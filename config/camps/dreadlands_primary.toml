@@ -1,22 +1,197 @@
-# Primary Dreadlands planning anchor for issue #1719.
-# - Camp anchor: Ancient Combine Outpost courtyard in Lost Valley.
-# - Safe med / evac fallback: south of the wizard spires at approximately
-#   [2806, 9565, 0] per Project 1999 Dreadlands documentation.
-# - Current schema gap: waypoints, named pull points, restriction sectors,
-#   and route notes are documented in docs/wiki/Dreadlands-Primary-Camp.md
-#   because textquest/src/camp/config.rs does not yet load those fields.
+# Primary Dreadlands camp configuration for issue #1719 / #3362.
+#
+# Zone: Dreadlands (Kunark expansion, outdoor undead farming zone)
+#
+# Camp Overview:
+# - Primary anchor: Ancient Combine Outpost courtyard in Lost Valley.
+# - Level range: 45-51, matching the outpost undead bracket.
+# - Pull targets: greater plaguebone, greater spurbone, wraithbone champion.
+# - Safe med: outpost courtyard (DL-01). Fallback to wizard spires (DL-08)
+#   for resets or emergency evacuation.
+# - Outdoor zone — roamer (Gorenaire, mountain giant patriarch, dread widow)
+#   management is the primary hazard. Never pull outside the outpost loop.
+#
+# Safe Spots:
+# - Primary safe med: outpost courtyard [900, 9000, 0] (DL-01).
+#   Line-of-sight to all pull targets inside the Lost Valley loop.
+#   Stack the 6-box here between pulls. Do not med in the northeast skeleton
+#   triangle (more exposure, roamer overlap).
+# - Emergency safe med: wizard spires [2806, 9565, 0] (DL-08).
+#   Use for zone-in staging, full resets, or Gorenaire avoidance.
+#   Travel-only; do not farm from this position.
+#
+# Pull Points:
+# - Primary handoff: courtyard_handoff [970, 9050, 0] (DL-02).
+#   NE of the courtyard. Pulls reset toward camp without widening into the
+#   open valley floor. Primary pull initiation point for the outpost loop.
+# - North check: north_wall_watch [1080, 9150, 0] (DL-03).
+#   Verify northern wall roamers are clear before committing to the north ruins.
+# - South return: south_gate [860, 8820, 0] (DL-07).
+#   Return gate into the courtyard for no-aggro med transitions.
+#
+# Outdoor Recovery Behavior:
+# - If a pull widens outside the courtyard loop, recover via courtyard_return
+#   (DL-15), west_recovery (DL-16), east_recovery (DL-17), or
+#   north_recovery (DL-18) before dropping aggro.
+# - Never med at north_ruins (DL-04) or west_hilltoe (DL-06) during active pulls.
+# - Hard stops: fv_tunnel_watch (DL-21) and giant_lane_watch (DL-22) block
+#   movement toward the broader valley. Do not pursue pulls past these points.
+# - gorenaire_no_pull: nothing south or east of druid_ring_lane (DL-20).
+# - valley_floor_no_pull: do not leave the outpost loop toward Karnor's, FV,
+#   or giant huts. Open-zone roamers make unattended pulls unsafe.
+# - return_no_aggro = true: do not snap the puller back to camp while hot.
+#
+# 6-Waypoint Primary Route (outpost loop, clockwise):
+# This route covers the core undead farming loop inside the Ancient Combine
+# Outpost. The runtime schema does not yet load named waypoint arrays;
+# route_waypoints is defined here for forward-compatibility with schema v2
+# (see issue #1900). Coordinates sourced from P99 Dreadlands documentation.
+#
+# Route order: DL-01 -> DL-02 -> DL-03 -> DL-10 -> DL-12 -> DL-07 -> DL-01
+#
+#   DL-01 outpost_courtyard   [900, 9000, 0]  Primary anchor / safe med.
+#   DL-02 courtyard_handoff   [970, 9050, 0]  Primary pull handoff (NE edge).
+#   DL-03 north_wall_watch   [1080, 9150, 0]  North wall roamer check.
+#   DL-10 lost_valley_east   [1300, 9100, 0]  East edge of outpost loop.
+#   DL-12 skeleton_corner    [1110, 9440, 0]  Greater plaguebone turn point.
+#   DL-07 south_gate          [860, 8820, 0]  South return gate, no-aggro.
+#
+# References:
+# - docs/wiki/Dreadlands-Primary-Camp.md (full 22-waypoint lattice, restriction
+#   zones, recovery routes, evidence state, and validation status)
+# - EverQuest coordinate system: XY horizontal, Z vertical
+# - Outdoor respawn cycle: ~6:40 baseline (live logs pending)
 
 name = "dreadlands_primary"
 zone = "dreadlands"
+
+# Primary camp anchor: Ancient Combine Outpost courtyard (DL-01).
 camp_center = [900.0, 9000.0, 0.0]
+
+# Primary pull handoff: NE of the courtyard (DL-02).
 pull_point = [970.0, 9050.0, 0.0]
+
+# Pull radius covers the outpost loop without widening into the valley floor.
 pull_radius = 500.0
+
+# Tight camp radius keeps the 6-box on the safe med footprint.
 camp_radius = 60.0
+
+# Leash radius long enough for the outpost loop, short enough to drop bad roamer pulls.
 leash_radius = 700.0
+
+# rest_mana_pct: 70% — safe med threshold before another undead pull.
 rest_mana_pct = 70
+
+# pull_mana_pct: 45% — conservative start threshold to handle outdoor adds.
 pull_mana_pct = 45
+
+# Level range: 45-51, Lost Valley undead progression bracket.
 level_range = [45, 51]
-pull_mob_names = ["greater plaguebone", "greater spurbone", "wraithbone champion"]
-ignore_mob_names = ["Gorenaire", "a mountain giant patriarch", "a dread widow", "rotting skeleton"]
-burn_mob_names = ["wraithbone champion"]
+
+pull_mob_names = [
+  "greater plaguebone",
+  "greater spurbone",
+  "wraithbone champion",
+]
+
+ignore_mob_names = [
+  "Gorenaire",
+  "a mountain giant patriarch",
+  "a dread widow",
+  "rotting skeleton",
+]
+
+burn_mob_names = [
+  "wraithbone champion",
+]
+
+# Do not snap the puller back to camp while still carrying live adds.
 return_no_aggro = true
+
+# 6-waypoint primary outpost route (forward-compatible with schema v2).
+# Runtime loader ignores unknown fields; route documented here for schema
+# expansion (issue #1900). See header comments for full route description.
+[[route_waypoints]]
+id = "DL-01"
+name = "outpost_courtyard"
+coords = [900.0, 9000.0, 0.0]
+purpose = "Primary camp anchor and safe med location."
+
+[[route_waypoints]]
+id = "DL-02"
+name = "courtyard_handoff"
+coords = [970.0, 9050.0, 0.0]
+purpose = "Primary pull handoff; NE edge of the courtyard."
+
+[[route_waypoints]]
+id = "DL-03"
+name = "north_wall_watch"
+coords = [1080.0, 9150.0, 0.0]
+purpose = "North wall roamer check before committing to north ruins."
+
+[[route_waypoints]]
+id = "DL-10"
+name = "lost_valley_east"
+coords = [1300.0, 9100.0, 0.0]
+purpose = "East edge of the outpost loop."
+
+[[route_waypoints]]
+id = "DL-12"
+name = "skeleton_corner"
+coords = [1110.0, 9440.0, 0.0]
+purpose = "Greater plaguebone pull turn; do not med here."
+
+[[route_waypoints]]
+id = "DL-07"
+name = "south_gate"
+coords = [860.0, 8820.0, 0.0]
+purpose = "South return gate into the courtyard for no-aggro transitions."
+
+# Emergency safe med (not part of primary route; used for resets only).
+[[safe_spots]]
+id = "DL-08"
+name = "spire_safe_med"
+coords = [2806.0, 9565.0, 0.0]
+purpose = "Wizard spires emergency safe med. Zone-in staging and Gorenaire avoidance."
+
+# Recovery waypoints (used when pulls widen outside the courtyard loop).
+[[recovery_waypoints]]
+id = "DL-15"
+name = "courtyard_return"
+coords = [930.0, 8920.0, 0.0]
+purpose = "Preferred no-aggro return to courtyard."
+
+[[recovery_waypoints]]
+id = "DL-16"
+name = "west_recovery"
+coords = [690.0, 8900.0, 0.0]
+purpose = "Recovery line if west pulls widen."
+
+[[recovery_waypoints]]
+id = "DL-17"
+name = "east_recovery"
+coords = [1260.0, 8880.0, 0.0]
+purpose = "Recovery line if east pulls widen."
+
+[[recovery_waypoints]]
+id = "DL-18"
+name = "north_recovery"
+coords = [1010.0, 9520.0, 0.0]
+purpose = "Recovery line if the northern ruins get hot."
+
+# Hard stop waypoints (do not pursue pulls past these points).
+[[hard_stops]]
+id = "DL-21"
+name = "fv_tunnel_watch"
+coords = [1600.0, 8700.0, 0.0]
+purpose = "Hard stop before broader valley traffic toward Firiona Vie."
+
+[[hard_stops]]
+id = "DL-22"
+name = "giant_lane_watch"
+coords = [1500.0, 9600.0, 0.0]
+purpose = "Hard stop before giant or dread widow roamers."
+
+prev_camp = "unrest_yard"
+next_camp = "plane_of_innovation_primary"
