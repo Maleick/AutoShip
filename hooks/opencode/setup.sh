@@ -214,7 +214,7 @@ if [[ -z "$SELECTED_MODELS" ]]; then
   SELECTED_MODELS=$(default_free_models "$available_model_ids")
 fi
 
-reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL"
+reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL,$LEAD_MODEL"
 
 if [[ -z "$SELECTED_MODELS" ]]; then
   echo "Error: no free OpenCode models found. Set AUTOSHIP_MODELS to choose models explicitly." >&2
