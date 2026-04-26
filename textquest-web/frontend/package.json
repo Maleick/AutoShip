@@ -3,13 +3,21 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "format": "prettier --write src",
-    "format:check": "prettier --check src"
+    "format:check": "prettier --check src",
+    "prepare": "cd ../.. && husky install textquest-web/frontend/.husky"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -30,6 +38,8 @@
     "eslint-plugin-react-hooks": "^5.x",
     "eslint-plugin-react-refresh": "^0.4.x",
     "globals": "^15.x",
+    "husky": "^9.x",
+    "lint-staged": "^15.x",
     "prettier": "^3.x",
     "tailwindcss": "^4.x",
     "typescript": "~5.6.x",

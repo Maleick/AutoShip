@@ -1,0 +1,52 @@
+================================================================================
+                    TEXTQUEST KEYBOARD SHORTCUTS
+                         Quick Reference
+================================================================================
+
+GLOBAL HOTKEYS (Available to all characters)
+================================================================================
+
+COMBAT CONTROLS
+  E ..................... Engage (Start combat)
+  D ..................... Disengage (Stop combat)
+  L ..................... Loot (Loot corpses)
+  R ..................... Repeat (Repeat last command)
+
+NAVIGATION & UI
+  ? ..................... Help (Open help screen / show keybindings)
+  F1 .................... Help Alt (Alternate help key)
+  Tab ................... Cycle Panel (Switch active panel)
+  M ..................... Map (Toggle map visibility)
+
+SEARCH & TOOLS
+  / ..................... Search (Search for spawns)
+
+SPECIAL MODES
+  P ..................... Privacy Mode (Hide sensitive information)
+  F8 .................... Alert Panel (Toggle alert panel)
+
+================================================================================
+CHARACTER-SPECIFIC HOTKEYS
+================================================================================
+
+WARRIOR
+  E ..................... Warrior Stance (Take defensive stance)
+
+WIZARD
+  M ..................... Mana Shield (Cast mana shield)
+  F2 .................... Evocation (Cast favorite spell)
+
+CLERIC
+  H ..................... Heal (Cast heal on focus target)
+  G ..................... Group Heal (Cast group heal)
+
+================================================================================
+TIPS
+================================================================================
+
+  • Press ? or F1 in-game to view this reference at any time
+  • Some shortcuts override global hotkeys (e.g., Warrior E = Stance not Engage)
+  • Use Tab to cycle through panels and discover available options
+  • Customize hotkeys by editing config/hotkeys.toml
+
+================================================================================

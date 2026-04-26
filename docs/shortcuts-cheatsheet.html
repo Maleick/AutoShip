@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TextQuest Keyboard Shortcuts Cheat Sheet</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: "Courier New", monospace;
+            background: #0a0e27;
+            color: #e0e0e0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #00ff00;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .section {
+            background: #1a1f3a;
+            border: 2px solid #00ff00;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .section h2 {
+            color: #00ff00;
+            border-bottom: 1px solid #00ff00;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        .shortcut-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .shortcut-row:last-child {
+            border-bottom: none;
+        }
+        .key {
+            background: #00ff00;
+            color: #0a0e27;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+            margin-right: 10px;
+            font-size: 0.9em;
+        }
+        .description {
+            flex: 1;
+            color: #b0b0b0;
+            font-size: 0.85em;
+        }
+        .left {
+            display: flex;
+            align-items: flex-start;
+        }
+        .character-section {
+            background: #2a1f3a;
+            border: 2px solid #ff00ff;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .character-section h3 {
+            color: #ff00ff;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .global-section {
+            background: #1a2a3a;
+            border: 2px solid #00aaff;
+        }
+        .global-section h2 {
+            color: #00aaff;
+            border-bottom: 1px solid #00aaff;
+        }
+        .footer {
+            text-align: center;
+            color: #666;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+            font-size: 0.8em;
+        }
+        @media print {
+            body {
+                background: white;
+                color: black;
+            }
+            .section, .global-section, .character-section {
+                background: white;
+                border-color: black;
+                color: black;
+            }
+            h1 {
+                color: black;
+                text-shadow: none;
+            }
+            h2, h3 {
+                color: black;
+            }
+            .key {
+                background: #e0e0e0;
+                color: black;
+                border: 1px solid black;
+            }
+            .description {
+                color: black;
+            }
+            .subtitle {
+                color: black;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TextQuest</h1>
+        <h1 style="font-size: 1.8em; color: #00ff00;">KEYBOARD SHORTCUTS</h1>
+        <p class="subtitle">Quick Reference Guide • Press ? in-game for full help</p>
+
+        <div class="grid">
+            <!-- GLOBAL SHORTCUTS -->
+            <div class="section global-section">
+                <h2>COMBAT CONTROLS</h2>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">E</span>
+                        <span class="description">Engage - Start combat</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">D</span>
+                        <span class="description">Disengage - Stop combat</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">L</span>
+                        <span class="description">Loot - Loot corpses</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">R</span>
+                        <span class="description">Repeat - Repeat last command</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NAVIGATION -->
+            <div class="section global-section">
+                <h2>NAVIGATION & UI</h2>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">?</span>
+                        <span class="description">Help - Show keybindings</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">F1</span>
+                        <span class="description">Help Alt - Alternate help key</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">Tab</span>
+                        <span class="description">Cycle - Switch active panel</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">M</span>
+                        <span class="description">Map - Toggle map visibility</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOOLS & MODES -->
+            <div class="section global-section">
+                <h2>TOOLS & MODES</h2>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">/</span>
+                        <span class="description">Search - Search spawns</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">P</span>
+                        <span class="description">Privacy - Hide sensitive info</span>
+                    </div>
+                </div>
+                <div class="shortcut-row">
+                    <div class="left">
+                        <span class="key">F8</span>
+                        <span class="description">Alerts - Toggle alert panel</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WARRIOR -->
+            <div class="section">
+                <div class="character-section">
+                    <h3>⚔️ WARRIOR</h3>
+                    <div class="shortcut-row">
+                        <div class="left">
+                            <span class="key">E</span>
+                            <span class="description">Stance - Defensive stance</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WIZARD -->
+            <div class="section">
+                <div class="character-section">
+                    <h3>🔮 WIZARD</h3>
+                    <div class="shortcut-row">
+                        <div class="left">
+                            <span class="key">M</span>
+                            <span class="description">Shield - Mana shield</span>
+                        </div>
+                    </div>
+                    <div class="shortcut-row">
+                        <div class="left">
+                            <span class="key">F2</span>
+                            <span class="description">Spell - Evocation</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLERIC -->
+            <div class="section">
+                <div class="character-section">
+                    <h3>✨ CLERIC</h3>
+                    <div class="shortcut-row">
+                        <div class="left">
+                            <span class="key">H</span>
+                            <span class="description">Heal - Heal target</span>
+                        </div>
+                    </div>
+                    <div class="shortcut-row">
+                        <div class="left">
+                            <span class="key">G</span>
+                            <span class="description">Group Heal - Heal group</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>TextQuest Keyboard Shortcuts Reference | Updated 2026-04-25</p>
+            <p>For full documentation, see KEYBOARD_SHORTCUTS.md or press ? in-game</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -2,6 +2,17 @@
 @import "focus-indicators.css";
 
 @theme {
+  --font-display: "Cinzel", "IM Fell English", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+}
+
+/* Dark theme (default) */
+:root {
   --color-void: #0d0618;
   --color-panel: #1a0a2e;
   --color-elevated: #2d1e41;
@@ -18,18 +29,94 @@
   --color-state-warn: #fbbf24;
   --color-state-danger: #ef4444;
   --color-state-info: #60a5fa;
+}
 
-  --font-display: "Cinzel", "IM Fell English", Georgia, serif;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+/* Light theme */
+:root.light-mode {
+  --color-void: #f5f3ff;
+  --color-panel: #ede9f6;
+  --color-elevated: #e0d9f0;
 
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
+  --color-neriak-magenta: #a020f0;
+  --color-neriak-magenta-bright: #9d00ff;
+  --color-neriak-cyan: #0088cc;
+
+  --color-neriak-text: #2d1b4e;
+  --color-neriak-muted: #6b5a8a;
+  --color-neriak-dim: #b5a3d0;
+
+  --color-state-ok: #059669;
+  --color-state-warn: #d97706;
+  --color-state-danger: #dc2626;
+  --color-state-info: #2563eb;
+}
+
+/* High-contrast dark mode (WCAG AAA) */
+:root.high-contrast {
+  --color-void: #000000;
+  --color-panel: #0a0a0a;
+  --color-elevated: #1a1a1a;
+
+  --color-neriak-magenta: #ff33ff;
+  --color-neriak-magenta-bright: #ff00ff;
+  --color-neriak-cyan: #00ffff;
+
+  --color-neriak-text: #ffffff;
+  --color-neriak-muted: #d0d0d0;
+  --color-neriak-dim: #808080;
+
+  --color-state-ok: #00ff00;
+  --color-state-warn: #ffff00;
+  --color-state-danger: #ff0000;
+  --color-state-info: #00ccff;
+}
+
+/* High-contrast light mode (WCAG AAA) */
+:root.high-contrast.light-mode {
+  --color-void: #ffffff;
+  --color-panel: #f5f5f5;
+  --color-elevated: #e0e0e0;
+
+  --color-neriak-magenta: #8000ff;
+  --color-neriak-magenta-bright: #7700ff;
+  --color-neriak-cyan: #0066ff;
+
+  --color-neriak-text: #000000;
+  --color-neriak-muted: #2f2f2f;
+  --color-neriak-dim: #7f7f7f;
+
+  --color-state-ok: #004d00;
+  --color-state-warn: #664d00;
+  --color-state-danger: #800000;
+  --color-state-info: #003366;
 }
 
 body {
   background-color: var(--color-void);
   color: var(--color-neriak-text);
   font-family: var(--font-sans);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+/* High-contrast mode text styling */
+:root.high-contrast {
+  font-weight: 600;
+}
+
+:root.high-contrast [role="button"],
+:root.high-contrast button,
+:root.high-contrast a,
+:root.high-contrast [role="link"] {
+  font-weight: 700;
+  border-width: 2px;
+}
+
+:root.high-contrast [role="button"]:focus-visible,
+:root.high-contrast button:focus-visible,
+:root.high-contrast a:focus-visible,
+:root.high-contrast [role="link"]:focus-visible {
+  outline-width: 3px;
+  outline-offset: 3px;
 }

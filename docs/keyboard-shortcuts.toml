@@ -1,0 +1,276 @@
+# TextQuest Keyboard Shortcuts Reference
+# Comprehensive keyboard binding map for navigation, combat, and UI interactions
+# Last Updated: 2026-04-25
+
+[metadata]
+title = "TextQuest Keyboard Shortcuts"
+version = "1.0.0"
+description = "Complete keyboard shortcut map for TextQuest client and web interface"
+
+# ==============================================================================
+# NAVIGATION SHORTCUTS
+# ==============================================================================
+[navigation]
+description = "Movement and navigation shortcuts"
+
+# Basic Movement
+move_north = "w"
+move_south = "s"
+move_east = "d"
+move_west = "a"
+move_up = "shift+w"
+move_down = "shift+s"
+move_northeast = "e"
+move_northwest = "q"
+move_southeast = "c"
+move_southwest = "z"
+
+# Navigation UI
+open_map = "m"
+toggle_minimap = "shift+m"
+open_waypoints = "p"
+add_waypoint = "shift+p"
+clear_waypoints = "ctrl+p"
+toggle_compass = "ctrl+m"
+zone_info = "i"
+
+# ==============================================================================
+# COMBAT SHORTCUTS
+# ==============================================================================
+[combat]
+description = "Combat and ability hotkeys"
+
+# Targeting
+cycle_target_forward = "tab"
+cycle_target_backward = "shift+tab"
+target_self = "0"
+target_nearest_enemy = "~"
+target_nearest_ally = "shift+~"
+clear_target = "esc"
+lock_target = "ctrl+l"
+
+# Abilities Tier 1 (Primary)
+ability_1 = "1"
+ability_2 = "2"
+ability_3 = "3"
+ability_4 = "4"
+ability_5 = "5"
+
+# Abilities Tier 2 (Secondary)
+ability_6 = "shift+1"
+ability_7 = "shift+2"
+ability_8 = "shift+3"
+ability_9 = "shift+4"
+ability_10 = "shift+5"
+
+# Abilities Tier 3 (Ctrl modifiers)
+ability_11 = "ctrl+1"
+ability_12 = "ctrl+2"
+ability_13 = "ctrl+3"
+ability_14 = "ctrl+4"
+ability_15 = "ctrl+5"
+
+# Combat Actions
+auto_attack = "\"
+stand_ground = "f"
+follow_target = "shift+f"
+stop_movement = "x"
+toggle_combat_mode = "ctrl+c"
+
+# ==============================================================================
+# UI AND MENU SHORTCUTS
+# ==============================================================================
+[ui]
+description = "User interface and menu navigation"
+
+# Primary UI
+toggle_inventory = "i"
+toggle_character_sheet = "c"
+toggle_equipment = "e"
+toggle_spells = "shift+e"
+toggle_abilities = "shift+a"
+toggle_buffs = "b"
+open_quest_log = "q"
+open_journal = "j"
+
+# Chat and Communication
+toggle_chat = "enter"
+reply_to_last = "shift+r"
+clear_chat = "ctrl+shift+c"
+chat_emote = "/"
+chat_guild = "g"
+chat_group = "h"
+chat_tell = "t"
+chat_broadcast = "shift+b"
+
+# Help and Documentation
+toggle_help = "h"
+open_keybind_reference = "f1"
+open_tutorial = "shift+h"
+open_settings = "escape"
+
+# Windows
+toggle_all_ui = "u"
+dock_ui_left = "ctrl+shift+l"
+dock_ui_right = "ctrl+shift+r"
+dock_ui_top = "ctrl+shift+t"
+dock_ui_bottom = "ctrl+shift+b"
+
+# ==============================================================================
+# INVENTORY AND ITEMS
+# ==============================================================================
+[inventory]
+description = "Inventory and item management"
+
+use_item = "return"
+drop_item = "delete"
+equip_item = "e"
+unequip_item = "shift+e"
+sell_item = "shift+s"
+buy_item = "b"
+examine_item = "shift+i"
+split_stack = "ctrl+x"
+sort_inventory = "ctrl+shift+s"
+
+# ==============================================================================
+# SOCIAL AND GROUP
+# ==============================================================================
+[social]
+description = "Group and social features"
+
+open_group = "shift+g"
+invite_to_group = "ctrl+g"
+leave_group = "shift+l"
+promote_leader = "ctrl+shift+p"
+promote_assist = "ctrl+shift+a"
+toggle_group_ui = "alt+g"
+open_friends_list = "shift+f"
+open_guild_window = "shift+u"
+
+# ==============================================================================
+# VI EDITOR BINDINGS
+# ==============================================================================
+[vi_mode]
+description = "VI-style keybindings for power users"
+
+# Movement (hjkl)
+move_up_vi = "k"
+move_down_vi = "j"
+move_left_vi = "h"
+move_right_vi = "l"
+
+# Ability sequence
+activate_vi_command = ":"
+repeat_last_action = "."
+previous_target = ","
+next_target = ";"
+
+# ==============================================================================
+# EMACS BINDINGS
+# ==============================================================================
+[emacs_mode]
+description = "Emacs-style keybindings"
+
+move_forward = "ctrl+f"
+move_backward = "ctrl+b"
+move_next_line = "ctrl+n"
+move_previous_line = "ctrl+p"
+beginning_of_line = "ctrl+a"
+end_of_line = "ctrl+e"
+kill_to_end_of_line = "ctrl+k"
+undo = "ctrl+/"
+redo = "ctrl+y"
+
+# ==============================================================================
+# SYSTEM AND DEBUG
+# ==============================================================================
+[system]
+description = "System-level and debug shortcuts"
+
+# Window Management
+minimize_window = "cmd+m"
+close_window = "cmd+w"
+fullscreen_toggle = "cmd+f"
+screenshot = "f12"
+
+# Debug (development builds only)
+debug_console = "ctrl+shift+d"
+show_framerate = "ctrl+shift+f"
+reload_ui = "ctrl+shift+r"
+toggle_collision = "ctrl+shift+x"
+toggle_names = "shift+n"
+
+# ==============================================================================
+# ALTERNATIVE BINDINGS BY PLATFORM
+# ==============================================================================
+
+[platform.macos]
+description = "macOS-specific alternatives"
+
+# Command key alternatives
+screenshot_macos = "cmd+shift+3"
+force_quit = "cmd+option+esc"
+switch_app = "cmd+tab"
+
+[platform.windows]
+description = "Windows-specific alternatives"
+
+# Alt key alternatives
+screenshot_windows = "print"
+window_snap_left = "win+left"
+window_snap_right = "win+right"
+open_menu = "alt+f10"
+
+[platform.linux]
+description = "Linux-specific alternatives"
+
+screenshot_linux = "print"
+window_manager_menu = "super+m"
+
+# ==============================================================================
+# CUSTOMIZATION NOTES
+# ==============================================================================
+
+[customization]
+description = "User preference overrides"
+enable_custom_bindings = false
+custom_profile = "default"
+allow_conflicting_binds = false
+warn_on_bind_conflict = true
+
+# Profile options: "default", "vi", "emacs", "gaming", "accessibility"
+# To enable custom bindings, set enable_custom_bindings = true
+# Custom bindings should be stored in: ~/.textquest/keybinds.toml
+
+# ==============================================================================
+# SPECIAL COMBOS (Multi-key sequences)
+# ==============================================================================
+
+[combos]
+description = "Multi-key ability sequences"
+
+# Example: Double-tap for charged attack
+charged_attack = "ability_1 ability_1"
+execute_combo = "ability_1 ability_3 ability_5"
+emergency_heal_sequence = "ability_10 ability_14"
+buff_rotation = "ability_6 ability_7 ability_8"
+
+# ==============================================================================
+# ACCESSIBILITY ALTERNATIVES
+# ==============================================================================
+
+[accessibility]
+description = "Accessibility-friendly alternatives"
+
+# Single-key alternatives for multi-hand users
+hold_for_movement = "shift"
+hold_for_abilities = "ctrl"
+sticky_modifiers = true
+slow_repeat = false
+repeat_delay_ms = 500
+repeat_rate_ms = 100
+
+# Text-to-speech
+enable_tts = false
+announce_target = false
+announce_ability_ready = false

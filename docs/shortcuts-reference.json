@@ -1,0 +1,162 @@
+{
+  "version": "1.0.0",
+  "title": "TextQuest Keyboard Shortcuts Reference",
+  "lastUpdated": "2026-04-25",
+  "global": {
+    "combat": [
+      {
+        "key": "E",
+        "modifiers": [],
+        "action": "engage",
+        "description": "Start combat with target",
+        "category": "Combat Controls"
+      },
+      {
+        "key": "D",
+        "modifiers": [],
+        "action": "disengage",
+        "description": "Stop combat",
+        "category": "Combat Controls"
+      },
+      {
+        "key": "L",
+        "modifiers": [],
+        "action": "loot",
+        "description": "Loot corpses",
+        "category": "Combat Controls"
+      },
+      {
+        "key": "R",
+        "modifiers": [],
+        "action": "repeat",
+        "description": "Repeat last command",
+        "category": "Combat Controls"
+      }
+    ],
+    "navigation": [
+      {
+        "key": "?",
+        "modifiers": [],
+        "action": "help",
+        "description": "Open help screen / show keybindings",
+        "category": "Navigation & UI"
+      },
+      {
+        "key": "F1",
+        "modifiers": [],
+        "action": "help",
+        "description": "Alternate keybinding to open help",
+        "category": "Navigation & UI"
+      },
+      {
+        "key": "Tab",
+        "modifiers": [],
+        "action": "cycle_panel",
+        "description": "Switch focus between active panels",
+        "category": "Navigation & UI"
+      },
+      {
+        "key": "M",
+        "modifiers": [],
+        "action": "map",
+        "description": "Toggle map visibility (in Overview screen)",
+        "category": "Navigation & UI"
+      }
+    ],
+    "search": [
+      {
+        "key": "/",
+        "modifiers": [],
+        "action": "search",
+        "description": "Search for spawns",
+        "category": "Search & Tools"
+      }
+    ],
+    "modes": [
+      {
+        "key": "P",
+        "modifiers": [],
+        "action": "privacy_mode",
+        "description": "Toggle privacy mode (hides sensitive info)",
+        "category": "Special Modes"
+      },
+      {
+        "key": "F8",
+        "modifiers": [],
+        "action": "alert_panel",
+        "description": "Toggle alert panel visibility",
+        "category": "Special Modes"
+      }
+    ]
+  },
+  "characterSpecific": {
+    "Warrior": [
+      {
+        "key": "E",
+        "modifiers": [],
+        "action": "warrior_stance",
+        "description": "Take defensive stance (overrides global engage)",
+        "category": "Class Abilities"
+      }
+    ],
+    "Wizard": [
+      {
+        "key": "M",
+        "modifiers": [],
+        "action": "cast_mana_shield",
+        "description": "Cast mana shield (overrides global map toggle)",
+        "category": "Class Abilities"
+      },
+      {
+        "key": "F2",
+        "modifiers": [],
+        "action": "evocation",
+        "description": "Cast evocation (favorite spell)",
+        "category": "Class Abilities"
+      }
+    ],
+    "Cleric": [
+      {
+        "key": "H",
+        "modifiers": [],
+        "action": "cast_heal",
+        "description": "Cast heal on focus target",
+        "category": "Class Abilities"
+      },
+      {
+        "key": "G",
+        "modifiers": [],
+        "action": "cast_group_heal",
+        "description": "Cast group heal",
+        "category": "Class Abilities"
+      }
+    ]
+  },
+  "categories": [
+    {
+      "name": "Combat Controls",
+      "description": "Start, stop, and interact with combat",
+      "shortcuts": ["E", "D", "L", "R"]
+    },
+    {
+      "name": "Navigation & UI",
+      "description": "Move around the interface and open screens",
+      "shortcuts": ["?", "F1", "Tab", "M"]
+    },
+    {
+      "name": "Search & Tools",
+      "description": "Search and utility functions",
+      "shortcuts": ["/"]
+    },
+    {
+      "name": "Special Modes",
+      "description": "Toggle special interface modes",
+      "shortcuts": ["P", "F8"]
+    },
+    {
+      "name": "Class Abilities",
+      "description": "Character-specific class abilities and spells",
+      "shortcuts": ["E", "M", "F2", "H", "G"]
+    }
+  ]
+}
