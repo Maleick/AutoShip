@@ -1349,6 +1349,8 @@ pub struct App {
     pub wizard_state: WizardState,
     /// CH chain configuration panel state.
     pub ch_chain_panel_state: ChChainPanelState,
+    /// Hotkey configuration UI state.
+    pub hotkeys_config_state: super::ui::hotkey_config::HotkeysConfigState,
 
     /// Command aliases mapping (e.g., "h" → "help", "q" → "quit").
     pub command_aliases: HashMap<String, String>,

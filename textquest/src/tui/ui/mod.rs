@@ -19,6 +19,7 @@ pub mod eq_internals;
 pub mod explorer;
 pub mod groups;
 pub mod help;
+pub mod hotkey_config;
 pub mod map;
 pub mod navigation;
 pub mod orchestrator_panel;
@@ -84,6 +85,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         }
         ActiveScreen::Metrics => roster::draw_metrics_dashboard(frame, outer[1], app),
         ActiveScreen::Policy => policy_panel::draw_policy_screen(frame, outer[1], app),
+        ActiveScreen::Hotkeys => hotkey_config::draw_hotkey_config(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
