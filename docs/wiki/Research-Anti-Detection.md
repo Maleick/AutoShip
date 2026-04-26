@@ -251,13 +251,40 @@ Independent verification via GhidraMCP analysis of eqgame.exe on Frostreaver. Ev
 
 - Server-set flag at player struct offset 0x2C4 — persists in save data across sessions. Once flagged, character stays flagged forever.
 
-**Movement-agreement packet (2026-04-21 — Research, not live-validated):**
+**Movement-agreement packet — Spike C1 Decision Record (#3401, 2026-04-26):**
 
-- Per-frame position update: opcode `0x1643` via `UdpConnection::SendMessage` (confirmed network architecture research, Dec 2024 binary)
-- Payload struct: `PlayerPositionUpdateClient_Struct` — sequence (u16), spawn_id (u16), vehicle_id (u16), delta_x/z/y (f32 each), packed heading:12 + animation:10 bitfield
-- Movement-history summary (1/sec aggregate): opcode unresolved — `CMovementHistoryClientException` RTTI confirmed; serialization site xref blocked on Ghidra session
-- Tolerance envelope: speed_factor ±7% SAFE; heading_wobble 1.0–4.0 EQ-deg/frame MARGINAL (4.0 exceeds estimated ~2.7-deg/frame cap); see `docs/research/C1-movement-agreement-packet.md`
-- Evidence state: `Research-backed` for struct layout and opcode; `Needs Live Proof` for tolerance bounds and history-summary opcode
+_Opcode candidates (narrowed to 3 via Ghidra cross-reference and EQEmu comparison):_
+
+| # | Opcode    | Direction | Evidence                                                                               | Confidence                         |
+|---|-----------|-----------|----------------------------------------------------------------------------------------|------------------------------------|
+| 1 | `0x1643`  | C→S       | `UdpConnection::SendMessage` hook, network architecture research (Dec 2024 binary)     | High — primary candidate           |
+| 2 | `0x14cb`  | C→S       | `Research-EQ-Protocol.md` §4.1 opcode mapping (different patch build)                 | Medium — alternate patch rotation  |
+| 3 | _unknown_ | C→S       | Distinct 1/sec movement-history summary; `CMovementHistoryClientException` RTTI only  | Low — RTTI evidence only           |
+
+_Field layout — `PlayerPositionUpdateClient_Struct` (EQEmu canonical, 20260310-compatible):_
+
+| Offset | Size | Type     | Field      | Notes                                                     |
+|--------|------|----------|------------|-----------------------------------------------------------|
+| 0      | 2    | uint16   | sequence   | Monotonically incrementing; server detects gaps / replay  |
+| 2      | 2    | uint16   | spawn_id   | Self spawn ID — must match server-side session            |
+| 4      | 2    | uint16   | vehicle_id | 0 = no vehicle; non-zero = mounted/in-vehicle             |
+| 6      | 4    | float32  | delta_x    | Velocity in EQ X axis (E/W); EQ units/frame               |
+| 10     | 4    | float32  | delta_z    | Velocity in EQ Z axis (vertical)                          |
+| 14     | 4    | float32  | delta_y    | Velocity in EQ Y axis (N/S)                               |
+| 18     | 12b  | bitfield | heading    | 12-bit packed (0–4095); maps to 0–360°                    |
+| —      | 10b  | bitfield | animation  | Current animation state ID                                |
+| —      | 10b  | bitfield | (reserved) | Padding / reserved                                        |
+| Total  | ~24  | —        | —          | With typical bitfield alignment                           |
+
+_Decision record:_
+
+- **Primary opcode:** `0x1643` — CONFIRMED as per-frame C→S position update via `UdpConnection::SendMessage`. Confidence: High.
+- **Opcode rotation:** `0x1643` is Dec 2024 binary; `0x14cb` is an earlier patch mapping. Both use `PlayerPositionUpdateClient_Struct`. Live 20260310 build opcode requires pattern-scan or live capture to confirm final value.
+- **Movement-history summary opcode (1/sec):** UNRESOLVED. `CMovementHistoryClientException` RTTI confirms a distinct server-side validation class exists. Whether a separate summary packet is sent C→S or the server accumulates per-frame `0x1643` updates server-side is unknown. Blocked on Frostreaver Ghidra RTTI → serialization xref. Confidence: Low.
+- **Field layout confidence:** High for sequence/spawn_id/vehicle_id/delta_x/y/z (EQEmu + EQ protocol research). Medium for heading bitfield packing (EQEmu-sourced; not live-captured from 20260310 binary).
+- **Tolerance envelope:** speed_factor ±7% SAFE; heading_wobble 1.0–4.0 EQ-deg/frame MARGINAL (4.0 exceeds estimated ~2.7 EQ-deg/frame server cap). Recommend capping `heading_wobble` at 2.5 EQ-deg/frame.
+- **Approach safety:** TextQuest controls movement via in-process memory writes; EQ's own network layer sends position packets at normal cadence. Timing and delta values are EQ-generated — optimal for movement-agreement compliance.
+- **Overall evidence state:** `Research-backed` for struct layout and primary opcode; `Needs Live Proof` for tolerance bounds and history-summary opcode. Full analysis: `docs/research/C1-movement-agreement-packet.md`.
 
 ### Evidence Status
 
