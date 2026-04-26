@@ -21,6 +21,7 @@ pub mod groups;
 pub mod help;
 pub mod hotkey_config;
 pub mod map;
+pub mod metrics_panel;
 pub mod navigation;
 pub mod orchestrator_panel;
 pub mod packets;
