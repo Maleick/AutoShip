@@ -4,19 +4,12 @@
 
 use textquest::camp::{
     config::{CampConfig, GroupReadinessConfig, RoleReadinessThresholds},
-    readiness::{check_group_ready, check_member_ready, ReadinessBlocker},
+    readiness::{ReadinessBlocker, check_group_ready, check_member_ready},
     state::{CampAction, CampLoop, CampMember, CampSnapshot, CampState, Role},
 };
 use textquest_common::types::SharedStateFrame;
 
-fn make_frame(
-    hp: i32,
-    hp_max: i32,
-    mana: i32,
-    mana_max: i32,
-    x: f32,
-    y: f32,
-) -> SharedStateFrame {
+fn make_frame(hp: i32, hp_max: i32, mana: i32, mana_max: i32, x: f32, y: f32) -> SharedStateFrame {
     SharedStateFrame {
         client_id: 1,
         spawn_id: 1,

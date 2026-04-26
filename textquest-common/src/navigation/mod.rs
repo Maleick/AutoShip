@@ -8,4 +8,4 @@
 pub mod multi_zone_pathfinder;
 pub mod zone_graph;
 
-pub use zone_graph::{cost_for_transfer_type, TransitionCost, ZoneId};
+pub use zone_graph::{TransitionCost, ZoneId, cost_for_transfer_type};

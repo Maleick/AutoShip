@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 
 use textquest_common::combat::{
-    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CastResult, CombatRole, CombatStateReq,
-    ConditionExpr, SpellEntry, TargetSelector,
+    AbilityCandidate, AbilitySet, ActionType, CastResult, CombatRole, CombatStateReq,
+    ConditionExpr, EQExpansion, SpellEntry, TargetSelector,
 };
 
 use crate::combat::{

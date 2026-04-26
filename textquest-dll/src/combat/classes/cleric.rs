@@ -1,4 +1,4 @@
-use textquest_common::combat::{AbilityCandidate, EQExpansion, AbilitySet, CombatRole, SpellEntry};
+use textquest_common::combat::{AbilityCandidate, AbilitySet, CombatRole, EQExpansion, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 

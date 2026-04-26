@@ -145,7 +145,9 @@ impl TestScenario for MockScenario {
         self.runs += 1;
         let mut result = self.result.clone();
         result.duration = duration;
-        result.metrics.insert("mock_run".to_string(), MetricValue::Counter(self.runs));
+        result
+            .metrics
+            .insert("mock_run".to_string(), MetricValue::Counter(self.runs));
         Box::pin(async move { result })
     }
 }
@@ -190,9 +192,7 @@ impl TestScenario for CountdownScenario {
     fn run(&mut self, duration: Duration) -> BoxScenarioFuture<'_> {
         if self.remaining == 0 {
             let error = format!("{} has already reached zero", self.name);
-            return Box::pin(async move {
-                ScenarioResult::failure(duration, vec![error])
-            });
+            return Box::pin(async move { ScenarioResult::failure(duration, vec![error]) });
         }
 
         self.remaining -= 1;
@@ -228,9 +228,7 @@ impl TestScenario for FastFailScenario {
 
     fn run(&mut self, duration: Duration) -> BoxScenarioFuture<'_> {
         let error = self.error.clone();
-        Box::pin(async move {
-            ScenarioResult::failure(duration, vec![error])
-        })
+        Box::pin(async move { ScenarioResult::failure(duration, vec![error]) })
     }
 }
 
@@ -238,7 +236,11 @@ impl TestScenario for FastFailScenario {
 
 /// Build a compact `AccountInfo` value for scenario tests.
 #[must_use]
-pub fn account_info(account: impl Into<String>, character: impl Into<String>, class: impl Into<String>) -> AccountInfo {
+pub fn account_info(
+    account: impl Into<String>,
+    character: impl Into<String>,
+    class: impl Into<String>,
+) -> AccountInfo {
     AccountInfo {
         account_name: account.into(),
         character_name: character.into(),
@@ -278,11 +280,7 @@ pub fn spawn_entry(id: u32, name: impl Into<String>, level: u8) -> SpawnData {
 
 /// Build a small list of nearby spawns around a stable seed.
 #[must_use]
-pub fn spawn_wave(
-    count: usize,
-    seed_id: u32,
-    base_name: impl Into<String>,
-) -> Vec<SpawnData> {
+pub fn spawn_wave(count: usize, seed_id: u32, base_name: impl Into<String>) -> Vec<SpawnData> {
     let name_prefix = base_name.into();
     (0..count)
         .map(|index| {

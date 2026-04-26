@@ -55,12 +55,10 @@ where
         return Ok(T::default());
     }
 
-    let raw = fs::read_to_string(path).with_context(|| {
-        format!("failed to read JSON config file: {}", path.display())
-    })?;
-    serde_json::from_str(&raw).with_context(|| {
-        format!("failed to parse JSON config file: {}", path.display())
-    })
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("failed to read JSON config file: {}", path.display()))?;
+    serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse JSON config file: {}", path.display()))
 }
 
 pub fn save_json_config<T>(path: &Path, value: &T) -> Result<()>
@@ -68,11 +66,10 @@ where
     T: Serialize,
 {
     ensure_parent_dir(path)?;
-    let encoded = serde_json::to_string_pretty(value)
-        .context("failed to serialize JSON config data")?;
-    fs::write(path, encoded).with_context(|| {
-        format!("failed to write JSON config file: {}", path.display())
-    })?;
+    let encoded =
+        serde_json::to_string_pretty(value).context("failed to serialize JSON config data")?;
+    fs::write(path, encoded)
+        .with_context(|| format!("failed to write JSON config file: {}", path.display()))?;
     Ok(())
 }
 
@@ -84,12 +81,10 @@ where
         return Ok(T::default());
     }
 
-    let raw = fs::read_to_string(path).with_context(|| {
-        format!("failed to read TOML config file: {}", path.display())
-    })?;
-    toml::from_str(&raw).with_context(|| {
-        format!("failed to parse TOML config file: {}", path.display())
-    })
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("failed to read TOML config file: {}", path.display()))?;
+    toml::from_str(&raw)
+        .with_context(|| format!("failed to parse TOML config file: {}", path.display()))
 }
 
 pub fn save_toml_config<T>(path: &Path, value: &T) -> Result<()>
@@ -97,11 +92,9 @@ where
     T: Serialize,
 {
     ensure_parent_dir(path)?;
-    let encoded =
-        toml::to_string_pretty(value).context("failed to serialize TOML config data")?;
-    fs::write(path, encoded).with_context(|| {
-        format!("failed to write TOML config file: {}", path.display())
-    })?;
+    let encoded = toml::to_string_pretty(value).context("failed to serialize TOML config data")?;
+    fs::write(path, encoded)
+        .with_context(|| format!("failed to write TOML config file: {}", path.display()))?;
     Ok(())
 }
 

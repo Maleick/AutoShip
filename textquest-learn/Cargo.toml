@@ -32,5 +32,4 @@ tempfile = "3.8"
 
 [features]
 runtime-only = []
-full = []
 

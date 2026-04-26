@@ -310,8 +310,7 @@ pub async fn promote_to_config(
     let last_change = state.last_config_change.read().await;
 
     if last_change.is_none() {
-        return json_error(StatusCode::BAD_REQUEST, "No configuration to promote")
-            .into_response();
+        return json_error(StatusCode::BAD_REQUEST, "No configuration to promote").into_response();
     }
 
     // In a real implementation, this would:

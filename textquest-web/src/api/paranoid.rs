@@ -1,10 +1,10 @@
 //! Enhanced anti-GM detection with behavioral changes on suspicion (MQ2Paranoid parity).
 
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

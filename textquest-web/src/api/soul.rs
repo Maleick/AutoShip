@@ -417,7 +417,10 @@ pub async fn receive_session_debrief(
 ) -> impl IntoResponse {
     let mut debriefs = state.soul_audit.debrief_by_character.write().await;
     debriefs.insert(debrief.character_id, debrief.clone());
-    (StatusCode::OK, Json(serde_json::json!({"status": "debrief_received"})))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"status": "debrief_received"})),
+    )
 }
 
 /// `GET /api/soul/debrief/:character_id` — retrieve latest session debrief.

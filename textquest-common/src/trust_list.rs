@@ -25,9 +25,7 @@ impl TrustList {
     #[must_use]
     pub fn contains(&self, name: &str) -> bool {
         let lower = name.to_ascii_lowercase();
-        self.entries
-            .iter()
-            .any(|e| e.to_ascii_lowercase() == lower)
+        self.entries.iter().any(|e| e.to_ascii_lowercase() == lower)
     }
 
     /// Add a player to the trust list (no-op if already present).
@@ -40,8 +38,7 @@ impl TrustList {
     /// Remove a player from the trust list (case-insensitive).
     pub fn remove(&mut self, name: &str) {
         let lower = name.to_ascii_lowercase();
-        self.entries
-            .retain(|e| e.to_ascii_lowercase() != lower);
+        self.entries.retain(|e| e.to_ascii_lowercase() != lower);
     }
 
     /// Number of entries in the trust list.

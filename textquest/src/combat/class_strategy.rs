@@ -117,11 +117,7 @@ pub struct ClassConfig {
 impl ClassConfig {
     /// Construct a class config from an explicit rotation.
     #[must_use]
-    pub fn new(
-        class_name: impl Into<String>,
-        source_id: u32,
-        rotation: Vec<CombatAction>,
-    ) -> Self {
+    pub fn new(class_name: impl Into<String>, source_id: u32, rotation: Vec<CombatAction>) -> Self {
         Self {
             class_name: class_name.into(),
             source_id,
@@ -201,19 +197,31 @@ impl ClassConfig {
 
         for action in &self.rotation {
             if action.duration().is_zero() {
-                return Err(format!("{} rotation contains a zero-duration action", self.class_name));
+                return Err(format!(
+                    "{} rotation contains a zero-duration action",
+                    self.class_name
+                ));
             }
             if action.damage() == 0 {
-                return Err(format!("{} rotation contains a zero-damage action", self.class_name));
+                return Err(format!(
+                    "{} rotation contains a zero-damage action",
+                    self.class_name
+                ));
             }
         }
 
         match ClassArchetype::for_name(&self.class_name) {
             Some(ClassArchetype::Melee) if !self.rotation.iter().any(CombatAction::is_melee) => {
-                Err(format!("{} rotation must include melee damage", self.class_name))
+                Err(format!(
+                    "{} rotation must include melee damage",
+                    self.class_name
+                ))
             }
             Some(ClassArchetype::Caster) if !self.rotation.iter().any(CombatAction::is_spell) => {
-                Err(format!("{} rotation must include spell damage", self.class_name))
+                Err(format!(
+                    "{} rotation must include spell damage",
+                    self.class_name
+                ))
             }
             Some(_) => Ok(()),
             None => Err(format!("unsupported combat class: {}", self.class_name)),

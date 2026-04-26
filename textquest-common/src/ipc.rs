@@ -1360,7 +1360,6 @@ pub enum Command {
     QueryPauseStatus,
 
     // ─── Mail Window Commands (M10: Mail to Bazaar Mule) ───
-
     /// Open the EQ in-game mail compose window.
     ///
     /// No-op if the window is already open. Returns `Response::CommandResult`
@@ -2033,7 +2032,6 @@ pub enum Response {
     },
 
     // ─── Mail Window Responses (M10: Mail to Bazaar Mule) ───
-
     /// Snapshot of the EQ in-game mail compose window state.
     ///
     /// Returned in response to `Command::QueryMailWindowState`.

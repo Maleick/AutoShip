@@ -289,10 +289,8 @@ mod tests {
         let mut rng = rand::rngs::StdRng::seed_from_u64(2689);
 
         for _ in 0..500 {
-            let prior = Distribution::new(
-                rng.random_range(-250.0..250.0),
-                rng.random_range(0.5..40.0),
-            );
+            let prior =
+                Distribution::new(rng.random_range(-250.0..250.0), rng.random_range(0.5..40.0));
             let sample_mean = rng.random_range(-250.0..250.0);
             let sample_count = rng.random_range(1..2000);
             let prior_strength = rng.random_range(1.0..25.0);

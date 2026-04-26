@@ -5,9 +5,9 @@
 //! Each term is weighted and summed, then clamped to [-1, 1] per tick.
 //! Ban-risk is always a penalty term (hard constraint).
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Known signal names that can appear in reward specs.
 /// Matches ledger telemetry and anti-cheat signals.
@@ -98,9 +98,14 @@ impl RewardConfig {
         }
 
         // Ban-risk term must exist (hard requirement)
-        let has_ban_risk = self.terms.iter().any(|t| t.signal == "antidetect.risk_score");
+        let has_ban_risk = self
+            .terms
+            .iter()
+            .any(|t| t.signal == "antidetect.risk_score");
         if !has_ban_risk {
-            return Err(anyhow!("ban-risk term (antidetect.risk_score) is mandatory in all specs"));
+            return Err(anyhow!(
+                "ban-risk term (antidetect.risk_score) is mandatory in all specs"
+            ));
         }
 
         Ok(())

@@ -211,16 +211,13 @@ mod inner {
 
     static HOOK_BASE_ADDR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-    pub fn install(
-        write_site_addr: usize,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn install(write_site_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
         INSTALLED.get_or_try_init(|| {
             // SAFETY: write_site_addr is the rebased address of the target
             // function. transmute converts it to a typed function pointer.
             unsafe {
                 let target: RefillInboundFn = std::mem::transmute(write_site_addr);
-                InboundCounterRefillHook
-                    .initialize(target, inbound_counter_refill_detour)?;
+                InboundCounterRefillHook.initialize(target, inbound_counter_refill_detour)?;
                 InboundCounterRefillHook.enable()?;
             }
 
@@ -281,7 +278,10 @@ mod tests {
     fn record_write_populates_cache() {
         clean();
         record_write(42);
-        assert!(has_observation(), "observation flag should be set after write");
+        assert!(
+            has_observation(),
+            "observation flag should be set after write"
+        );
         assert_eq!(
             expected_ack_counter(),
             Some(42),
@@ -338,8 +338,7 @@ mod tests {
     fn inbound_refill_delta_matches_ghidra_evidence() {
         // Ghidra analysis 2026-04-03: inbound counter refilled by +0x55 = 85.
         assert_eq!(
-            INBOUND_REFILL_DELTA,
-            0x55,
+            INBOUND_REFILL_DELTA, 0x55,
             "inbound refill delta must be 0x55 per Ghidra analysis"
         );
     }
@@ -357,12 +356,16 @@ mod tests {
         assert_eq!(expected_ack_counter(), Some(tick1_value));
 
         // Tick 2: counter decremented by traffic, then refilled again.
-        let tick2_value: i32 = tick1_value.wrapping_sub(10).wrapping_add(INBOUND_REFILL_DELTA);
+        let tick2_value: i32 = tick1_value
+            .wrapping_sub(10)
+            .wrapping_add(INBOUND_REFILL_DELTA);
         record_write(tick2_value);
         assert_eq!(expected_ack_counter(), Some(tick2_value));
 
         // Tick 3: another cycle.
-        let tick3_value: i32 = tick2_value.wrapping_sub(7).wrapping_add(INBOUND_REFILL_DELTA);
+        let tick3_value: i32 = tick2_value
+            .wrapping_sub(7)
+            .wrapping_add(INBOUND_REFILL_DELTA);
         record_write(tick3_value);
         assert_eq!(
             expected_ack_counter(),
@@ -385,8 +388,7 @@ mod tests {
         // (i32 read width).
         let counter_end = INBOUND_MSG_COUNTER + 4;
         assert!(
-            INBOUND_MSG_COUNTER >= LFG_PRNG_STATE + (55 * 4)
-                || counter_end <= LFG_PRNG_STATE,
+            INBOUND_MSG_COUNTER >= LFG_PRNG_STATE + (55 * 4) || counter_end <= LFG_PRNG_STATE,
             "INBOUND_MSG_COUNTER ({:#x}) must not alias LFG_PRNG_STATE ({:#x}..+220)",
             INBOUND_MSG_COUNTER,
             LFG_PRNG_STATE,

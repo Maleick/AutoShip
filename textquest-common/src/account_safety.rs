@@ -278,7 +278,9 @@ mod tests {
     #[test]
     fn detect_account_banned() {
         assert!(detect_ban_message("Your account has been banned"));
-        assert!(detect_ban_message("Your account has been banned permanently"));
+        assert!(detect_ban_message(
+            "Your account has been banned permanently"
+        ));
     }
 
     #[test]
@@ -310,7 +312,9 @@ mod tests {
         assert!(detect_ban_message(
             "[System] Your account has been suspended. Please contact support."
         ));
-        assert!(detect_ban_message("[Error] Account locked due to security violation"));
+        assert!(detect_ban_message(
+            "[Error] Account locked due to security violation"
+        ));
     }
 
     #[test]
@@ -376,7 +380,9 @@ mod tests {
     #[test]
     fn detect_cheating_detected() {
         assert!(detect_ban_message("Cheating detected"));
-        assert!(detect_ban_message("Illegal activity detected - account banned"));
+        assert!(detect_ban_message(
+            "Illegal activity detected - account banned"
+        ));
     }
 
     #[test]
@@ -388,7 +394,9 @@ mod tests {
     #[test]
     fn detect_account_locked_for_security() {
         assert!(detect_ban_message("Account locked for security"));
-        assert!(detect_ban_message("Your account is locked for security reasons"));
+        assert!(detect_ban_message(
+            "Your account is locked for security reasons"
+        ));
     }
 
     #[test]
@@ -418,7 +426,11 @@ mod tests {
 
     #[test]
     fn ban_detection_new() {
-        let detection = BanDetection::new(42, "Your account has been suspended".into(), "login_screen".into());
+        let detection = BanDetection::new(
+            42,
+            "Your account has been suspended".into(),
+            "login_screen".into(),
+        );
         assert_eq!(detection.client_id, 42);
         assert_eq!(detection.message, "Your account has been suspended");
         assert_eq!(detection.context, "login_screen");
@@ -593,21 +605,11 @@ mod tests {
         let mut registry = BannedAccountRegistry::new();
 
         // First ban
-        let result1 = handle_ban_detection(
-            5,
-            "banned".into(),
-            "login".into(),
-            &mut registry,
-        );
+        let result1 = handle_ban_detection(5, "banned".into(), "login".into(), &mut registry);
         assert!(matches!(result1, BanHandlingResult::Halted { .. }));
 
         // Second detection (already banned)
-        let result2 = handle_ban_detection(
-            5,
-            "banned again".into(),
-            "chat".into(),
-            &mut registry,
-        );
+        let result2 = handle_ban_detection(5, "banned again".into(), "chat".into(), &mut registry);
 
         match result2 {
             BanHandlingResult::Halted { reason, .. } => {
@@ -644,14 +646,10 @@ mod tests {
     #[test]
     fn handle_ban_detection_preserves_message() {
         let mut registry = BannedAccountRegistry::new();
-        let msg = "Your account has been permanently suspended due to repeated violations".to_string();
+        let msg =
+            "Your account has been permanently suspended due to repeated violations".to_string();
 
-        let result = handle_ban_detection(
-            10,
-            msg.clone(),
-            "disconnect".into(),
-            &mut registry,
-        );
+        let result = handle_ban_detection(10, msg.clone(), "disconnect".into(), &mut registry);
 
         match result {
             BanHandlingResult::Halted { detection, .. } => {
@@ -725,11 +723,8 @@ mod tests {
 
         for i in 0..NUM_CLIENTS {
             let client_id = i as ClientId;
-            let detection = BanDetection::new(
-                client_id,
-                format!("Client {} banned", i),
-                "test".into(),
-            );
+            let detection =
+                BanDetection::new(client_id, format!("Client {} banned", i), "test".into());
             registry.mark_banned(detection);
         }
 

@@ -290,8 +290,8 @@ pub mod outbound_counter_hook {
     /// `counter_addr` and unregisters it. Safe to call even if the hook was
     /// never installed (no-op in that case).
     pub fn remove(counter_addr: usize) {
-        use super::super::hwbp::MAX_SLOTS;
         use super::super::hwbp::HwbpSlot;
+        use super::super::hwbp::MAX_SLOTS;
         for idx in 0..MAX_SLOTS {
             if let Some(slot) = HwbpSlot::from_index(idx) {
                 if hwbp::get_address(slot) == counter_addr {
@@ -450,8 +450,8 @@ mod tests {
     /// stores it in LAST_OUTBOUND_COUNTER.
     #[test]
     fn counter_callback_snapshots_value() {
-        use super::outbound_counter_hook;
         use super::LAST_OUTBOUND_COUNTER;
+        use super::outbound_counter_hook;
 
         // Reset the global snapshot.
         LAST_OUTBOUND_COUNTER.store(0, Ordering::Release);
@@ -474,8 +474,8 @@ mod tests {
     /// pointer (defensive guard for mid-frame edge cases).
     #[test]
     fn counter_callback_null_pointer_is_safe() {
-        use super::outbound_counter_hook;
         use super::LAST_OUTBOUND_COUNTER;
+        use super::outbound_counter_hook;
 
         LAST_OUTBOUND_COUNTER.store(0x55, Ordering::Release);
         let continued = outbound_counter_hook::callback(std::ptr::null_mut());
@@ -493,8 +493,8 @@ mod tests {
     /// simulated frame boundaries (write → read → write → read).
     #[test]
     fn counter_preserved_across_frame_boundaries() {
-        use super::outbound_counter_hook;
         use super::LAST_OUTBOUND_COUNTER;
+        use super::outbound_counter_hook;
 
         LAST_OUTBOUND_COUNTER.store(0, Ordering::Release);
 
@@ -520,8 +520,7 @@ mod tests {
     fn outbound_counter_hook_install_remove_stub() {
         let _guard = setup();
         let fake_addr: usize = 0x0001_40F6_0FC8; // OUTBOUND_MSG_COUNTER offset
-        outbound_counter_hook::install(fake_addr)
-            .expect("stub install should succeed");
+        outbound_counter_hook::install(fake_addr).expect("stub install should succeed");
         outbound_counter_hook::remove(fake_addr);
         // After remove, no slot should hold the counter address.
         for idx in 0..hwbp::MAX_SLOTS {

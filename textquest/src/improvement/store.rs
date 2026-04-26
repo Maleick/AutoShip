@@ -64,8 +64,8 @@ impl PosteriorStore {
     /// Open an in-memory posterior database (for testing).
     #[cfg(test)]
     pub fn open_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()
-            .context("Failed to open in-memory posteriors DB")?;
+        let conn =
+            Connection::open_in_memory().context("Failed to open in-memory posteriors DB")?;
         conn.execute_batch(SCHEMA)
             .context("Failed to initialize posteriors schema")?;
         Ok(Self {
@@ -154,12 +154,7 @@ impl PosteriorStore {
     }
 
     /// Save a Gaussian posterior.
-    pub fn save_gaussian(
-        &self,
-        character: &str,
-        knob: &str,
-        posterior: &Gaussian,
-    ) -> Result<()> {
+    pub fn save_gaussian(&self, character: &str, knob: &str, posterior: &Gaussian) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT OR REPLACE INTO posteriors (character, knob, knob_type, mean_val, variance, obs_variance, sum_obs, count_obs, updated_at)

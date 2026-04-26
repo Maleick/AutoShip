@@ -7,14 +7,17 @@ use std::{
 
 use anyhow::{Context, Result};
 use arrow_array::{
-    Array, FixedSizeListArray, Float32Array, Int32Array, Int64Array,
-    RecordBatch, RecordBatchIterator, StringArray,
-    types::Float32Type,
+    Array, FixedSizeListArray, Float32Array, Int32Array, Int64Array, RecordBatch,
+    RecordBatchIterator, StringArray, types::Float32Type,
 };
 use arrow_schema::{DataType, Field, Schema};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use futures::TryStreamExt;
-use lancedb::{Table, connect, index::Index, query::{ExecutableQuery, QueryBase}};
+use lancedb::{
+    Table, connect,
+    index::Index,
+    query::{ExecutableQuery, QueryBase},
+};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Builder;
 
@@ -487,10 +490,18 @@ impl SemanticMemoryStore {
                     .context("failed to create semantic LanceDB table")?,
             };
 
-            if let Err(err) = table.create_index(&["character_id"], Index::Auto).execute().await {
+            if let Err(err) = table
+                .create_index(&["character_id"], Index::Auto)
+                .execute()
+                .await
+            {
                 tracing::debug!(error = %err, "semantic_memory: character_id index not created");
             }
-            if let Err(err) = table.create_index(&["embedding"], Index::Auto).execute().await {
+            if let Err(err) = table
+                .create_index(&["embedding"], Index::Auto)
+                .execute()
+                .await
+            {
                 tracing::debug!(error = %err, "semantic_memory: embedding index not created");
             }
 
@@ -561,7 +572,10 @@ impl SemanticMemoryStore {
         if content.is_empty() {
             return Err(anyhow::anyhow!("semantic memory content cannot be empty"));
         }
-        let mut tags_vec = tags.iter().map(|tag| (*tag).to_string()).collect::<Vec<_>>();
+        let mut tags_vec = tags
+            .iter()
+            .map(|tag| (*tag).to_string())
+            .collect::<Vec<_>>();
         if !tags_vec.iter().any(|tag| tag == kind) {
             tags_vec.push(kind.to_string());
         }
@@ -618,7 +632,11 @@ impl SemanticMemoryStore {
     }
 
     /// Recall the most recent semantic memories without a semantic query.
-    pub fn recall_recent(&self, character_id: ClientId, top_k: usize) -> Result<Vec<SemanticMemoryRow>> {
+    pub fn recall_recent(
+        &self,
+        character_id: ClientId,
+        top_k: usize,
+    ) -> Result<Vec<SemanticMemoryRow>> {
         self.recall_recent_internal(character_id, top_k)
     }
 
@@ -749,7 +767,10 @@ fn merge_semantic_rows(
         created_ts: existing.created_ts.max(incoming.created_ts),
         zone: incoming.zone.or(existing.zone),
         party_overlap: existing.party_overlap.max(incoming.party_overlap),
-        merge_count: existing.merge_count.saturating_add(incoming.merge_count).saturating_add(1),
+        merge_count: existing
+            .merge_count
+            .saturating_add(incoming.merge_count)
+            .saturating_add(1),
         embedding: merged_embedding,
         score: None,
     }

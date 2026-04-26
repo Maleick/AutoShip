@@ -1,6 +1,6 @@
 use textquest_common::combat::{
-    AbilityCandidate, EQExpansion, AbilitySet, CombatRole, CombatStateReq, ConditionExpr, SpellEntry,
-    TargetSelector,
+    AbilityCandidate, AbilitySet, CombatRole, CombatStateReq, ConditionExpr, EQExpansion,
+    SpellEntry, TargetSelector,
 };
 
 use crate::combat::{

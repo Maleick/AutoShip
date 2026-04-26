@@ -325,8 +325,7 @@ impl VoiceCommandConfig {
     /// Return a normalized copy with exactly eight operator slots.
     #[must_use]
     pub fn normalized(mut self) -> Self {
-        self.operator_phrases
-            .truncate(OPERATOR_VOICE_COMMAND_SLOTS);
+        self.operator_phrases.truncate(OPERATOR_VOICE_COMMAND_SLOTS);
         self.operator_phrases
             .resize(OPERATOR_VOICE_COMMAND_SLOTS, None);
         self
@@ -339,21 +338,25 @@ impl VoiceCommandConfig {
         }
 
         if self.whisper_model.as_os_str().is_empty() {
-            return Err(anyhow::anyhow!("voice command model path must not be empty"));
+            return Err(anyhow::anyhow!(
+                "voice command model path must not be empty"
+            ));
         }
 
         if self.cancel_window_ms == 0 {
-            return Err(anyhow::anyhow!("voice command cancel window must be positive"));
+            return Err(anyhow::anyhow!(
+                "voice command cancel window must be positive"
+            ));
         }
 
         if self.echo_prompt_ms == 0 {
-            return Err(anyhow::anyhow!("voice command echo prompt duration must be positive"));
+            return Err(anyhow::anyhow!(
+                "voice command echo prompt duration must be positive"
+            ));
         }
 
         if !self.local_only {
-            return Err(anyhow::anyhow!(
-                "voice commands must remain local-only"
-            ));
+            return Err(anyhow::anyhow!("voice commands must remain local-only"));
         }
 
         if self.persist_audio {
@@ -397,17 +400,26 @@ pub struct VoiceOperatorPhrase {
     pub label: Option<String>,
 }
 
-
 /// Built-in voice command recognized from a Whisper transcript.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoiceCommand {
-    PauseCharacter { character: String },
-    ResumeCharacter { character: String },
+    PauseCharacter {
+        character: String,
+    },
+    ResumeCharacter {
+        character: String,
+    },
     PauseAll,
     ResumeAll,
-    GoToCamp { camp: u8 },
-    Assist { character: String },
-    MuteAlerts { character: String },
+    GoToCamp {
+        camp: u8,
+    },
+    Assist {
+        character: String,
+    },
+    MuteAlerts {
+        character: String,
+    },
     MuteNarrator,
     UnmuteNarrator,
     MuteAllVoices,
@@ -444,9 +456,7 @@ impl VoiceCommand {
             | Self::Assist { .. }
             | Self::NextPull
             | Self::Stop => true,
-            Self::OperatorDefined {
-                side_effecting, ..
-            } => *side_effecting,
+            Self::OperatorDefined { side_effecting, .. } => *side_effecting,
             Self::MuteAlerts { .. }
             | Self::MuteNarrator
             | Self::UnmuteNarrator
@@ -692,7 +702,9 @@ impl VoiceCommandSession {
     /// Returns the pending echo prompt when confirmation is active.
     #[must_use]
     pub fn pending_echo_prompt(&self) -> Option<&str> {
-        self.pending.as_ref().map(|pending| pending.echo_prompt.as_str())
+        self.pending
+            .as_ref()
+            .map(|pending| pending.echo_prompt.as_str())
     }
 }
 

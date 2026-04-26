@@ -63,15 +63,10 @@ impl MezTracker {
     /// - `"did not take hold"` — spell did not land (soft immune / resist).
     ///
     /// Returns `true` when an immunity was recorded.
-    pub fn parse_chat_line(
-        &mut self,
-        line: &str,
-        mob_name: &str,
-        spell_id: SpellId,
-    ) -> bool {
+    pub fn parse_chat_line(&mut self, line: &str, mob_name: &str, spell_id: SpellId) -> bool {
         let lower = line.to_lowercase();
-        let is_immune_msg = lower.contains("your target is immune")
-            || lower.contains("did not take hold");
+        let is_immune_msg =
+            lower.contains("your target is immune") || lower.contains("did not take hold");
 
         if is_immune_msg {
             self.mark_immune(mob_name, spell_id);
@@ -147,8 +142,7 @@ mod tests {
     #[test]
     fn parse_did_not_take_hold_records_immunity() {
         let mut tracker = MezTracker::new();
-        let recorded =
-            tracker.parse_chat_line("Your spell did not take hold.", "Thicket Rat", 20);
+        let recorded = tracker.parse_chat_line("Your spell did not take hold.", "Thicket Rat", 20);
         assert!(recorded);
         assert!(tracker.is_immune("Thicket Rat", 20));
     }

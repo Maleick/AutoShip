@@ -23,7 +23,8 @@ pub trait BayesianPosterior: Send + Sync {
         if self.should_suggest(current_value) {
             Some(Suggestion {
                 proposed: self.mean(),
-                confidence: 1.0 - (-0.5 * ((self.mean() - current_value) / self.std_dev()).powi(2)).exp(),
+                confidence: 1.0
+                    - (-0.5 * ((self.mean() - current_value) / self.std_dev()).powi(2)).exp(),
             })
         } else {
             None
@@ -57,7 +58,10 @@ impl BetaBinomial {
     /// Create a Beta-Binomial posterior with default weak priors.
     /// Uses Beta(1, 1) uniform prior.
     pub fn new() -> Self {
-        Self { alpha: 1.0, beta: 1.0 }
+        Self {
+            alpha: 1.0,
+            beta: 1.0,
+        }
     }
 
     /// Create with custom prior pseudocounts.
@@ -184,7 +188,8 @@ impl BayesianPosterior for Gaussian {
         let posterior_precision = prior_precision + self.count_obs * obs_precision;
 
         // Updated mean
-        self.mean_val = (prior_precision * prior_mean + self.count_obs * obs_precision * data_mean) / posterior_precision;
+        self.mean_val = (prior_precision * prior_mean + self.count_obs * obs_precision * data_mean)
+            / posterior_precision;
 
         // Updated variance
         self.variance = 1.0 / posterior_precision;

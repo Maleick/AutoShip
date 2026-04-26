@@ -42,7 +42,12 @@ impl PolicyStore {
         let history = RollbackHistory::new(root.join("rollback_history.jsonl"));
         let swap = Arc::new(PolicySwapRegistry::new());
 
-        let store = Self { root: root.to_path_buf(), registry, history, swap };
+        let store = Self {
+            root: root.to_path_buf(),
+            registry,
+            history,
+            swap,
+        };
 
         // Restore active bundles from registry into swap slots on open.
         store.restore_active_bundles()?;
@@ -122,9 +127,12 @@ impl PolicyStore {
             Some(i) => entries[i].version.clone(),
             None => {
                 // Nothing active — activate the last promoted entry.
-                return entries.last().ok_or_else(|| PolicyError::NoPreviousVersion {
-                    scope: scope.to_string(),
-                }).and_then(|e| self.activate(scope, &e.version));
+                return entries
+                    .last()
+                    .ok_or_else(|| PolicyError::NoPreviousVersion {
+                        scope: scope.to_string(),
+                    })
+                    .and_then(|e| self.activate(scope, &e.version));
             }
         };
 
@@ -164,17 +172,25 @@ impl PolicyStore {
     }
 
     /// Return all active registry entries (for TUI display).
-    pub fn active_registry_entries(&self) -> Result<Vec<crate::registry::RegistryEntry>, PolicyError> {
+    pub fn active_registry_entries(
+        &self,
+    ) -> Result<Vec<crate::registry::RegistryEntry>, PolicyError> {
         self.registry.all_active()
     }
 
     fn artifact_dir(&self, scope: &str, version: &str) -> PathBuf {
         // Sanitise scope/version for use as directory names.
-        let safe = format!("{}.{}", scope, version).replace('/', "_").replace('\\', "_");
+        let safe = format!("{}.{}", scope, version)
+            .replace('/', "_")
+            .replace('\\', "_");
         self.root.join("artifacts").join(safe)
     }
 
-    fn load_bundle_from_disk(&self, scope: &str, version: &str) -> Result<PolicyBundle, PolicyError> {
+    fn load_bundle_from_disk(
+        &self,
+        scope: &str,
+        version: &str,
+    ) -> Result<PolicyBundle, PolicyError> {
         let dir = self.artifact_dir(scope, version);
         let manifest = load_manifest(&dir)?;
         let data = std::fs::read(dir.join("policy.bin")).unwrap_or_default();

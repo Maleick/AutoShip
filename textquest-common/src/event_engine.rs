@@ -45,13 +45,21 @@ pub struct EventRule {
 }
 
 impl EventRule {
-    pub fn new(name: impl Into<String>, pattern: impl Into<String>, command: impl Into<String>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        pattern: impl Into<String>,
+        command: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid_v4(),
             name: name.into(),
             pattern: pattern.into(),
             pattern_type: PatternType::Regex,
-            chat_type: vec!["group".to_string(), "guild".to_string(), "shout".to_string()],
+            chat_type: vec![
+                "group".to_string(),
+                "guild".to_string(),
+                "shout".to_string(),
+            ],
             command: command.into(),
             cooldown_ms: 0,
             enabled: true,
@@ -152,7 +160,11 @@ impl EventEngine {
         }
     }
 
-    fn matches_pattern(pattern: &str, pattern_type: &PatternType, text: &str) -> (bool, Vec<String>) {
+    fn matches_pattern(
+        pattern: &str,
+        pattern_type: &PatternType,
+        text: &str,
+    ) -> (bool, Vec<String>) {
         match pattern_type {
             PatternType::Literal => {
                 let matches = text.to_lowercase().contains(&pattern.to_lowercase());
@@ -238,7 +250,8 @@ impl EventEngine {
                 continue;
             }
 
-            let (matches, captures) = Self::matches_pattern(&rule.pattern, &rule.pattern_type, message);
+            let (matches, captures) =
+                Self::matches_pattern(&rule.pattern, &rule.pattern_type, message);
 
             if matches {
                 let command = Self::substitute_captures(&rule.command, &captures);
@@ -308,7 +321,7 @@ mod tests {
 
     #[test]
     fn captures_from_regex() {
-        let pattern = r"^(\w+) says '(.*)'" ;
+        let pattern = r"^(\w+) says '(.*)'";
         let text = "Bard says 'Hello everyone'";
         let (matches, captures) = EventEngine::matches_pattern(pattern, &PatternType::Regex, text);
         assert!(matches);
@@ -345,8 +358,7 @@ mod tests {
     #[test]
     fn cooldown_blocks_refire() {
         let mut engine = EventEngine::new();
-        let rule = EventRule::new("test", r"hello", "/cmd")
-            .with_cooldown_ms(1000);
+        let rule = EventRule::new("test", r"hello", "/cmd").with_cooldown_ms(1000);
 
         engine.add_rule(rule);
 
@@ -371,8 +383,8 @@ mod tests {
     #[test]
     fn chat_type_filter() {
         let mut engine = EventEngine::new();
-        let rule = EventRule::new("test", "hello", "/cmd")
-            .with_chat_types(vec!["guild".to_string()]);
+        let rule =
+            EventRule::new("test", "hello", "/cmd").with_chat_types(vec!["guild".to_string()]);
 
         engine.add_rule(rule);
 

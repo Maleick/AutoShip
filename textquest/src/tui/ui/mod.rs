@@ -26,9 +26,9 @@ pub mod navigation;
 pub mod orchestrator_panel;
 pub mod packets;
 pub mod patch_reconciliation;
+pub mod policy_panel;
 pub mod spawns;
 pub mod widgets;
-pub mod policy_panel;
 pub mod zone_blocker_panel;
 pub mod zone_status_panel;
 
@@ -716,11 +716,7 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
     // Mode pill: status badge with accent color (magenta for HUNT, cyan for CAMP)
     let mode_str = format!("{}", app.operating_mode);
     let pill = widgets::status_pill(&mode_str, t);
-    let _ = push_segment_if_fits(
-        &mut spans,
-        pill,
-        max_width,
-    );
+    let _ = push_segment_if_fits(&mut spans, pill, max_width);
 
     // Separator and MA
     let ma_label = app.main_assist.as_deref().map(|name| {
@@ -1524,12 +1520,27 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
         };
         push_heading(&mut rows, marker, "Debug — Oracle Controls");
         push_kv(&mut rows, None, "j/k", "Navigate focused debug panel");
-        push_kv(&mut rows, None, "Enter", "Load selected offset or explorer row into Hex");
-        push_kv(&mut rows, None, "h/x", "Open Hex memory for the selected spawn");
+        push_kv(
+            &mut rows,
+            None,
+            "Enter",
+            "Load selected offset or explorer row into Hex",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "h/x",
+            "Open Hex memory for the selected spawn",
+        );
         push_kv(&mut rows, None, "/", "Search offsets or explorer rows");
         push_kv(&mut rows, None, "a", "Toggle hex dump annotations");
         push_kv(&mut rows, None, "c", "Cycle EQ Internals category filter");
-        push_kv(&mut rows, None, "Tab", "Cycle Spawns / Hex / Explorer / Internals");
+        push_kv(
+            &mut rows,
+            None,
+            "Tab",
+            "Cycle Spawns / Hex / Explorer / Internals",
+        );
         rows.push(help_row(None, HelpCell::Text(String::new())));
     }
 

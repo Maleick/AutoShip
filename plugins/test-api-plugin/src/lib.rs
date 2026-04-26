@@ -67,9 +67,15 @@ mod tests {
 
         let capabilities = context.capabilities();
         assert_eq!(capabilities.len(), 3);
-        assert!(capabilities.iter().any(|c| c.domain == PluginDomain::Combat));
-        assert!(capabilities.iter().any(|c| c.domain == PluginDomain::Navigation));
-        assert!(capabilities.iter().any(|c| c.domain == PluginDomain::Inventory));
+        assert!(capabilities
+            .iter()
+            .any(|c| c.domain == PluginDomain::Combat));
+        assert!(capabilities
+            .iter()
+            .any(|c| c.domain == PluginDomain::Navigation));
+        assert!(capabilities
+            .iter()
+            .any(|c| c.domain == PluginDomain::Inventory));
     }
 
     #[test]

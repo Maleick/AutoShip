@@ -742,8 +742,7 @@ mod tests {
 
         let knobs = default_knobs();
         let mut dedupe = DedupeState::new();
-        let sug = rule_camp_aggro_radius("Cleric", &[s], &knobs, &mut dedupe)
-            .expect("should fire");
+        let sug = rule_camp_aggro_radius("Cleric", &[s], &knobs, &mut dedupe).expect("should fire");
 
         assert_eq!(sug.knob, KnobId::CampAggroRadius);
         // proposed ≈ 100 * 0.8 = 80
@@ -842,8 +841,8 @@ mod tests {
 
         let knobs = default_knobs();
         let mut dedupe = DedupeState::new();
-        let sug = rule_combat_ability_priority("Bard", &[s], &knobs, &mut dedupe)
-            .expect("should fire");
+        let sug =
+            rule_combat_ability_priority("Bard", &[s], &knobs, &mut dedupe).expect("should fire");
 
         assert_eq!(sug.knob, KnobId::CombatAbilityPriority);
         let proposed: Vec<String> = serde_json::from_value(sug.proposed).unwrap();
@@ -951,7 +950,10 @@ mod tests {
         let second = rule_pull_cadence("Warrior", &sessions, &knobs, &mut dedupe);
 
         assert!(first.is_some(), "first call should emit");
-        assert!(second.is_none(), "second call with same value should be suppressed");
+        assert!(
+            second.is_none(),
+            "second call with same value should be suppressed"
+        );
     }
 
     #[test]

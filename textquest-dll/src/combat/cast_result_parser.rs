@@ -46,7 +46,10 @@ pub fn parse_cast_result(text: &str) -> Option<CastResult> {
     }
 
     // Line of sight
-    if lower.contains("can't see") || lower.contains("cannot see") || lower.contains("line of sight") {
+    if lower.contains("can't see")
+        || lower.contains("cannot see")
+        || lower.contains("line of sight")
+    {
         return Some(CastResult::CannotSee);
     }
 

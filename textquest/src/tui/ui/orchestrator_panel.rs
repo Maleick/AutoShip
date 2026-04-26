@@ -438,7 +438,11 @@ fn draw_fleet_header(frame: &mut Frame, area: Rect, app: &App) {
     ];
 
     let content = Paragraph::new(lines).wrap(Wrap { trim: true });
-    let block = panel(" FLEET ORCHESTRATOR ", Style::default().fg(t.text_server), t);
+    let block = panel(
+        " FLEET ORCHESTRATOR ",
+        Style::default().fg(t.text_server),
+        t,
+    );
     frame.render_widget(content.block(block), area);
 }
 

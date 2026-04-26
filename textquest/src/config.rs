@@ -375,7 +375,6 @@ pub struct AppConfig {
     #[cfg(windows)]
     #[serde(default)]
     pub session_recorder: crate::metrics::SessionRecorderConfig,
-
 }
 
 /// Kill tracker auto-reporting configuration.

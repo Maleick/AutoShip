@@ -3,7 +3,7 @@
 use std::{path::Path, sync::Mutex};
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 /// Schema for the fleet metrics database.
 ///

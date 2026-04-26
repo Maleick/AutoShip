@@ -299,7 +299,6 @@ impl WizardWidget<'_> {
         para.render(area, buf);
     }
 
-
     fn render_progress(&self, area: Rect, buf: &mut Buffer) {
         if area.width < 4 {
             return;

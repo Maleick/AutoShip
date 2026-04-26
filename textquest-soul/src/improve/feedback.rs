@@ -105,10 +105,7 @@ impl PipelineFeedback {
             self.id_to_key.insert(ev.id, key.clone());
             self.current_ids.insert(ev.id);
             // Record that an alarm fired for this key
-            self.posteriors
-                .entry(key)
-                .or_default()
-                .record_alarm();
+            self.posteriors.entry(key).or_default().record_alarm();
         }
     }
 
@@ -129,7 +126,10 @@ impl PipelineFeedback {
         match action {
             OperatorAction::Accept(id) => {
                 if let Some(key) = self.id_to_key.get(&id) {
-                    self.posteriors.entry(key.clone()).or_default().record_real();
+                    self.posteriors
+                        .entry(key.clone())
+                        .or_default()
+                        .record_real();
                 }
             }
             OperatorAction::Dismiss(id) => {
@@ -209,11 +209,7 @@ mod tests {
     #[test]
     fn no_demotion_before_dismissals() {
         let mut fb = PipelineFeedback::new();
-        let events = vec![make_event(
-            1,
-            AnomalyKind::ManaCollapseMad,
-            Severity::Major,
-        )];
+        let events = vec![make_event(1, AnomalyKind::ManaCollapseMad, Severity::Major)];
         fb.register_session(&events);
         let out = fb.filter(events.clone());
         assert_eq!(out[0].severity, Severity::Major);
@@ -247,7 +243,11 @@ mod tests {
         let ev3 = make_event(3, AnomalyKind::ManaCollapseMad, Severity::Major);
         fb.register_session(std::slice::from_ref(&ev3));
         let out = fb.filter(vec![ev3]);
-        assert_eq!(out[0].severity, Severity::Average, "2 dismissals → Major demoted to Average");
+        assert_eq!(
+            out[0].severity,
+            Severity::Average,
+            "2 dismissals → Major demoted to Average"
+        );
     }
 
     #[test]
@@ -296,7 +296,9 @@ mod tests {
         for i in 1..=2u64 {
             let ev = make_event(
                 i,
-                AnomalyKind::LootRateStlMad { camp: "camp_a".into() },
+                AnomalyKind::LootRateStlMad {
+                    camp: "camp_a".into(),
+                },
                 Severity::Average,
             );
             fb.register_session(&[ev]);
@@ -305,12 +307,18 @@ mod tests {
         // camp_b should be unaffected
         let ev_b = make_event(
             10,
-            AnomalyKind::LootRateStlMad { camp: "camp_b".into() },
+            AnomalyKind::LootRateStlMad {
+                camp: "camp_b".into(),
+            },
             Severity::Average,
         );
         fb.register_session(std::slice::from_ref(&ev_b));
         let out = fb.filter(vec![ev_b]);
-        assert_eq!(out[0].severity, Severity::Average, "camp_b unaffected by camp_a dismissals");
+        assert_eq!(
+            out[0].severity,
+            Severity::Average,
+            "camp_b unaffected by camp_a dismissals"
+        );
     }
 
     #[test]

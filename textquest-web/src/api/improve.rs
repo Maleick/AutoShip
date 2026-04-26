@@ -1,6 +1,5 @@
 //! Self-improvement auto-promote API — confidence-gated auto-apply of suggestions.
 
-use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{Path as AxumPath, State},
@@ -8,9 +7,10 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-use crate::AppState;
 use super::json_error;
+use crate::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoPromoteStatus {
@@ -103,7 +103,13 @@ pub async fn kill_auto_promote(
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/auto-promote", axum::routing::get(get_auto_promote_settings))
-        .route("/auto-promote", axum::routing::put(put_auto_promote_settings))
+        .route(
+            "/auto-promote",
+            axum::routing::get(get_auto_promote_settings),
+        )
+        .route(
+            "/auto-promote",
+            axum::routing::put(put_auto_promote_settings),
+        )
         .route("/auto-promote/kill", axum::routing::post(kill_auto_promote))
 }

@@ -17,6 +17,8 @@ pub mod box_chat;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
+/// Camp knowledge layer — PEQ camp clustering, overrides, and catalog storage.
+pub mod camp_knowledge;
 /// MQ2Log-style per-character chat output logging.
 pub mod chat_log;
 /// Circuit breaker for mass failure protection — 3-state (Closed/Open/HalfOpen)
@@ -42,8 +44,6 @@ pub mod config_share;
 /// recovery commands.
 #[cfg(windows)]
 pub mod crash_reporter;
-/// Camp knowledge layer — PEQ camp clustering, overrides, and catalog storage.
-pub mod camp_knowledge;
 /// Encrypted credential store (Argon2id + AES-256-GCM).
 #[cfg(windows)]
 #[allow(dead_code)]
@@ -66,6 +66,8 @@ pub mod discord;
 #[cfg(windows)]
 #[allow(dead_code)]
 pub mod eq;
+/// Self-improvement loop — Bayesian posteriors for suggestion engine.
+pub mod improvement;
 /// DLL injection and staging.
 #[cfg(windows)]
 pub mod inject;
@@ -74,14 +76,9 @@ pub mod inject;
 pub mod ipc;
 /// EQ item database, TLP loot tables, wishlists, and loot history.
 pub mod loot;
-/// Self-improvement loop — Bayesian posteriors for suggestion engine.
-pub mod improvement;
 /// Fleet metrics — SQLite-backed storage for events, DPS, loot, lockouts, plat.
 #[cfg(windows)]
 pub mod metrics;
-/// Session stats aggregation — JSONL → SQLite aggregate tables.
-#[cfg(windows)]
-pub mod stats;
 /// Navigation — waypoint recording, zone routing, navmesh integration.
 #[cfg(windows)]
 #[allow(dead_code)]
@@ -95,11 +92,14 @@ pub mod orchestrator;
 pub mod orchestrator_loop;
 /// Shared runtime paths for logs and local state.
 pub mod paths;
-/// Replay archives, FlatBuffers cache, and policy diff tooling.
-pub mod replay;
 /// OS-level process interaction — open, read memory, find processes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod process;
+/// Replay archives, FlatBuffers cache, and policy diff tooling.
+pub mod replay;
+/// Session stats aggregation — JSONL → SQLite aggregate tables.
+#[cfg(windows)]
+pub mod stats;
 /// Terminal UI — app state, event handling, theme, renderers.
 #[cfg(windows)]
 pub mod tui;

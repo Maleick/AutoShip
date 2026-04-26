@@ -124,8 +124,8 @@ impl BandolierManager {
 
     /// Load known set names from an EQ character ini file.
     pub fn load_from_ini(&mut self, path: &Path) -> Result<(), String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("failed to read ini: {e}"))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("failed to read ini: {e}"))?;
         self.known_sets = parse_eq_bandolier_ini(&content);
         Ok(())
     }
@@ -226,12 +226,8 @@ impl BandolierManager {
             BandolierCondition::TankHasAggro => ctx.tank_has_aggro,
             BandolierCondition::InCombat => ctx.in_combat,
             BandolierCondition::OutOfCombat => !ctx.in_combat,
-            BandolierCondition::DistanceAbove(d) => {
-                ctx.target_distance.is_some_and(|td| td > *d)
-            }
-            BandolierCondition::DistanceBelow(d) => {
-                ctx.target_distance.is_some_and(|td| td < *d)
-            }
+            BandolierCondition::DistanceAbove(d) => ctx.target_distance.is_some_and(|td| td > *d),
+            BandolierCondition::DistanceBelow(d) => ctx.target_distance.is_some_and(|td| td < *d),
         }
     }
 }
@@ -240,8 +236,7 @@ impl BandolierManager {
 // Global instance
 // ---------------------------------------------------------------------------
 
-pub(crate) static BANDOLIER_MANAGER: Mutex<BandolierManager> =
-    Mutex::new(BandolierManager::new());
+pub(crate) static BANDOLIER_MANAGER: Mutex<BandolierManager> = Mutex::new(BandolierManager::new());
 
 // ---------------------------------------------------------------------------
 // EQ ini parser
@@ -292,8 +287,7 @@ pub fn parse_eq_bandolier_ini(ini_text: &str) -> Vec<String> {
             size = value.parse().unwrap_or(0);
         } else if key_lower.starts_with("bandolieritem") && key_lower.ends_with("name") {
             // Extract slot index from "BandolierItem<N>Name".
-            let middle =
-                &key_lower["bandolieritem".len()..key_lower.len() - "name".len()];
+            let middle = &key_lower["bandolieritem".len()..key_lower.len() - "name".len()];
             if let Ok(idx) = middle.parse::<usize>() {
                 names.insert(idx, value.to_string());
             }

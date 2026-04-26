@@ -257,7 +257,10 @@ fn ensure_memory_columns(conn: &Connection) -> Result<()> {
         .context("Failed to read memory schema columns")?;
 
     for (column, sql) in [
-        ("session_id", "ALTER TABLE memories ADD COLUMN session_id TEXT"),
+        (
+            "session_id",
+            "ALTER TABLE memories ADD COLUMN session_id TEXT",
+        ),
         (
             "embedding",
             "ALTER TABLE memories ADD COLUMN embedding TEXT NOT NULL DEFAULT '[]'",
@@ -415,18 +418,18 @@ impl MemoryStore {
                 );
                 self.push_fallback(CachedMemory {
                     character_id,
-                event_type: event_type.to_string(),
-                event_json,
-                zone,
-                mood_at_time: mood_str,
-                importance,
-                embedding: embedding_json,
-                kind,
-                session_id,
-            });
-            Ok(-1)
+                    event_type: event_type.to_string(),
+                    event_json,
+                    zone,
+                    mood_at_time: mood_str,
+                    importance,
+                    embedding: embedding_json,
+                    kind,
+                    session_id,
+                });
+                Ok(-1)
+            }
         }
-    }
     }
 
     /// Push a memory entry into the in-memory fallback cache, evicting the
@@ -495,7 +498,10 @@ impl MemoryStore {
         )?;
 
         let rows = stmt
-            .query_map(params![character_id, cutoff, limit as i64], MemoryRow::from_row)?
+            .query_map(
+                params![character_id, cutoff, limit as i64],
+                MemoryRow::from_row,
+            )?
             .collect::<std::result::Result<Vec<_>, _>>()
             .context("Failed to read recent memories")?;
 
@@ -1410,7 +1416,12 @@ impl MemoryRow {
         let zone = self.zone.as_deref().unwrap_or("-");
         format!(
             "[{}] zone={} mood={} importance={:.2} created_at={} {}",
-            self.event_type, zone, self.mood_at_time, self.importance, self.created_at, self.event_json
+            self.event_type,
+            zone,
+            self.mood_at_time,
+            self.importance,
+            self.created_at,
+            self.event_json
         )
     }
 }

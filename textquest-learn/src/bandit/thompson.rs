@@ -84,9 +84,7 @@ impl ThompsonArm {
             self.finalize();
         }
         let d = self.d;
-        let z: Vec<f32> = (0..d)
-            .map(|_| sample_standard_normal(rng))
-            .collect();
+        let z: Vec<f32> = (0..d).map(|_| sample_standard_normal(rng)).collect();
         let perturbation = lower_tri_mat_vec(&self.chol_l, &z, d);
         // θ = μ + L @ z
         let mut theta = self.mu.clone();
@@ -168,8 +166,8 @@ impl ThompsonModel {
 mod tests {
     use super::*;
     use crate::bandit::context::CTX_DIM;
-    use rand::SeedableRng;
     use rand::rngs::SmallRng;
+    use rand::SeedableRng;
 
     /// Synthetic bandit: arm 1 reward 1.0, arm 0 reward 0.2.
     /// After 10K steps Thompson should predominantly pick arm 1.

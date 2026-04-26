@@ -71,10 +71,7 @@ impl CharacterSoulConfig {
             format!("name={}", self.name),
             format!("speech={:?}", self.speech),
             format!("traits={:?}", self.traits),
-            format!(
-                "edginess={:?}",
-                self.edginess.unwrap_or_default()
-            ),
+            format!("edginess={:?}", self.edginess.unwrap_or_default()),
         ];
 
         if !self.backstory.is_empty() {
@@ -291,9 +288,9 @@ impl VoiceRoutingTable {
             | VoiceEventClass::DeathAnnouncement
             | VoiceEventClass::Ding
             | VoiceEventClass::NamedLootDrop => VoiceRoute::narrator_only(),
-            VoiceEventClass::Banter
-            | VoiceEventClass::LowManaMutter
-            | VoiceEventClass::Callout => VoiceRoute::character_only(),
+            VoiceEventClass::Banter | VoiceEventClass::LowManaMutter | VoiceEventClass::Callout => {
+                VoiceRoute::character_only()
+            }
         };
 
         VoiceRoute {

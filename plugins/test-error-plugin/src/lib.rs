@@ -3,7 +3,9 @@
 //! This plugin intentionally fails during on_load to verify that error
 //! handling and plugin isolation work correctly in the registry.
 
-use textquest_common::plugins::{PluginContext, PluginMetadata, PluginError, PluginResult, TextQuestPlugin};
+use textquest_common::plugins::{
+    PluginContext, PluginError, PluginMetadata, PluginResult, TextQuestPlugin,
+};
 
 #[derive(Default)]
 pub struct ErrorPlugin {

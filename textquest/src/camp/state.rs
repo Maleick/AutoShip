@@ -445,7 +445,8 @@ impl CampLoop {
                     s.healer_mana_pct >= self.config.group_readiness.healer.mana_pct as f32
                 });
 
-                let timeout_exceeded = self.tick - started_tick >= self.config.group_readiness.timeout_ticks;
+                let timeout_exceeded =
+                    self.tick - started_tick >= self.config.group_readiness.timeout_ticks;
 
                 if group_ready {
                     self.transition_to_pulling(&mut commands);
@@ -907,7 +908,10 @@ mod tests {
         // Idle -> GroupWatchWait when no snapshot (snapshot-less mode)
         assert!(matches!(camp.state, CampState::GroupWatchWait { .. }));
         // All members should sit
-        let sit_cmds: Vec<_> = cmds.iter().filter(|(_, action)| action.contains("/sit")).collect();
+        let sit_cmds: Vec<_> = cmds
+            .iter()
+            .filter(|(_, action)| action.contains("/sit"))
+            .collect();
         assert_eq!(sit_cmds.len(), 6, "All 6 members should sit");
     }
 

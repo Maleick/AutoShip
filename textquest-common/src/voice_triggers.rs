@@ -177,7 +177,11 @@ impl VoiceTriggerContext {
     }
 
     #[must_use]
-    pub fn non_tank_with_hits(&self, min_hits: u8, within_seconds: u64) -> Option<&VoicePartyMember> {
+    pub fn non_tank_with_hits(
+        &self,
+        min_hits: u8,
+        within_seconds: u64,
+    ) -> Option<&VoicePartyMember> {
         self.party
             .iter()
             .filter(|member| {
@@ -250,23 +254,47 @@ impl VoiceMatch {
 pub enum VoicePredicate {
     #[default]
     Always,
-    AllOf { conditions: Vec<VoicePredicate> },
-    AnyOf { conditions: Vec<VoicePredicate> },
-    Not { condition: Box<VoicePredicate> },
+    AllOf {
+        conditions: Vec<VoicePredicate>,
+    },
+    AnyOf {
+        conditions: Vec<VoicePredicate>,
+    },
+    Not {
+        condition: Box<VoicePredicate>,
+    },
     ClericOomImminent,
     TankChChainBreak,
-    UnintendedAdds { count: u8, within_seconds: u64 },
+    UnintendedAdds {
+        count: u8,
+        within_seconds: u64,
+    },
     MezBreak,
-    LowManaDps { mana_below: u8, mob_hp_above: u8 },
-    RespawnWindowOpen { within_seconds: u64 },
-    BuffAboutToFade { within_seconds: u64 },
-    AggroSwap { hits: u8, within_seconds: u64 },
+    LowManaDps {
+        mana_below: u8,
+        mob_hp_above: u8,
+    },
+    RespawnWindowOpen {
+        within_seconds: u64,
+    },
+    BuffAboutToFade {
+        within_seconds: u64,
+    },
+    AggroSwap {
+        hits: u8,
+        within_seconds: u64,
+    },
     LootNamedDrop,
-    Ding { min_level_delta: u8 },
-    PullCadenceDrift { multiplier: f64 },
-    IdleTooLong { seconds: u64 },
+    Ding {
+        min_level_delta: u8,
+    },
+    PullCadenceDrift {
+        multiplier: f64,
+    },
+    IdleTooLong {
+        seconds: u64,
+    },
 }
-
 
 impl VoicePredicate {
     #[must_use]
@@ -280,41 +308,49 @@ impl VoicePredicate {
                 }
                 Some(merged)
             }
-            Self::AnyOf { conditions } => conditions.iter().find_map(|condition| condition.evaluate(ctx)),
-            Self::Not { condition } => condition.evaluate(ctx).is_none().then_some(VoiceMatch::default()),
+            Self::AnyOf { conditions } => conditions
+                .iter()
+                .find_map(|condition| condition.evaluate(ctx)),
+            Self::Not { condition } => condition
+                .evaluate(ctx)
+                .is_none()
+                .then_some(VoiceMatch::default()),
             Self::ClericOomImminent => {
                 let cleric = ctx.party_member(VoiceRole::Cleric)?;
                 let incoming_dps = ctx.combat.incoming_dps.or(cleric.incoming_dps)?;
                 let heal_per_sec = cleric.heal_per_sec?;
 
-                (cleric.mana_percent? < 15 && incoming_dps > heal_per_sec * 0.8).then(|| {
-                    VoiceMatch::with_speaker(cleric.name.clone())
-                })
+                (cleric.mana_percent? < 15 && incoming_dps > heal_per_sec * 0.8)
+                    .then(|| VoiceMatch::with_speaker(cleric.name.clone()))
             }
             Self::TankChChainBreak => {
                 let tank = ctx.party_member(VoiceRole::Tank)?;
-                let landed = tank.last_ch_landed_seconds_ago.or(ctx.combat.last_ch_landed_seconds_ago)?;
+                let landed = tank
+                    .last_ch_landed_seconds_ago
+                    .or(ctx.combat.last_ch_landed_seconds_ago)?;
 
-                (landed > 7 && tank.hp_percent? < 60).then(|| VoiceMatch::with_speaker(tank.name.clone()))
+                (landed > 7 && tank.hp_percent? < 60)
+                    .then(|| VoiceMatch::with_speaker(tank.name.clone()))
             }
-            Self::UnintendedAdds { count, within_seconds } => {
-                (ctx.pull.unintended_adds_count >= *count
-                    && ctx
-                        .pull
-                        .unintended_adds_window_seconds
-                        .map(|window| window <= *within_seconds)
-                        .unwrap_or(false))
-                .then_some(VoiceMatch::default())
-            }
-            Self::MezBreak => {
-                (ctx.combat.mez_break_on_non_target && ctx.combat.mez_break_target.is_some()).then(|| {
-                    let mut matched = VoiceMatch::default();
-                    if let Some(target) = &ctx.combat.mez_break_target {
-                        matched = matched.with_value("target", target.clone());
-                    }
-                    matched
-                })
-            }
+            Self::UnintendedAdds {
+                count,
+                within_seconds,
+            } => (ctx.pull.unintended_adds_count >= *count
+                && ctx
+                    .pull
+                    .unintended_adds_window_seconds
+                    .map(|window| window <= *within_seconds)
+                    .unwrap_or(false))
+            .then_some(VoiceMatch::default()),
+            Self::MezBreak => (ctx.combat.mez_break_on_non_target
+                && ctx.combat.mez_break_target.is_some())
+            .then(|| {
+                let mut matched = VoiceMatch::default();
+                if let Some(target) = &ctx.combat.mez_break_target {
+                    matched = matched.with_value("target", target.clone());
+                }
+                matched
+            }),
             Self::LowManaDps {
                 mana_below,
                 mob_hp_above,
@@ -341,19 +377,20 @@ impl VoicePredicate {
                     .or(ctx.buff.tank_buff_fades_in_seconds)?;
                 (fade_in <= *within_seconds).then(|| VoiceMatch::with_speaker(tank.name.clone()))
             }
-            Self::AggroSwap { hits, within_seconds } => {
+            Self::AggroSwap {
+                hits,
+                within_seconds,
+            } => {
                 let target = ctx.non_tank_with_hits(*hits, *within_seconds)?;
                 Some(VoiceMatch::with_speaker(target.name.clone()))
             }
-            Self::LootNamedDrop => {
-                (ctx.loot.is_rare && ctx.loot.item_name.is_some()).then(|| {
-                    let mut matched = VoiceMatch::default();
-                    if let Some(item_name) = &ctx.loot.item_name {
-                        matched = matched.with_value("item", item_name.clone());
-                    }
-                    matched
-                })
-            }
+            Self::LootNamedDrop => (ctx.loot.is_rare && ctx.loot.item_name.is_some()).then(|| {
+                let mut matched = VoiceMatch::default();
+                if let Some(item_name) = &ctx.loot.item_name {
+                    matched = matched.with_value("item", item_name.clone());
+                }
+                matched
+            }),
             Self::Ding { min_level_delta } => {
                 let before = ctx.progress.level_before?;
                 let after = ctx.progress.level_after?;
@@ -646,16 +683,12 @@ impl TtsCoalescer {
     #[must_use]
     fn can_merge(&self, left: &QueuedVoiceAlert, right: &QueuedVoiceAlert, _now: Instant) -> bool {
         left.alert.is_mergeable_with(&right.alert, self.window)
-            && right
-                .queued_at
-                .saturating_duration_since(left.queued_at)
-                <= self.window
+            && right.queued_at.saturating_duration_since(left.queued_at) <= self.window
     }
 }
 
 /// Queue that applies debouncing and priority ordering.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct VoiceQueue {
     heap: BinaryHeap<QueuedVoiceAlert>,
     debouncer: HashMap<VoiceTriggerId, Instant>,
@@ -669,7 +702,6 @@ pub enum VoiceQueueOutcome {
     Debounced,
     DroppedAmbientBusy,
 }
-
 
 impl VoiceQueue {
     #[must_use]
@@ -788,7 +820,11 @@ impl VoiceTriggerEngine {
         let mut candidates = Vec::new();
         let mut seen_ids = BTreeSet::new();
 
-        for trigger in self.builtins.iter().chain(self.config.custom_triggers.iter()) {
+        for trigger in self
+            .builtins
+            .iter()
+            .chain(self.config.custom_triggers.iter())
+        {
             if !seen_ids.insert(trigger.id.clone()) {
                 continue;
             }
@@ -812,7 +848,12 @@ impl VoiceTriggerEngine {
             if alert
                 .speaker
                 .as_ref()
-                .map(|speaker| self.config.muted_characters.iter().any(|muted| muted.eq_ignore_ascii_case(speaker)))
+                .map(|speaker| {
+                    self.config
+                        .muted_characters
+                        .iter()
+                        .any(|muted| muted.eq_ignore_ascii_case(speaker))
+                })
                 .unwrap_or(false)
             {
                 continue;
@@ -1054,10 +1095,16 @@ mod tests {
         assert!(!first.is_empty());
 
         let second = engine.process_snapshot(&ctx, now + Duration::from_secs(4));
-        assert!(second.is_empty(), "P0 repeat should be debounced for 5 seconds");
+        assert!(
+            second.is_empty(),
+            "P0 repeat should be debounced for 5 seconds"
+        );
 
         let third = engine.process_snapshot(&ctx, now + Duration::from_secs(5));
-        assert!(!third.is_empty(), "P0 repeat should fire again after 5 seconds");
+        assert!(
+            !third.is_empty(),
+            "P0 repeat should fire again after 5 seconds"
+        );
     }
 
     #[test]
@@ -1128,9 +1175,22 @@ mod tests {
         let ctx = base_context();
         let fired = engine.process_snapshot(&ctx, Instant::now());
 
-        assert!(fired.iter().all(|request| request.severity <= VoiceSeverityTier::Warning));
-        assert!(!fired.iter().any(|request| request.speaker.as_deref() == Some("Wizard")));
-        assert!(!fired.iter().any(|request| request.trigger_ids.iter().any(|id| id == "pull_cadence_drift")));
+        assert!(
+            fired
+                .iter()
+                .all(|request| request.severity <= VoiceSeverityTier::Warning)
+        );
+        assert!(
+            !fired
+                .iter()
+                .any(|request| request.speaker.as_deref() == Some("Wizard"))
+        );
+        assert!(!fired.iter().any(|request| {
+            request
+                .trigger_ids
+                .iter()
+                .any(|id| id == "pull_cadence_drift")
+        }));
 
         engine.update_config(VoiceTriggerConfig {
             enabled: true,

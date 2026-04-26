@@ -1,10 +1,10 @@
 //! Auto-camp handling for safety automation (MQ2AutoCamp parity).
 
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

@@ -3,8 +3,6 @@
 
 /// Soul operator alerts and anomaly detection.
 pub mod alerts;
-/// Streaming anomaly-detection pipeline for the self-improvement loop.
-pub mod improve;
 /// Soul audit logging — append-only JSONL log of key state changes.
 pub mod audit;
 /// Inter-character banter — proximity and relationship-based dialogue
@@ -20,17 +18,21 @@ pub mod config_validator;
 pub mod coordinator;
 /// SQLite schema validation and migration framework for Soul Engine.
 pub mod db_validation;
+pub mod debrief_aggregator;
+/// Tier-1 heuristic engine — rule-based pattern detection for gameplay
+/// anti-patterns (downtime, mana bottleneck, pull rate, camp drift).
+pub mod heuristics;
 /// Idle behavior system — generates ambient actions when characters are not
 /// busy.
 pub mod idle;
+/// Streaming anomaly-detection pipeline for the self-improvement loop.
+pub mod improve;
 /// LLM integration — provider trait, request/response types, fallback
 /// generation.
 pub mod llm;
 /// Persistent memory — stores character experiences and relationships across
 /// sessions.
 pub mod memory;
-/// LanceDB-backed semantic memory and embedding utilities.
-pub mod semantic_memory;
 /// Natural mood decay over time.
 pub mod mood_decay;
 /// Operator controls and safety mechanisms.
@@ -46,6 +48,8 @@ pub mod rate_limiter;
 pub mod recovery;
 /// Resource leak detection and cleanup verification.
 pub mod resource_checks;
+/// LanceDB-backed semantic memory and embedding utilities.
+pub mod semantic_memory;
 /// Keyword-based sentiment scoring.
 pub mod sentiment;
 /// Social dynamics — inter-character relationships, group cohesion, banter
@@ -56,12 +60,8 @@ pub mod speech_evolution;
 /// Game-state suppression rules — prevent soul actions from interfering with
 /// orchestrator loops.
 pub mod suppression;
-/// Tier-1 heuristic engine — rule-based pattern detection for gameplay
-/// anti-patterns (downtime, mana bottleneck, pull rate, camp drift).
-pub mod heuristics;
 /// Zone classification — environmental metadata that constrains idle behavior
 /// selection.
 pub mod zone_classifier;
 /// Zone metadata and environment-aware idle constraints.
 pub mod zones;
-pub mod debrief_aggregator;

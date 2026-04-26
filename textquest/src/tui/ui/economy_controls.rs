@@ -418,7 +418,6 @@ fn draw_rules_panel(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(blk), area);
 }
 
-
 /// Render the Ledger panel (magenta border, sidebar).
 fn draw_ledger_panel(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;

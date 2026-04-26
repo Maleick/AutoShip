@@ -43,7 +43,7 @@ impl<'conn> MigrationRunner<'conn> {
     fn ensure_schema_versions_table(&self) -> Result<()> {
         self.conn
             .execute_batch(
-            r#"
+                r#"
             CREATE TABLE IF NOT EXISTS schema_versions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 version INTEGER NOT NULL UNIQUE,
@@ -51,7 +51,7 @@ impl<'conn> MigrationRunner<'conn> {
                 applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
             );
             "#,
-        )
+            )
             .context("Failed to create schema_versions table")?;
         Ok(())
     }
@@ -95,15 +95,21 @@ impl<'conn> MigrationRunner<'conn> {
         let tx = self.conn.unchecked_transaction()?;
 
         // Execute migration SQL
-        tx.execute_batch(migration.sql)
-            .with_context(|| format!("Failed to execute migration SQL for v{}", migration.version))?;
+        tx.execute_batch(migration.sql).with_context(|| {
+            format!("Failed to execute migration SQL for v{}", migration.version)
+        })?;
 
         // Record migration
         tx.execute(
             "INSERT OR IGNORE INTO schema_versions (version, name) VALUES (?, ?)",
             [&migration.version.to_string(), migration.name],
         )
-        .with_context(|| format!("Failed to record migration {} in schema_versions", migration.version))?;
+        .with_context(|| {
+            format!(
+                "Failed to record migration {} in schema_versions",
+                migration.version
+            )
+        })?;
 
         tx.commit()
             .with_context(|| format!("Failed to commit migration {}", migration.version))?;
@@ -260,8 +266,8 @@ mod tests {
 
         runner.apply_pending()?;
 
-        let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name")?;
+        let mut stmt =
+            conn.prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name")?;
         let indices: Vec<String> = stmt
             .query_map([], |row| row.get(0))?
             .collect::<Result<Vec<_>, _>>()?;

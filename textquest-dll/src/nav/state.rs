@@ -277,10 +277,10 @@ impl Navigator {
             State::Moving | State::Following { .. } | State::Sticking | State::Circling { .. } => {
                 self.controller.stop_forward();
                 self.controller.stop_back();
-        let old_state = std::mem::replace(&mut self.state, State::Idle);
-        self.pre_pause_state = Some(old_state);
-        self.state = State::Paused(PauseReason::UserPause);
-        tracing::info!("Navigation paused by user");
+                let old_state = std::mem::replace(&mut self.state, State::Idle);
+                self.pre_pause_state = Some(old_state);
+                self.state = State::Paused(PauseReason::UserPause);
+                tracing::info!("Navigation paused by user");
             }
             _ => {
                 tracing::debug!("Pause requested but not in a pauseable state");
@@ -577,10 +577,7 @@ impl Navigator {
         let has_large_stick_jump = if let Some(stick_target) = &stick_target_sample {
             if let Some(previous) = &self.cached_stick_target_sample {
                 previous.id == stick_target.id
-                    && previous
-                        .position
-                        .distance_3d(&stick_target.position)
-                        >= STICK_GATE_DISTANCE
+                    && previous.position.distance_3d(&stick_target.position) >= STICK_GATE_DISTANCE
             } else {
                 false
             }
@@ -636,10 +633,8 @@ impl Navigator {
                     if break_conditions.contains(StickBreakConditions::PAUSE_ON_WARP) {
                         self.controller.stop_forward();
                         self.controller.stop_back();
-                        let old_state = std::mem::replace(
-                            &mut self.state,
-                            State::Paused(PauseReason::Warp),
-                        );
+                        let old_state =
+                            std::mem::replace(&mut self.state, State::Paused(PauseReason::Warp));
                         self.pre_pause_state = Some(old_state);
                         self.cached_stick_target_sample = stick_target_sample;
                         return;
@@ -850,7 +845,12 @@ impl Navigator {
         }
     }
 
-    fn tick_sticking(&mut self, current_target: Option<&SpawnData>, nearby: &[SpawnData], _stick_target_sample: Option<&TargetSample>) {
+    fn tick_sticking(
+        &mut self,
+        current_target: Option<&SpawnData>,
+        nearby: &[SpawnData],
+        _stick_target_sample: Option<&TargetSample>,
+    ) {
         use super::stick::StickTickResult;
 
         let player_pos = self.controller.read_position();

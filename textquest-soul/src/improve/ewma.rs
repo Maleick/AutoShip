@@ -63,15 +63,13 @@ impl EwmaDetector {
             if state.warmup.len() == WARMUP_SAMPLES {
                 let n = WARMUP_SAMPLES as f64;
                 let mean = state.warmup.iter().sum::<f64>() / n;
-                let variance =
-                    state.warmup.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
+                let variance = state.warmup.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
                 let std = variance.sqrt();
                 state.baseline_mean = mean;
                 state.baseline_std = std;
                 state.ewma = mean;
                 // LCL = mean − L · std · √(λ/(2−λ))
-                state.lcl =
-                    mean - threshold_sigma * std * (lambda / (2.0 - lambda)).sqrt();
+                state.lcl = mean - threshold_sigma * std * (lambda / (2.0 - lambda)).sqrt();
             }
             return None;
         }
@@ -121,12 +119,14 @@ mod tests {
     fn no_alarm_on_stable_signal() {
         let mut d = EwmaDetector::new(0.2, 3.0);
         // Varied baseline to get non-zero std (≈2.5); LCL ≈ mean − 2.5 ≈ 96.9
-        let values = [95.0_f64, 98.0, 102.0, 100.0, 99.0, 101.0, 97.0, 103.0, 100.0, 99.0]
-            .iter()
-            .cycle()
-            .take(WARMUP_SAMPLES)
-            .cloned()
-            .collect::<Vec<_>>();
+        let values = [
+            95.0_f64, 98.0, 102.0, 100.0, 99.0, 101.0, 97.0, 103.0, 100.0, 99.0,
+        ]
+        .iter()
+        .cycle()
+        .take(WARMUP_SAMPLES)
+        .cloned()
+        .collect::<Vec<_>>();
         for v in &values {
             d.update("warrior", "guk", *v, false);
         }

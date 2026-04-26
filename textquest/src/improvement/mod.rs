@@ -10,6 +10,6 @@ pub use bayesian::{BayesianPosterior, BetaBinomial, Gaussian};
 pub use store::PosteriorStore;
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod test_integration;
+#[cfg(test)]
+mod tests;

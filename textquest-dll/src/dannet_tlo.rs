@@ -63,10 +63,7 @@ pub fn query_observed(peer: &str, query: &str) -> Option<String> {
 #[must_use]
 pub fn dannet_tlo_evaluate(peer: &str, member: &str) -> String {
     // Parse Q[...] syntax
-    let query = if let Some(inner) = member
-        .strip_prefix("Q[")
-        .and_then(|s| s.strip_suffix(']'))
-    {
+    let query = if let Some(inner) = member.strip_prefix("Q[").and_then(|s| s.strip_suffix(']')) {
         inner
     } else {
         // Unrecognised member — return peer name for ${DanNet[Alice]} bare access

@@ -54,12 +54,12 @@ pub mod puller;
 /// reward claiming.
 #[cfg(windows)]
 pub mod quest_tracker;
-/// Recovery phase — med, heal, rebuff between pulls.
-#[cfg(windows)]
-pub mod recovery;
 /// Group readiness gate — checks if all members ready before pulling.
 #[cfg(windows)]
 pub mod readiness;
+/// Recovery phase — med, heal, rebuff between pulls.
+#[cfg(windows)]
+pub mod recovery;
 /// Skill leveling and training automation — tracks skill levels, mastery, and
 /// tradeskill sessions.
 #[cfg(windows)]

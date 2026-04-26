@@ -28,9 +28,7 @@ pub fn register_boxr_command() {
 
 fn boxr_handler(args: &[&str]) -> CommandResult {
     if args.is_empty() {
-        return CommandResult::Message(
-            "Usage: /boxr Pause|Resume|Status".to_string(),
-        );
+        return CommandResult::Message("Usage: /boxr Pause|Resume|Status".to_string());
     }
 
     match args[0].to_lowercase().as_str() {

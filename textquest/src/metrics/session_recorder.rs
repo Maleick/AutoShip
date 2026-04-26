@@ -9,8 +9,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use serde::{Deserialize, Serialize};
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
 /// Configuration for session recording.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,11 +86,7 @@ impl SessionRecorder {
     ///
     /// Creates the session directory if it doesn't exist. Returns a no-op
     /// recorder if `enabled` is false.
-    pub fn open(
-        character: &str,
-        session_id: &str,
-        config: &SessionRecorderConfig,
-    ) -> Result<Self> {
+    pub fn open(character: &str, session_id: &str, config: &SessionRecorderConfig) -> Result<Self> {
         if !config.enabled {
             return Ok(Self {
                 enabled: false,
@@ -159,8 +155,7 @@ impl SessionRecorder {
             .context("session recorder file is closed")?;
 
         for event in self.batch.drain(..) {
-            let json = serde_json::to_string(&event)
-                .context("cannot serialize session event")?;
+            let json = serde_json::to_string(&event).context("cannot serialize session event")?;
             writeln!(file, "{}", json)
                 .context(format!("cannot write to {}", self.path.display()))?;
         }
@@ -217,9 +212,7 @@ pub fn metrics_event_to_session_event(
                 "damage": damage,
             }),
         ),
-        MetricsEvent::CombatKill {
-            character_name, ..
-        } => (
+        MetricsEvent::CombatKill { character_name, .. } => (
             SessionEventKind::Combat,
             serde_json::json!({
                 "character": character_name,
@@ -281,8 +274,8 @@ pub fn metrics_event_to_session_event(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::BufRead;
     use std::fs::File;
+    use std::io::BufRead;
     use std::io::BufReader;
 
     fn temp_home() -> PathBuf {
@@ -296,10 +289,7 @@ mod tests {
             ..Default::default()
         };
         let mut recorder = SessionRecorder::open("Warrior01", "sess_001", &config).unwrap();
-        let event = SessionEvent::new(
-            SessionEventKind::Combat,
-            serde_json::json!({"damage": 234}),
-        );
+        let event = SessionEvent::new(SessionEventKind::Combat, serde_json::json!({"damage": 234}));
         recorder.record(event).unwrap();
         recorder.flush().unwrap();
         assert!(recorder.path().as_os_str().is_empty());
@@ -516,7 +506,11 @@ mod tests {
             line_count += 1;
         }
 
-        assert_eq!(line_count, 10_000, "Expected 10k events, got {}", line_count);
+        assert_eq!(
+            line_count, 10_000,
+            "Expected 10k events, got {}",
+            line_count
+        );
 
         // Verify roughly equal distribution of event kinds
         for (kind, count) in kind_counts {
@@ -547,10 +541,7 @@ mod tests {
             file: Some(File::create(&path).unwrap()),
             path: path.clone(),
             batch: vec![
-                SessionEvent::new(
-                    SessionEventKind::Combat,
-                    serde_json::json!({"damage": 100}),
-                ),
+                SessionEvent::new(SessionEventKind::Combat, serde_json::json!({"damage": 100})),
                 SessionEvent::new(
                     SessionEventKind::Loot,
                     serde_json::json!({"item": "Shaman Claws", "value": 1500}),

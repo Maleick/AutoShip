@@ -165,11 +165,9 @@ fn parse_region_specs(payload: &[u8]) -> Vec<MemRegionSpec> {
     (0..count)
         .map(|i| {
             let base = i * SPEC_SIZE;
-            let addr = u64::from_le_bytes(
-                specs_payload[base..base + 8]
-                    .try_into()
-                    .unwrap_or([0u8; 8]),
-            ) as usize;
+            let addr =
+                u64::from_le_bytes(specs_payload[base..base + 8].try_into().unwrap_or([0u8; 8]))
+                    as usize;
             let len = u32::from_le_bytes(
                 specs_payload[base + 8..base + 12]
                     .try_into()

@@ -6,12 +6,12 @@
 use std::path::Path;
 
 use textquest_learn::{
+    BanditRuntime, PolicyMode,
     bandit::{
         context::{ContextBuilder, ContextSpec, ContextVec},
         model::BanditScope,
         shadow::ShadowLog,
     },
-    BanditRuntime, PolicyMode,
 };
 
 use super::strategy::{CombatContext, GroupMemberState};
@@ -141,9 +141,9 @@ impl BanditDecisionPoint {
 mod tests {
     use super::*;
     use textquest_learn::bandit::{
-        context::{ContextSpec, CTX_DIM},
+        context::{CTX_DIM, ContextSpec},
         linucb::LinUcbModel,
-        model::{AlgorithmTag, BanditScope, ModelFile, MODEL_FILE_VERSION},
+        model::{AlgorithmTag, BanditScope, MODEL_FILE_VERSION, ModelFile},
     };
 
     fn make_test_model(spec: &ContextSpec) -> Vec<u8> {
@@ -170,8 +170,8 @@ mod tests {
     #[test]
     fn serve_in_shadow_returns_rule_arm() {
         use textquest_learn::{
-            bandit::{context::ContextSpec, shadow::ShadowLog},
             BanditRuntime,
+            bandit::{context::ContextSpec, shadow::ShadowLog},
         };
 
         let spec = ContextSpec::base();

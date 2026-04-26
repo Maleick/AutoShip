@@ -1279,8 +1279,7 @@ pub fn handle_events(
                 _ => {}
             },
             ActivePanel::DebugExplorer => {
-                if !app.explorer_state.search_mode && matches!(key.code, KeyCode::Char('p' | 'P'))
-                {
+                if !app.explorer_state.search_mode && matches!(key.code, KeyCode::Char('p' | 'P')) {
                     app.toggle_gemma_observer_pause();
                     return Ok(true);
                 }

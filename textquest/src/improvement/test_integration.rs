@@ -20,7 +20,7 @@ mod acceptance_tests {
         // Verify closed-form updates are applied
         bb.update(1.0); // success
         assert_eq!(bb.alpha(), 2.0); // 1 + 1
-        assert_eq!(bb.beta(), 1.0);  // unchanged
+        assert_eq!(bb.beta(), 1.0); // unchanged
 
         bb.update(0.0); // failure
         assert_eq!(bb.alpha(), 2.0);
@@ -102,7 +102,11 @@ mod acceptance_tests {
         }
 
         // With 200 samples, posterior should converge to truth
-        assert!((bb.mean() - 0.75).abs() < 0.05, "Failed to converge: {}", bb.mean());
+        assert!(
+            (bb.mean() - 0.75).abs() < 0.05,
+            "Failed to converge: {}",
+            bb.mean()
+        );
         assert!(bb.std_dev() < 0.05, "Variance too high: {}", bb.std_dev());
     }
 
@@ -116,8 +120,16 @@ mod acceptance_tests {
             gauss.update(42.0);
         }
 
-        assert!((gauss.mean() - 42.0).abs() < 0.1, "Failed to converge: {}", gauss.mean());
-        assert!(gauss.variance < 0.1, "Variance too high: {}", gauss.variance);
+        assert!(
+            (gauss.mean() - 42.0).abs() < 0.1,
+            "Failed to converge: {}",
+            gauss.mean()
+        );
+        assert!(
+            gauss.variance < 0.1,
+            "Variance too high: {}",
+            gauss.variance
+        );
     }
 
     #[test]
@@ -134,8 +146,16 @@ mod acceptance_tests {
         // List and verify both are persisted
         let knobs = store.list_knobs("test")?;
         assert_eq!(knobs.len(), 2);
-        assert!(knobs.iter().any(|(k, t)| k == "bb_knob" && t == "beta_binomial"));
-        assert!(knobs.iter().any(|(k, t)| k == "gauss_knob" && t == "gaussian"));
+        assert!(
+            knobs
+                .iter()
+                .any(|(k, t)| k == "bb_knob" && t == "beta_binomial")
+        );
+        assert!(
+            knobs
+                .iter()
+                .any(|(k, t)| k == "gauss_knob" && t == "gaussian")
+        );
 
         Ok(())
     }

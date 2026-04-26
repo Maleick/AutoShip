@@ -408,10 +408,7 @@ fn format_filter_line<'a>(
     };
     let client_label = match state.filter_client_id {
         Some(pid) => {
-            let label = state
-                .resolved_client_label(pid)
-                .unwrap_or("WIP")
-                .to_owned();
+            let label = state.resolved_client_label(pid).unwrap_or("WIP").to_owned();
             format!("client={label}")
         }
         None => String::from("client=*"),

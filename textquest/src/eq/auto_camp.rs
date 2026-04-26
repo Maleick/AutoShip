@@ -35,7 +35,10 @@ pub enum AutoCampEvent {
     /// AutoLogin re-login should be triggered now.
     TriggerRelogin { character_name: String },
     /// Discord alert should be sent with this message.
-    DiscordAlert { character_name: String, message: String },
+    DiscordAlert {
+        character_name: String,
+        message: String,
+    },
 }
 
 /// Internal tracking state with wall-clock timestamp.
@@ -127,9 +130,9 @@ impl AutoCampController {
         });
 
         self.state = AutoCampState::PendingCamp;
-        self.timer = Some(PhaseTimer::new(Duration::from_secs(
-            u64::from(self.config.camp_delay_secs),
-        )));
+        self.timer = Some(PhaseTimer::new(Duration::from_secs(u64::from(
+            self.config.camp_delay_secs,
+        ))));
     }
 
     /// Notify the controller that the camp command has been acknowledged.
@@ -152,9 +155,9 @@ impl AutoCampController {
         });
 
         self.state = AutoCampState::PendingRelogin;
-        self.timer = Some(PhaseTimer::new(Duration::from_secs(
-            u64::from(self.config.relogin_delay_secs),
-        )));
+        self.timer = Some(PhaseTimer::new(Duration::from_secs(u64::from(
+            self.config.relogin_delay_secs,
+        ))));
     }
 
     /// Notify the controller that the re-login sequence has completed and the
@@ -172,7 +175,11 @@ impl AutoCampController {
     ///
     /// Generates events when phase timers expire.
     pub fn tick(&mut self) {
-        let timer_elapsed = self.timer.as_ref().map(PhaseTimer::elapsed).unwrap_or(false);
+        let timer_elapsed = self
+            .timer
+            .as_ref()
+            .map(PhaseTimer::elapsed)
+            .unwrap_or(false);
 
         match self.state {
             AutoCampState::PendingCamp if timer_elapsed => {
@@ -250,10 +257,7 @@ mod tests {
         ctrl.tick();
         let events = ctrl.pending_events();
         assert_eq!(events.len(), 1);
-        assert!(matches!(
-            events[0],
-            AutoCampEvent::IssueCampCommand { .. }
-        ));
+        assert!(matches!(events[0], AutoCampEvent::IssueCampCommand { .. }));
         assert_eq!(ctrl.state(), AutoCampState::Camping);
     }
 

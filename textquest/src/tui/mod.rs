@@ -7,11 +7,6 @@ pub mod achievements;
 pub mod app;
 /// Audio alert definitions and configurable playback controls.
 pub mod audio;
-/// Audio event dispatcher — wires game events to sound playback.
-pub mod audio_dispatcher;
-/// Audio integration example — demonstrates wiring dispatcher into game loop.
-#[allow(dead_code)]
-pub mod audio_integration_example;
 /// Shared branding constants (wordmark, version) for TUI surfaces.
 pub mod branding;
 /// Shared cast presentation helpers for TUI surfaces.

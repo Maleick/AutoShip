@@ -848,7 +848,12 @@ mod tests {
     // ─── tick_with_player_pos: zone-line proximity detection (#897) ───────
 
     /// Helper: create an FSM in Walking/ZoneTo state with given zone-line pos.
-    fn fsm_in_walking_zone_to(client_id: ClientId, zl_x: f32, zl_y: f32, zl_z: f32) -> ZoneTransitionFsm {
+    fn fsm_in_walking_zone_to(
+        client_id: ClientId,
+        zl_x: f32,
+        zl_y: f32,
+        zl_z: f32,
+    ) -> ZoneTransitionFsm {
         let mut fsm = ZoneTransitionFsm::new(client_id);
         fsm.start(zone_kind("test_zone", zl_x, zl_y, zl_z));
         // confirm we're in Walking

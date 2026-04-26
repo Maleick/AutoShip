@@ -2249,7 +2249,10 @@ pub fn run_stats_compact_mode(
     } else if let Some(session_id) = session {
         let session_dir = events_dir.join(&session_id);
         if !session_dir.exists() {
-            return Err(anyhow::anyhow!("Session directory not found: {:?}", session_dir));
+            return Err(anyhow::anyhow!(
+                "Session directory not found: {:?}",
+                session_dir
+            ));
         }
         stats::compact_session(&db_path, &session_dir, &session_id)?;
         eprintln!("Compacted session {}", session_id);
@@ -2777,7 +2780,10 @@ pub fn run_replay_show_mode(session_id: &str) -> Result<()> {
     println!("created_unix_seconds: {}", meta.created_unix_seconds);
     println!("policy_sha: {}", meta.policy_sha);
     println!("config_hash: {}", meta.config_hash);
-    println!("dictionary_id: {}", meta.dictionary_id.as_deref().unwrap_or("n/a"));
+    println!(
+        "dictionary_id: {}",
+        meta.dictionary_id.as_deref().unwrap_or("n/a")
+    );
     println!("content_hash: {}", meta.content_hash);
     println!("party: {}", meta.party.join(", "));
     println!("zones: {}", meta.zones.join(", "));
@@ -2800,10 +2806,11 @@ pub fn run_replay_export_mode(
     output: Option<&std::path::Path>,
 ) -> Result<()> {
     let loaded = load_replay_bundle(session_id)?;
-    let export_path = output
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-            .join(format!("{session_id}.tqreplay")));
+    let export_path = output.map(std::path::Path::to_path_buf).unwrap_or_else(|| {
+        std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join(format!("{session_id}.tqreplay"))
+    });
 
     if redacted {
         let tempdir = tempfile::tempdir().context("failed to create replay redaction tempdir")?;
@@ -2826,7 +2833,11 @@ pub fn run_replay_export_mode(
         replay::export_bundle_to_tqreplay(&loaded.path, &export_path, false)?;
     }
 
-    eprintln!("replay: exported {} -> {}", session_id, export_path.display());
+    eprintln!(
+        "replay: exported {} -> {}",
+        session_id,
+        export_path.display()
+    );
     Ok(())
 }
 
@@ -3094,9 +3105,7 @@ pub fn run_tempset_mode(character: &str, knob: &str, value: &str) -> Result<()> 
     // then send TempSetOverride. For now we print the command so operators
     // know the feature is wired up; PID resolution is done via the shared
     // state reader in a follow-up.
-    eprintln!(
-        "[tempset] {character}: {knob} = {value}  (non-persistent — cleared on restart)"
-    );
+    eprintln!("[tempset] {character}: {knob} = {value}  (non-persistent — cleared on restart)");
     let _ = Command::TempSetOverride {
         key: knob.to_owned(),
         value: value.to_owned(),
@@ -3184,8 +3193,8 @@ pub fn run_set_pull_mode(mode_str: &str, pid: u32) -> Result<()> {
     use std::str::FromStr;
     use textquest_common::{combat::PullMode, ipc::Command};
 
-    let mode = PullMode::from_str(mode_str)
-        .map_err(|e| anyhow::anyhow!("Invalid pull mode: {e}"))?;
+    let mode =
+        PullMode::from_str(mode_str).map_err(|e| anyhow::anyhow!("Invalid pull mode: {e}"))?;
 
     let mut pipe = connect_authenticated_pipe(pid)?;
     let cmd = textquest_common::ipc::IpcCommand::new(Command::SetPullMode { mode });
@@ -3275,8 +3284,8 @@ pub fn run_config_export_mode(module: &str, path: Option<&str>) -> Result<()> {
 pub fn run_config_import_mode(share_string: &str, path: Option<&str>, yes: bool) -> Result<()> {
     use std::io::BufRead as _;
 
-    let blob = crate::config_share::import_share_string(share_string)
-        .context("decode share string")?;
+    let blob =
+        crate::config_share::import_share_string(share_string).context("decode share string")?;
 
     let resolved_path = match path {
         Some(p) => std::path::PathBuf::from(p),

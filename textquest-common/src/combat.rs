@@ -1300,8 +1300,9 @@ pub enum BurnState {
 // ── EQ Expansion Versions ───────────────────────────────────────────────────
 
 /// EQ expansion/era for ability versioning — ensures abilities resolve on TLP servers.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord, Default,
+)]
 pub enum EQExpansion {
     #[default]
     Classic,
@@ -1331,7 +1332,6 @@ pub enum EQExpansion {
     GMM,
     NoV,
 }
-
 
 // ── Ability Resolution (AbilitySets) ────────────────────────────────────────
 

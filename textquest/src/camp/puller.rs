@@ -144,10 +144,7 @@ impl PullStateMachine {
 
     /// Creates a pull state machine with an initial mode and callback.
     #[must_use]
-    pub fn with_mode_and_callback(
-        initial_mode: PullMode,
-        callback: OnModeChangeCallback,
-    ) -> Self {
+    pub fn with_mode_and_callback(initial_mode: PullMode, callback: OnModeChangeCallback) -> Self {
         Self {
             current_mode: initial_mode,
             on_mode_change: Some(callback),

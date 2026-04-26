@@ -163,8 +163,12 @@ pub struct MeleeTickInput {
 /// Commands emitted by the scheduler each tick.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MeleeCommand {
-    ActivateDisc { name: String },
-    UseSkill { name: String },
+    ActivateDisc {
+        name: String,
+    },
+    UseSkill {
+        name: String,
+    },
     PauseAutoAttack,
     ResumeAutoAttack,
     /// Ranger: headshot cooldown has reset, next arrow may proc headshot.
@@ -386,7 +390,11 @@ mod tests {
     fn pauses_on_mez() {
         let mut sched = MeleeDiscScheduler::new();
         sched.set_config(1, enabled_config());
-        sched.states.entry(1).or_insert_with(ClientMeleeState::new).is_auto_attacking = true;
+        sched
+            .states
+            .entry(1)
+            .or_insert_with(ClientMeleeState::new)
+            .is_auto_attacking = true;
 
         let mut input = warrior_input(100, true);
         input.target_mezzed = true;
@@ -402,7 +410,11 @@ mod tests {
         sched.set_config(1, cfg);
         // 20% endurance — below threshold
         let cmds = sched.tick(&warrior_input(20, true));
-        assert!(!cmds.iter().any(|c| matches!(c, MeleeCommand::UseSkill { .. })));
+        assert!(
+            !cmds
+                .iter()
+                .any(|c| matches!(c, MeleeCommand::UseSkill { .. }))
+        );
     }
 
     #[test]
@@ -411,7 +423,8 @@ mod tests {
         sched.set_config(1, enabled_config());
         let cmds = sched.tick(&warrior_input(100, true));
         assert!(
-            cmds.iter().any(|c| matches!(c, MeleeCommand::UseSkill { name } if name == "Kick")),
+            cmds.iter()
+                .any(|c| matches!(c, MeleeCommand::UseSkill { name } if name == "Kick")),
             "Warrior should use Kick: {cmds:?}"
         );
     }
@@ -437,14 +450,17 @@ mod tests {
         };
         let cmds = sched.tick(&input);
         assert!(
-            !cmds.iter().any(|c| matches!(c, MeleeCommand::UseSkill { name } if name == "Backstab")),
+            !cmds
+                .iter()
+                .any(|c| matches!(c, MeleeCommand::UseSkill { name } if name == "Backstab")),
             "Backstab should NOT fire when not behind target"
         );
 
         input.target_behind = true;
         let cmds = sched.tick(&input);
         assert!(
-            cmds.iter().any(|c| matches!(c, MeleeCommand::UseSkill { name } if name == "Backstab")),
+            cmds.iter()
+                .any(|c| matches!(c, MeleeCommand::UseSkill { name } if name == "Backstab")),
             "Backstab SHOULD fire when behind target"
         );
     }
@@ -498,7 +514,8 @@ mod tests {
         sched.set_config(1, cfg);
         let cmds = sched.tick(&warrior_input(100, true));
         assert!(
-            cmds.iter().any(|c| matches!(c, MeleeCommand::ActivateDisc { name } if name == "HighPrio")),
+            cmds.iter()
+                .any(|c| matches!(c, MeleeCommand::ActivateDisc { name } if name == "HighPrio")),
             "High-priority disc should activate first"
         );
     }

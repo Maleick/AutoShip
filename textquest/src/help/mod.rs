@@ -365,7 +365,9 @@ impl HelpDatabase {
         self.command_index.insert(primary, index);
         for alias in &command.aliases {
             let alias_key = normalize_key(alias);
-            if let std::collections::hash_map::Entry::Vacant(e) = self.command_index.entry(alias_key) {
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                self.command_index.entry(alias_key)
+            {
                 e.insert(index);
             } else {
                 warn!(

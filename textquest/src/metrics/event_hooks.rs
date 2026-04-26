@@ -49,13 +49,7 @@ impl EventHookContext {
     }
 
     /// Emit a loot pickup event.
-    pub fn emit_loot_drop(
-        &self,
-        pid: u32,
-        item_name: String,
-        item_id: u32,
-        zone: String,
-    ) {
+    pub fn emit_loot_drop(&self, pid: u32, item_name: String, item_id: u32, zone: String) {
         if let Some(tx) = self.event_tx.as_ref() {
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -75,12 +69,7 @@ impl EventHookContext {
     }
 
     /// Emit a zone change event for movement tracking.
-    pub fn emit_zone_change(
-        &self,
-        pid: u32,
-        from_zone: String,
-        to_zone: String,
-    ) {
+    pub fn emit_zone_change(&self, pid: u32, from_zone: String, to_zone: String) {
         if let Some(tx) = self.event_tx.as_ref() {
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -99,13 +88,7 @@ impl EventHookContext {
     }
 
     /// Emit a kill event.
-    pub fn emit_kill(
-        &self,
-        source_pid: u32,
-        target_name: String,
-        target_level: u8,
-        zone: String,
-    ) {
+    pub fn emit_kill(&self, source_pid: u32, target_name: String, target_level: u8, zone: String) {
         if let Some(tx) = self.event_tx.as_ref() {
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -125,12 +108,7 @@ impl EventHookContext {
     }
 
     /// Emit a death event.
-    pub fn emit_death(
-        &self,
-        pid: u32,
-        character_name: String,
-        zone: String,
-    ) {
+    pub fn emit_death(&self, pid: u32, character_name: String, zone: String) {
         if let Some(tx) = self.event_tx.as_ref() {
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)

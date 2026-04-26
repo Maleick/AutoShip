@@ -61,10 +61,9 @@ fn extract_groups_from_config(app: &App) -> Vec<ConfigGroup> {
             let lo = account_nums.iter().copied().min().unwrap_or(1);
             let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
-            let name = default_names.get((id - 1) as usize).map_or_else(
-                || format!("Group {id}"),
-                |s| s.to_string(),
-            );
+            let name = default_names
+                .get((id - 1) as usize)
+                .map_or_else(|| format!("Group {id}"), |s| s.to_string());
 
             ConfigGroup {
                 id,

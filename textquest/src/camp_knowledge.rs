@@ -197,8 +197,9 @@ impl CampDatabase {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create camp DB directory {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create camp DB directory {}", parent.display())
+            })?;
         }
 
         let conn = Connection::open(path)
@@ -355,8 +356,16 @@ impl CampDatabase {
                     entry.action.as_str(),
                     &entry.camp_id,
                     serde_json::to_string(&entry.source_camp_ids)?,
-                    entry.before.as_ref().map(serde_json::to_string).transpose()?,
-                    entry.after.as_ref().map(serde_json::to_string).transpose()?,
+                    entry
+                        .before
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
+                    entry
+                        .after
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
                     entry.note.clone(),
                 ],
             )?;
@@ -463,31 +472,49 @@ impl CampRefreshDiff {
     fn to_audit_entries(&self) -> Vec<CampAuditEntry> {
         let mut entries = Vec::new();
 
-        entries.extend(self.inserted.iter().map(|camp| CampAuditEntry {
-            action: CampAuditAction::RefreshInsert,
-            camp_id: camp.camp_id.clone(),
-            source_camp_ids: camp.spawngroup_ids.iter().map(|id| id.to_string()).collect(),
-            note: Some("camp refresh insert".to_string()),
-            before: None,
-            after: Some(camp.clone()),
+        entries.extend(self.inserted.iter().map(|camp| {
+            CampAuditEntry {
+                action: CampAuditAction::RefreshInsert,
+                camp_id: camp.camp_id.clone(),
+                source_camp_ids: camp
+                    .spawngroup_ids
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect(),
+                note: Some("camp refresh insert".to_string()),
+                before: None,
+                after: Some(camp.clone()),
+            }
         }));
 
-        entries.extend(self.updated.iter().map(|(before, after)| CampAuditEntry {
-            action: CampAuditAction::RefreshUpdate,
-            camp_id: after.camp_id.clone(),
-            source_camp_ids: after.spawngroup_ids.iter().map(|id| id.to_string()).collect(),
-            note: Some("camp refresh update".to_string()),
-            before: Some(before.clone()),
-            after: Some(after.clone()),
+        entries.extend(self.updated.iter().map(|(before, after)| {
+            CampAuditEntry {
+                action: CampAuditAction::RefreshUpdate,
+                camp_id: after.camp_id.clone(),
+                source_camp_ids: after
+                    .spawngroup_ids
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect(),
+                note: Some("camp refresh update".to_string()),
+                before: Some(before.clone()),
+                after: Some(after.clone()),
+            }
         }));
 
-        entries.extend(self.deleted.iter().map(|camp| CampAuditEntry {
-            action: CampAuditAction::RefreshDelete,
-            camp_id: camp.camp_id.clone(),
-            source_camp_ids: camp.spawngroup_ids.iter().map(|id| id.to_string()).collect(),
-            note: Some("camp refresh delete".to_string()),
-            before: Some(camp.clone()),
-            after: None,
+        entries.extend(self.deleted.iter().map(|camp| {
+            CampAuditEntry {
+                action: CampAuditAction::RefreshDelete,
+                camp_id: camp.camp_id.clone(),
+                source_camp_ids: camp
+                    .spawngroup_ids
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect(),
+                note: Some("camp refresh delete".to_string()),
+                before: Some(camp.clone()),
+                after: None,
+            }
         }));
 
         entries
@@ -527,13 +554,15 @@ pub fn build_camps(snapshot: &PeqSnapshot) -> Vec<Camp> {
     let mut camps = Vec::new();
     for ((zone_id, zone_short_name), mut zone_groups) in grouped_by_zone {
         zone_groups.sort_by_key(|group| group.spawngroup_id);
-        let clusters = dbscan_clusters(&zone_groups, DEFAULT_CAMP_CLUSTER_EPS, DEFAULT_CAMP_CLUSTER_MIN_SAMPLES);
+        let clusters = dbscan_clusters(
+            &zone_groups,
+            DEFAULT_CAMP_CLUSTER_EPS,
+            DEFAULT_CAMP_CLUSTER_MIN_SAMPLES,
+        );
 
         for cluster in clusters {
-            let mut spawngroup_ids: Vec<i32> = cluster
-                .iter()
-                .map(|group| group.spawngroup_id)
-                .collect();
+            let mut spawngroup_ids: Vec<i32> =
+                cluster.iter().map(|group| group.spawngroup_id).collect();
             spawngroup_ids.sort_unstable();
             spawngroup_ids.dedup();
 
@@ -586,10 +615,7 @@ pub fn camp_id(zone_short_name: &str, spawngroup_ids: &[i32]) -> String {
     let signature = format!(
         "{}|{}",
         normalized_zone,
-        ids.iter()
-            .map(i32::to_string)
-            .collect::<Vec<_>>()
-            .join(",")
+        ids.iter().map(i32::to_string).collect::<Vec<_>>().join(",")
     );
 
     sha256_hex(signature.as_bytes())
@@ -618,7 +644,10 @@ pub fn apply_overrides(
             ids.sort_unstable();
             ids.dedup();
             if ids.is_empty() {
-                bail!("Split override for {} contains an empty partition", split.camp_id);
+                bail!(
+                    "Split override for {} contains an empty partition",
+                    split.camp_id
+                );
             }
 
             let partition_ids: BTreeSet<i32> = ids.iter().copied().collect();
@@ -629,7 +658,10 @@ pub fn apply_overrides(
                 );
             }
             if !seen.is_disjoint(&partition_ids) {
-                bail!("Split override for {} reuses a spawngroup_id across partitions", split.camp_id);
+                bail!(
+                    "Split override for {} reuses a spawngroup_id across partitions",
+                    split.camp_id
+                );
             }
             seen.extend(partition_ids.iter().copied());
 
@@ -808,40 +840,38 @@ fn camp_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Camp> {
     let level_max: Option<i64> = row.get("level_max")?;
     let source: String = row.get("source")?;
 
-    let spawngroup_ids = serde_json::from_str::<Vec<i32>>(&spawngroup_ids_json).map_err(
-        |error| {
+    let spawngroup_ids =
+        serde_json::from_str::<Vec<i32>>(&spawngroup_ids_json).map_err(|error| {
             rusqlite::Error::FromSqlConversionFailure(
                 0,
                 rusqlite::types::Type::Text,
                 Box::new(error),
             )
-        },
-    )?;
-    let mob_families = serde_json::from_str::<Vec<String>>(&mob_families_json).map_err(
-        |error| {
+        })?;
+    let mob_families =
+        serde_json::from_str::<Vec<String>>(&mob_families_json).map_err(|error| {
             rusqlite::Error::FromSqlConversionFailure(
                 0,
                 rusqlite::types::Type::Text,
                 Box::new(error),
             )
-        },
-    )?;
+        })?;
 
     Ok(Camp {
         camp_id: row.get("camp_id")?,
         zone_id: row.get("zone_id")?,
         zone_short_name: row.get("zone_short_name")?,
         spawngroup_ids,
-        centroid_xyz: [row.get("centroid_x")?, row.get("centroid_y")?, row.get("centroid_z")?],
+        centroid_xyz: [
+            row.get("centroid_x")?,
+            row.get("centroid_y")?,
+            row.get("centroid_z")?,
+        ],
         level_min: level_min.map(|value| value as u8),
         level_max: level_max.map(|value| value as u8),
         mob_families,
         source: CampSource::from_str(&source).map_err(|error| {
-            rusqlite::Error::FromSqlConversionFailure(
-                0,
-                rusqlite::types::Type::Text,
-                error.into(),
-            )
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, error.into())
         })?,
     })
 }
@@ -862,13 +892,15 @@ fn summarize_groups(snapshot: &PeqSnapshot) -> Vec<GroupSummary> {
 
     groups
         .into_iter()
-        .map(|((zone_id, zone_short_name, spawngroup_id), spawns)| GroupSummary {
-            zone_id,
-            zone_short_name,
-            spawngroup_id,
-            centroid_xyz: weighted_spawn_centroid(&spawns),
-            spawn_count: spawns.len(),
-        })
+        .map(
+            |((zone_id, zone_short_name, spawngroup_id), spawns)| GroupSummary {
+                zone_id,
+                zone_short_name,
+                spawngroup_id,
+                centroid_xyz: weighted_spawn_centroid(&spawns),
+                spawn_count: spawns.len(),
+            },
+        )
         .collect()
 }
 
@@ -964,11 +996,18 @@ fn weighted_cluster_centroid(groups: &[GroupSummary]) -> [f32; 3] {
         .iter()
         .map(|group| group.centroid_xyz[2] * group.spawn_count as f32)
         .sum::<f32>();
-    [sum_x / total_spawns, sum_y / total_spawns, sum_z / total_spawns]
+    [
+        sum_x / total_spawns,
+        sum_y / total_spawns,
+        sum_z / total_spawns,
+    ]
 }
 
 fn weighted_merge_centroid(camps: &[Camp]) -> [f32; 3] {
-    let total_groups = camps.iter().map(|camp| camp.spawngroup_ids.len()).sum::<usize>() as f32;
+    let total_groups = camps
+        .iter()
+        .map(|camp| camp.spawngroup_ids.len())
+        .sum::<usize>() as f32;
     let sum_x = camps
         .iter()
         .map(|camp| camp.centroid_xyz[0] * camp.spawngroup_ids.len() as f32)
@@ -981,12 +1020,14 @@ fn weighted_merge_centroid(camps: &[Camp]) -> [f32; 3] {
         .iter()
         .map(|camp| camp.centroid_xyz[2] * camp.spawngroup_ids.len() as f32)
         .sum::<f32>();
-    [sum_x / total_groups, sum_y / total_groups, sum_z / total_groups]
+    [
+        sum_x / total_groups,
+        sum_y / total_groups,
+        sum_z / total_groups,
+    ]
 }
 
-fn spawnentries_by_group(
-    spawnentries: &[SpawnentryRow],
-) -> BTreeMap<i32, Vec<SpawnentryRow>> {
+fn spawnentries_by_group(spawnentries: &[SpawnentryRow]) -> BTreeMap<i32, Vec<SpawnentryRow>> {
     let mut map: BTreeMap<i32, Vec<SpawnentryRow>> = BTreeMap::new();
     for entry in spawnentries {
         map.entry(entry.spawngroup_id)
@@ -1050,7 +1091,10 @@ mod tests {
         let a = camp_id("solb", &[2, 1]);
         let b = camp_id("SOLB", &[1, 2, 2]);
 
-        assert_eq!(a, "8e91f70d02bf1c6d227d3ed537f7105b734213e1690156b00978b770b3188654");
+        assert_eq!(
+            a,
+            "8e91f70d02bf1c6d227d3ed537f7105b734213e1690156b00978b770b3188654"
+        );
         assert_eq!(a, b);
     }
 

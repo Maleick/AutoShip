@@ -275,10 +275,13 @@ pub fn analyze_session_for_suggestions(
         suggestions.push(ImprovementSuggestion {
             id: format!("suggest_stealth_review_{}", chrono::Utc::now().timestamp()),
             title: "Review safety — GM detection triggered".to_string(),
-            description: "GM detection was triggered. Review character behavior and account safety.".to_string(),
+            description:
+                "GM detection was triggered. Review character behavior and account safety."
+                    .to_string(),
             suggestion_type: SuggestionType::Safety,
             priority: 5,
-            recommendation: "Reduce automation visibility and review behavior patterns.".to_string(),
+            recommendation: "Reduce automation visibility and review behavior patterns."
+                .to_string(),
             created_at: Utc::now(),
             status: SuggestionStatus::Pending,
             config_path: None,
@@ -291,10 +294,12 @@ pub fn analyze_session_for_suggestions(
         suggestions.push(ImprovementSuggestion {
             id: format!("suggest_camp_tuning_{}", chrono::Utc::now().timestamp()),
             title: "Review camp settings — low combat activity".to_string(),
-            description: "Long session with low combat. Consider camp location or pull radius.".to_string(),
+            description: "Long session with low combat. Consider camp location or pull radius."
+                .to_string(),
             suggestion_type: SuggestionType::ConfigTuning,
             priority: 2,
-            recommendation: "Check camp pull radius or relocate camp to higher spawn area.".to_string(),
+            recommendation: "Check camp pull radius or relocate camp to higher spawn area."
+                .to_string(),
             created_at: Utc::now(),
             status: SuggestionStatus::Pending,
             config_path: Some("camp.pull_radius".to_string()),
@@ -322,7 +327,11 @@ mod tests {
             ..Default::default()
         };
         let suggestions = analyze_session_for_suggestions(&metrics, &[]);
-        assert!(suggestions.iter().any(|s| s.suggestion_type == SuggestionType::CombatRotation));
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.suggestion_type == SuggestionType::CombatRotation)
+        );
     }
 
     #[test]
@@ -332,7 +341,11 @@ mod tests {
             ..Default::default()
         };
         let suggestions = analyze_session_for_suggestions(&metrics, &[]);
-        assert!(suggestions.iter().any(|s| s.suggestion_type == SuggestionType::Navigation));
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.suggestion_type == SuggestionType::Navigation)
+        );
     }
 
     #[test]
@@ -342,6 +355,10 @@ mod tests {
             ..Default::default()
         };
         let suggestions = analyze_session_for_suggestions(&metrics, &[]);
-        assert!(suggestions.iter().any(|s| s.suggestion_type == SuggestionType::Safety));
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.suggestion_type == SuggestionType::Safety)
+        );
     }
 }

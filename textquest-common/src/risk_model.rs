@@ -152,8 +152,7 @@ pub struct CalibrationFixture {
 }
 
 /// Risk model engine: computes scores and learns from calibration fixtures.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RiskModel {
     /// Current weights (default or calibrated)
     pub weights: RiskWeights,
@@ -162,7 +161,6 @@ pub struct RiskModel {
     /// Cache of last-computed scores per (camp_id, party_signature)
     pub score_cache: HashMap<(String, String), RiskScore>,
 }
-
 
 impl RiskModel {
     /// Create empty model with default weights.

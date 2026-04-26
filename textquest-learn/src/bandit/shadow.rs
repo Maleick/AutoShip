@@ -73,8 +73,7 @@ impl<W: Write> ShadowLog<W> {
 }
 
 /// Shadow-mode or live execution policy.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum PolicyMode {
     /// Default: bandit pick is logged but rule pick executes.
     #[default]
@@ -91,7 +90,6 @@ impl PolicyMode {
         matches!(self, PolicyMode::Live { .. })
     }
 }
-
 
 #[cfg(test)]
 mod tests {

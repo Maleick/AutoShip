@@ -4428,7 +4428,11 @@ mod tests {
 
         draw_camp_overlay(&app, &to_grid, 40, 24, &mut grid);
 
-        assert!(grid.iter().flatten().all(|cell| *cell == (' ', Color::Reset)));
+        assert!(
+            grid.iter()
+                .flatten()
+                .all(|cell| *cell == (' ', Color::Reset))
+        );
     }
 
     #[test]

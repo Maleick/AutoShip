@@ -24,8 +24,8 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-use crate::persistence::{load_toml_config, save_toml_config};
 use crate::chat::ChatChannel;
+use crate::persistence::{load_toml_config, save_toml_config};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

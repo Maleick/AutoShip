@@ -2921,9 +2921,7 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 if let Ok(mut known_bandolier) = ACTIVE_BANDOLIER_SET.lock() {
                     *known_bandolier = Some(active_bandolier.clone());
                 }
-                if let Ok(mut mgr) =
-                    crate::combat::bandolier::BANDOLIER_MANAGER.try_lock()
-                {
+                if let Ok(mut mgr) = crate::combat::bandolier::BANDOLIER_MANAGER.try_lock() {
                     mgr.set_active(Some(active_bandolier));
                 }
             }

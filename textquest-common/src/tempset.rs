@@ -81,9 +81,7 @@ impl TempsetStore {
 
     /// Iterate over all active overrides as `(key, value)` pairs.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.overrides
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
+        self.overrides.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
     /// Return a snapshot of all active overrides sorted by key (for display).

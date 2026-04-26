@@ -52,17 +52,12 @@ impl TempSetStore {
 
     /// Remove a single override. Returns the removed value if it existed.
     pub fn clear_one(&mut self, character: &str, knob: &str) -> Option<String> {
-        self.inner
-            .get_mut(character)
-            .and_then(|m| m.remove(knob))
+        self.inner.get_mut(character).and_then(|m| m.remove(knob))
     }
 
     /// Remove all overrides for `character`. Returns how many were cleared.
     pub fn clear_all(&mut self, character: &str) -> usize {
-        self.inner
-            .remove(character)
-            .map(|m| m.len())
-            .unwrap_or(0)
+        self.inner.remove(character).map(|m| m.len()).unwrap_or(0)
     }
 
     /// Return all overrides for `character` (empty if none).

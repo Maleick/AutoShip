@@ -32,7 +32,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
 use crate::nav::ZoneGraph;
-use crate::navigation::zone_graph::{cost_for_transfer_type, ZoneId};
+use crate::navigation::zone_graph::{ZoneId, cost_for_transfer_type};
 
 // ─── Internal priority-queue node ─────────────────────────────────────────────
 
@@ -75,13 +75,11 @@ impl Eq for OrderedFloat {}
 
 impl Ord for OrderedFloat {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0
-            .partial_cmp(&other.0)
-            .unwrap_or(if self.0.is_nan() {
-                Ordering::Greater
-            } else {
-                Ordering::Less
-            })
+        self.0.partial_cmp(&other.0).unwrap_or(if self.0.is_nan() {
+            Ordering::Greater
+        } else {
+            Ordering::Less
+        })
     }
 }
 
@@ -190,11 +188,7 @@ fn heuristic(_node: ZoneId, _goal: ZoneId) -> f32 {
 }
 
 /// Reconstruct the path from `from` to `to` using the `came_from` map.
-fn reconstruct_path(
-    came_from: &HashMap<ZoneId, ZoneId>,
-    from: ZoneId,
-    to: ZoneId,
-) -> Vec<ZoneId> {
+fn reconstruct_path(came_from: &HashMap<ZoneId, ZoneId>, from: ZoneId, to: ZoneId) -> Vec<ZoneId> {
     let mut path = vec![to];
     let mut current = to;
     while current != from {

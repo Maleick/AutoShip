@@ -1507,11 +1507,8 @@ mod tests {
 
     #[test]
     fn test_auto_sell_rule_with_reason() {
-        let rule = AutoSellRule::with_reason(
-            ".*Junk.*".into(),
-            true,
-            "All junk items are trash".into(),
-        );
+        let rule =
+            AutoSellRule::with_reason(".*Junk.*".into(), true, "All junk items are trash".into());
         assert_eq!(rule.pattern, ".*Junk.*");
         assert!(rule.should_sell);
         assert_eq!(rule.reason, Some("All junk items are trash".into()));
@@ -1530,7 +1527,10 @@ mod tests {
         let mut config = test_vendor_config();
         config.auto_sell_rules = vec![AutoSellRule::new(".*Silk.*".into(), true)];
         let cycle = SellCycle::new(config);
-        assert_eq!(cycle.check_auto_sell_rules("Shimmering Silk Tunic"), Some(true));
+        assert_eq!(
+            cycle.check_auto_sell_rules("Shimmering Silk Tunic"),
+            Some(true)
+        );
     }
 
     #[test]
@@ -1538,7 +1538,10 @@ mod tests {
         let mut config = test_vendor_config();
         config.auto_sell_rules = vec![AutoSellRule::new(".*Quest.*".into(), false)];
         let cycle = SellCycle::new(config);
-        assert_eq!(cycle.check_auto_sell_rules("Ancient Quest Item"), Some(false));
+        assert_eq!(
+            cycle.check_auto_sell_rules("Ancient Quest Item"),
+            Some(false)
+        );
     }
 
     #[test]
@@ -1549,7 +1552,10 @@ mod tests {
             AutoSellRule::new(".*Silk.*".into(), true),  // This one won't be checked
         ];
         let cycle = SellCycle::new(config);
-        assert_eq!(cycle.check_auto_sell_rules("Shimmering Silk Tunic"), Some(false));
+        assert_eq!(
+            cycle.check_auto_sell_rules("Shimmering Silk Tunic"),
+            Some(false)
+        );
     }
 
     #[test]
@@ -1565,9 +1571,7 @@ mod tests {
     #[test]
     fn test_auto_sell_rules_complex_regex() {
         let mut config = test_vendor_config();
-        config.auto_sell_rules = vec![
-            AutoSellRule::new("^(Torn|Tattered|Ragged).*".into(), true),
-        ];
+        config.auto_sell_rules = vec![AutoSellRule::new("^(Torn|Tattered|Ragged).*".into(), true)];
         let cycle = SellCycle::new(config);
         assert_eq!(cycle.check_auto_sell_rules("Torn Cloth Sandal"), Some(true));
         assert_eq!(cycle.check_auto_sell_rules("Tattered Robe"), Some(true));

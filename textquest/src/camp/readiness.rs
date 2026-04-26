@@ -16,11 +16,23 @@ pub enum ReadinessBlocker {
     /// Member is dead (HP == 0).
     Dead { name: String },
     /// Member's HP below threshold for their role.
-    LowHp { name: String, current: u8, threshold: u8 },
+    LowHp {
+        name: String,
+        current: u8,
+        threshold: u8,
+    },
     /// Member's Mana below threshold for their role.
-    LowMana { name: String, current: u8, threshold: u8 },
+    LowMana {
+        name: String,
+        current: u8,
+        threshold: u8,
+    },
     /// Member is too far from camp center.
-    OutOfPosition { name: String, distance: f32, max_distance: f32 },
+    OutOfPosition {
+        name: String,
+        distance: f32,
+        max_distance: f32,
+    },
     /// Required buff is missing on member.
     MissingBuff { name: String, buff: String },
 }
@@ -31,14 +43,29 @@ impl ReadinessBlocker {
     pub fn message(&self) -> String {
         match self {
             Self::Dead { name } => format!("{} is dead", name),
-            Self::LowHp { name, current, threshold } => {
+            Self::LowHp {
+                name,
+                current,
+                threshold,
+            } => {
                 format!("{} HP {} < {}", name, current, threshold)
             }
-            Self::LowMana { name, current, threshold } => {
+            Self::LowMana {
+                name,
+                current,
+                threshold,
+            } => {
                 format!("{} mana {} < {}", name, current, threshold)
             }
-            Self::OutOfPosition { name, distance, max_distance } => {
-                format!("{} position {} > {}", name, distance as i32, max_distance as i32)
+            Self::OutOfPosition {
+                name,
+                distance,
+                max_distance,
+            } => {
+                format!(
+                    "{} position {} > {}",
+                    name, distance as i32, max_distance as i32
+                )
             }
             Self::MissingBuff { name, buff } => format!("{} missing {}", name, buff),
         }
@@ -90,9 +117,8 @@ pub fn check_member_ready(
     }
 
     // Check position (distance from camp center)
-    let distance_to_camp = ((frame.x - frame.x_camp).powi(2)
-        + (frame.y - frame.y_camp).powi(2))
-        .sqrt();
+    let distance_to_camp =
+        ((frame.x - frame.x_camp).powi(2) + (frame.y - frame.y_camp).powi(2)).sqrt();
 
     if distance_to_camp > config.position_radius {
         return Some(ReadinessBlocker::OutOfPosition {

@@ -126,11 +126,11 @@ impl RawClickyItem {
                 Ok(self.item)
             }
             (false, true) => {
-        if self.item.scenario != ClickyScenario::Any {
-            anyhow::bail!(
-                "clicky '{}' uses both legacy scenario flags and explicit scenario",
-                self.item.name
-            );
+                if self.item.scenario != ClickyScenario::Any {
+                    anyhow::bail!(
+                        "clicky '{}' uses both legacy scenario flags and explicit scenario",
+                        self.item.name
+                    );
                 }
                 self.item.scenario = ClickyScenario::Downtime;
                 Ok(self.item)
@@ -928,7 +928,11 @@ mod tests {
         assert_eq!(stub.calls.borrow().len(), 2, "cooldown has not expired");
 
         let log3 = mgr.tick(t0 + Duration::from_millis(1_050), &states, &stub);
-        assert_eq!(log3.len(), 2, "both characters should refresh after cooldown");
+        assert_eq!(
+            log3.len(),
+            2,
+            "both characters should refresh after cooldown"
+        );
         assert_eq!(stub.calls.borrow().len(), 4);
     }
 

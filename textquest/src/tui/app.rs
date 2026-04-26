@@ -29,7 +29,6 @@ use crate::{
         state::{CampMember, Role},
     },
     config::AccountsConfig,
-    travel::{self, FindMatch, FindRouter, TravelStepKind},
     eq::{
         gm_detector::{GmAlertConfig, GmDetector, GmEventType},
         log_parser::{ChatEvent, LootDatabase},
@@ -41,6 +40,7 @@ use crate::{
     },
     help::HelpDatabase,
     orchestrator::Orchestrator,
+    travel::{self, FindMatch, FindRouter, TravelStepKind},
 };
 use anyhow::Context;
 use ratatui::style::Color;
@@ -56,10 +56,7 @@ static HELP_DATABASE: LazyLock<HelpDatabase> = LazyLock::new(HelpDatabase::load_
 
 const GM_SYNC_QUEUE_CAPACITY: usize = 16;
 pub const GEMMA_OBSERVATION_LIMIT: usize = 50;
-type NavmeshOverlayLoadResult = (
-    String,
-    anyhow::Result<crate::nav::mesh::NavMeshOverlay>,
-);
+type NavmeshOverlayLoadResult = (String, anyhow::Result<crate::nav::mesh::NavMeshOverlay>);
 
 #[derive(Debug)]
 struct GmSyncPayload {
@@ -2966,8 +2963,7 @@ impl App {
         let default_names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"];
 
         if let Ok(accts) = AccountsConfig::load(std::path::Path::new("config/accounts.toml")) {
-            let mut groups_by_id: HashMap<u32, Vec<&crate::config::AccountEntry>> =
-                HashMap::new();
+            let mut groups_by_id: HashMap<u32, Vec<&crate::config::AccountEntry>> = HashMap::new();
             for acct in &accts.accounts {
                 if acct.group > 0 {
                     groups_by_id.entry(acct.group).or_default().push(acct);
@@ -2995,7 +2991,10 @@ impl App {
 
                         let name = default_names
                             .get((id as usize).saturating_sub(1))
-                            .map_or_else(|| format!("Group {id}"), std::string::ToString::to_string);
+                            .map_or_else(
+                                || format!("Group {id}"),
+                                std::string::ToString::to_string,
+                            );
 
                         GroupDef {
                             id: id.min(u32::from(u8::MAX)) as u8,
@@ -3030,10 +3029,9 @@ impl App {
 
         if let Some(cfg) = &self.accounts_config {
             for group in &self.groups {
-                let matches = cfg
-                    .accounts
-                    .iter()
-                    .any(|acct| acct.group == u32::from(group.id) && acct.character.eq_ignore_ascii_case(name));
+                let matches = cfg.accounts.iter().any(|acct| {
+                    acct.group == u32::from(group.id) && acct.character.eq_ignore_ascii_case(name)
+                });
                 if matches {
                     return Some(group.id);
                 }
@@ -3051,10 +3049,7 @@ impl App {
         })
     }
 
-    fn configured_group_members(
-        &self,
-        group: &GroupDef,
-    ) -> Option<HashSet<String>> {
+    fn configured_group_members(&self, group: &GroupDef) -> Option<HashSet<String>> {
         let cfg = self.accounts_config.as_ref()?;
         let names: HashSet<String> = cfg
             .accounts
@@ -3070,11 +3065,7 @@ impl App {
             })
             .collect();
 
-        if names.is_empty() {
-            None
-        } else {
-            Some(names)
-        }
+        if names.is_empty() { None } else { Some(names) }
     }
 
     fn group_idx_for_id(&self, group_id: u8) -> Option<usize> {
@@ -5673,7 +5664,9 @@ impl App {
             return;
         }
 
-        if destination_zone.is_none() && self.current_zone_short_name().is_none() && resolved.position.is_none()
+        if destination_zone.is_none()
+            && self.current_zone_short_name().is_none()
+            && resolved.position.is_none()
         {
             self.execute_find_within_current_zone(&resolved);
             return;
@@ -5695,10 +5688,19 @@ impl App {
 
     fn execute_find_within_current_zone(&mut self, poi: &FindMatch) {
         let destination_label = format!("{} ({})", poi.poi_name, poi.zone);
-        if let Some(pos) = poi.position.map(|p| textquest_common::nav::Waypoint::new(p.x, p.y, p.z)) {
+        if let Some(pos) = poi
+            .position
+            .map(|p| textquest_common::nav::Waypoint::new(p.x, p.y, p.z))
+        {
             self.execute_waypoint_navigation(&destination_label, pos, Some(&poi.zone));
-        } else if let Some((name, waypoint)) = self.find_named_spawn_in_active_zone(&poi.spawn_search) {
-            self.execute_waypoint_navigation(&format!("{destination_label} → {name}"), waypoint, Some(&poi.zone));
+        } else if let Some((name, waypoint)) =
+            self.find_named_spawn_in_active_zone(&poi.spawn_search)
+        {
+            self.execute_waypoint_navigation(
+                &format!("{destination_label} → {name}"),
+                waypoint,
+                Some(&poi.zone),
+            );
         } else if !poi.spawn_search.trim().is_empty() {
             self.set_feedback(
                 ToastLevel::Info,
@@ -5743,9 +5745,10 @@ impl App {
         let mut sent_hooks = 0usize;
         for step in &plan.steps {
             if let Some(command) = &step.command {
-                let count = self.send_ipc_to_focused(&textquest_common::ipc::Command::SlashCommand {
-                    command: command.clone(),
-                });
+                let count =
+                    self.send_ipc_to_focused(&textquest_common::ipc::Command::SlashCommand {
+                        command: command.clone(),
+                    });
                 sent_steps += 1;
                 if count > 0 {
                     sent_hooks += 1;
@@ -5766,7 +5769,10 @@ impl App {
             }
         }
 
-        if let Some(pos) = poi.position.map(|p| textquest_common::nav::Waypoint::new(p.x, p.y, p.z)) {
+        if let Some(pos) = poi
+            .position
+            .map(|p| textquest_common::nav::Waypoint::new(p.x, p.y, p.z))
+        {
             self.execute_waypoint_navigation(
                 &format!("{} ({})", poi.poi_name, poi.zone),
                 pos,
@@ -5787,8 +5793,7 @@ impl App {
             ToastLevel::Success,
             format!(
                 "Travel plan queued to {} ({} step commands)",
-                poi.zone,
-                sent_steps
+                poi.zone, sent_steps
             ),
             true,
         );
@@ -5800,11 +5805,9 @@ impl App {
             return;
         }
         let sent = hooks.iter().fold(0usize, |acc, hook| {
-            if self
-                .send_ipc_to_focused(&textquest_common::ipc::Command::SlashCommand {
-                    command: hook.clone(),
-                })
-                > 0
+            if self.send_ipc_to_focused(&textquest_common::ipc::Command::SlashCommand {
+                command: hook.clone(),
+            }) > 0
             {
                 acc.saturating_add(1)
             } else {
@@ -5843,7 +5846,10 @@ impl App {
             if spawn.spawn_id == player.spawn_id {
                 continue;
             }
-            let displayed = spawn.displayed_name.to_ascii_lowercase().replace([' ', '_', '-'], "");
+            let displayed = spawn
+                .displayed_name
+                .to_ascii_lowercase()
+                .replace([' ', '_', '-'], "");
             let name = spawn.name.to_ascii_lowercase().replace([' ', '_', '-'], "");
             if !displayed.contains(&target) && !name.contains(&target) {
                 continue;

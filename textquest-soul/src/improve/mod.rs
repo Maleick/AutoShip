@@ -112,7 +112,11 @@ impl AnomalyEvent {
 #[derive(Debug, Clone)]
 pub enum SessionMetric {
     /// DPS observation for a (class, zone) pair.
-    Dps { class: String, zone: String, value: f64 },
+    Dps {
+        class: String,
+        zone: String,
+        value: f64,
+    },
     /// A death event (Unix millisecond timestamp).
     Death { ts_ms: u64 },
     /// 10th-percentile mana value.
@@ -147,9 +151,8 @@ pub enum OperatorAction {
 // ── AnomalyPipeline ───────────────────────────────────────────────────────────
 
 use crate::improve::{
-    bocpd::BocpdDetector, causal::CausalGraph, ewma::EwmaDetector,
-    feedback::PipelineFeedback, mad::MadDetector, page_hinkley::PageHinkleyDetector,
-    stl_mad::StlMadDetector,
+    bocpd::BocpdDetector, causal::CausalGraph, ewma::EwmaDetector, feedback::PipelineFeedback,
+    mad::MadDetector, page_hinkley::PageHinkleyDetector, stl_mad::StlMadDetector,
 };
 
 /// Orchestrates all detector families and post-processors.
@@ -340,7 +343,11 @@ mod tests {
         let events = p.on_session_close();
         for ev in &events {
             if matches!(ev.kind, AnomalyKind::DpsDropEwma { .. }) {
-                assert_eq!(ev.severity, Severity::Minor, "stale baseline must emit Minor");
+                assert_eq!(
+                    ev.severity,
+                    Severity::Minor,
+                    "stale baseline must emit Minor"
+                );
                 assert!(ev.stale_baseline);
             }
         }

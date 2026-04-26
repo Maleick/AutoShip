@@ -437,7 +437,12 @@ fn build_zone_graph_lines<'a>(
         let path_str = names.join(" → ");
         lines.push(Line::from(vec![
             Span::styled("Active path: ", Style::default().fg(t.text_secondary)),
-            Span::styled(path_str, Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                path_str,
+                Style::default()
+                    .fg(t.text_highlight)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]));
         lines.push(Line::from(""));
     }
@@ -490,8 +495,7 @@ fn build_zone_graph_lines<'a>(
                 .get(&conn.dest_zone_id)
                 .map_or_else(|| conn.dest_zone_id.to_string(), |z| z.name.clone());
 
-            let edge_on_path =
-                path_edges.contains(&(zone_id, conn.dest_zone_id));
+            let edge_on_path = path_edges.contains(&(zone_id, conn.dest_zone_id));
 
             let edge_color = if edge_on_path {
                 t.text_highlight
@@ -503,11 +507,13 @@ fn build_zone_graph_lines<'a>(
                 Span::styled("  -> ", Style::default().fg(edge_color)),
                 Span::styled(
                     dest_name,
-                    Style::default().fg(edge_color).add_modifier(if edge_on_path {
-                        Modifier::BOLD
-                    } else {
-                        Modifier::empty()
-                    }),
+                    Style::default()
+                        .fg(edge_color)
+                        .add_modifier(if edge_on_path {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
                 ),
             ]));
         }

@@ -27,9 +27,7 @@ pub struct PluginManifest {
 
 impl PluginManifest {
     pub fn is_empty(&self) -> bool {
-        self.requires.is_empty()
-            && self.force_unload.is_empty()
-            && self.pause_on_load.is_none()
+        self.requires.is_empty() && self.force_unload.is_empty() && self.pause_on_load.is_none()
     }
 }
 
@@ -170,9 +168,15 @@ pub enum PluginError {
     NotFound(String),
     Lifecycle(String),
     /// One or more `requires` entries are absent or disabled.
-    UnsatisfiedRequirement { plugin: String, missing: Vec<String> },
+    UnsatisfiedRequirement {
+        plugin: String,
+        missing: Vec<String>,
+    },
     /// One or more `force_unload` entries could not be disabled.
-    ConflictingPlugin { plugin: String, conflicts: Vec<String> },
+    ConflictingPlugin {
+        plugin: String,
+        conflicts: Vec<String>,
+    },
 }
 
 impl fmt::Display for PluginError {
@@ -270,12 +274,13 @@ impl PluginRegistry {
             let mut failed: Vec<String> = Vec::new();
             for conflict in &metadata.manifest.force_unload.clone() {
                 if let Some(registered) = self.plugins.get_mut(conflict.as_str())
-                    && registered.enabled {
-                        match registered.plugin.on_unload() {
-                            Ok(()) => registered.enabled = false,
-                            Err(_) => failed.push(conflict.clone()),
-                        }
+                    && registered.enabled
+                {
+                    match registered.plugin.on_unload() {
+                        Ok(()) => registered.enabled = false,
+                        Err(_) => failed.push(conflict.clone()),
                     }
+                }
             }
             if !failed.is_empty() {
                 return Err(PluginError::ConflictingPlugin {

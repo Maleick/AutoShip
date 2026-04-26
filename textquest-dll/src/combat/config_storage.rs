@@ -4,8 +4,8 @@
 //! and SQLite-backed storage for per-character and per-server configurations.
 
 use anyhow::{Context, Result};
-use base64::{engine::general_purpose, Engine as _};
-use rusqlite::{params, Connection, OptionalExtension};
+use base64::{Engine as _, engine::general_purpose};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json;
 use std::path::Path;
 
@@ -38,8 +38,7 @@ impl SqliteConfigStore {
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)
-                    .context("Failed to create config directory")?;
+                std::fs::create_dir_all(parent).context("Failed to create config directory")?;
             }
         }
 

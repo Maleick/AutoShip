@@ -80,7 +80,11 @@ impl AutoAcceptHandler {
     /// Evaluate a pending prompt from `from_name` of `prompt_type`.
     ///
     /// Returns the decision and records an event for the audit trail.
-    pub fn evaluate(&mut self, from_name: &str, prompt_type: AcceptablePromptType) -> AcceptDecision {
+    pub fn evaluate(
+        &mut self,
+        from_name: &str,
+        prompt_type: AcceptablePromptType,
+    ) -> AcceptDecision {
         if !self.config.enabled {
             return AcceptDecision::Ignore;
         }

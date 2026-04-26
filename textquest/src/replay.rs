@@ -77,7 +77,6 @@ impl ReplayTier {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReplayMeta {
     pub schema_version: u32,
@@ -292,8 +291,8 @@ pub fn write_bundle(dir: impl AsRef<Path>, bundle: &mut ReplayBundle) -> Result<
         .with_context(|| format!("failed to write replay dictionary {}", dir.display()))?;
     bundle.meta.dictionary_id = bundle.dictionary.as_deref().map(dictionary_id);
 
-    let meta_bytes = serde_json::to_vec_pretty(&bundle.meta)
-        .context("failed to serialize replay metadata")?;
+    let meta_bytes =
+        serde_json::to_vec_pretty(&bundle.meta).context("failed to serialize replay metadata")?;
     fs::write(dir.join(META_FILE), meta_bytes)
         .with_context(|| format!("failed to write replay meta {}", dir.display()))?;
     Ok(())
@@ -328,9 +327,7 @@ pub fn load_bundle(dir: impl AsRef<Path>) -> Result<LoadedReplayBundle> {
 
     let use_dictionary = match meta.tier {
         ReplayTier::Hot => None,
-        ReplayTier::Warm | ReplayTier::Cold | ReplayTier::EternalAggregate => {
-            dictionary.as_deref()
-        }
+        ReplayTier::Warm | ReplayTier::Cold | ReplayTier::EternalAggregate => dictionary.as_deref(),
     };
 
     let streams = ReplayStreams {
@@ -374,7 +371,10 @@ pub fn verify_bundle(bundle: &ReplayBundle) -> ReplayVerification {
     }
 }
 
-pub fn list_bundles(root: impl AsRef<Path>, filters: &ReplayListFilters) -> Result<Vec<ReplaySummary>> {
+pub fn list_bundles(
+    root: impl AsRef<Path>,
+    filters: &ReplayListFilters,
+) -> Result<Vec<ReplaySummary>> {
     let root = root.as_ref();
     if !root.exists() {
         return Ok(Vec::new());
@@ -444,7 +444,8 @@ pub fn list_bundles(root: impl AsRef<Path>, filters: &ReplayListFilters) -> Resu
             }
 
             if let Some(cutoff) = cutoff
-                && let Some(created) = UNIX_EPOCH.checked_add(Duration::from_secs(meta.created_unix_seconds))
+                && let Some(created) =
+                    UNIX_EPOCH.checked_add(Duration::from_secs(meta.created_unix_seconds))
                 && created < cutoff
             {
                 continue;
@@ -561,7 +562,15 @@ pub fn export_bundle_to_tqreplay(
         .context("failed to create zstd encoder for replay export")?;
     let mut builder = tar::Builder::new(encoder);
 
-    let mut entries = vec![META_FILE, GAME_STATE_FILE, EVENTS_FILE, OPERATOR_FILE, ORCHESTRATOR_FILE, DICTIONARY_FILE, TUI_CAST_FILE];
+    let mut entries = vec![
+        META_FILE,
+        GAME_STATE_FILE,
+        EVENTS_FILE,
+        OPERATOR_FILE,
+        ORCHESTRATOR_FILE,
+        DICTIONARY_FILE,
+        TUI_CAST_FILE,
+    ];
     if redacted {
         entries.retain(|entry| *entry != OPERATOR_FILE);
     }
@@ -583,10 +592,7 @@ pub fn export_bundle_to_tqreplay(
     Ok(())
 }
 
-pub fn import_tqreplay(
-    input: impl AsRef<Path>,
-    output_dir: impl AsRef<Path>,
-) -> Result<PathBuf> {
+pub fn import_tqreplay(input: impl AsRef<Path>, output_dir: impl AsRef<Path>) -> Result<PathBuf> {
     let input = input.as_ref();
     let output_dir = output_dir.as_ref();
     fs::create_dir_all(output_dir)
@@ -666,7 +672,8 @@ fn encode_stream(bytes: &[u8], level: i32, dictionary: Option<&[u8]>) -> Result<
         let encoded = encoder.finish()?;
         Ok(encoded)
     } else {
-        zstd::stream::encode_all(Cursor::new(bytes), level).context("failed to zstd-compress stream")
+        zstd::stream::encode_all(Cursor::new(bytes), level)
+            .context("failed to zstd-compress stream")
     }
 }
 
@@ -690,10 +697,7 @@ fn compute_hashes(streams: &ReplayStreams) -> (BTreeMap<String, String>, String)
         hashes.insert(name.to_string(), hash.clone());
         content_hasher.update(bytes);
     }
-    (
-        hashes,
-        content_hasher.finalize().to_hex().to_string(),
-    )
+    (hashes, content_hasher.finalize().to_hex().to_string())
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {
@@ -834,9 +838,16 @@ mod tests {
         write_bundle(&bundle_dir, &mut bundle).expect("write bundle");
 
         let loaded = load_bundle(&bundle_dir).expect("load bundle");
-        assert!(loaded.verification.ok, "{:?}", loaded.verification.mismatches);
+        assert!(
+            loaded.verification.ok,
+            "{:?}",
+            loaded.verification.mismatches
+        );
         assert_eq!(loaded.bundle.meta.session_id, "session-001");
-        assert_eq!(loaded.bundle.streams.events, b"{\"event\":1}\n{\"event\":2}\n");
+        assert_eq!(
+            loaded.bundle.streams.events,
+            b"{\"event\":1}\n{\"event\":2}\n"
+        );
     }
 
     #[test]
@@ -898,13 +909,19 @@ mod tests {
         let dir = temp_bundle_dir();
         let bundle_dir = dir.path().join("ranger").join("session-001");
         let mut bundle = sample_bundle();
-        bundle.meta.created_unix_seconds = unix_seconds(SystemTime::now() - Duration::from_secs(100 * 86_400));
+        bundle.meta.created_unix_seconds =
+            unix_seconds(SystemTime::now() - Duration::from_secs(100 * 86_400));
         write_bundle(&bundle_dir, &mut bundle).expect("write bundle");
 
         let meta = compact_bundle(&bundle_dir).expect("compact");
         assert_eq!(meta.tier, ReplayTier::Cold);
         let loaded = load_bundle(&bundle_dir).expect("load compacted bundle");
-        assert!(String::from_utf8_lossy(&loaded.bundle.streams.game_state).lines().count() <= 3);
+        assert!(
+            String::from_utf8_lossy(&loaded.bundle.streams.game_state)
+                .lines()
+                .count()
+                <= 3
+        );
     }
 
     #[test]

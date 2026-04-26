@@ -621,13 +621,14 @@ impl AutoBankingPlanner for InventoryUtilityConfig {
 
         if !context.at_bank
             && (inventory_trigger_pending || item_action_pending || currency_action_pending)
-            && let Some(location) = location {
-                return AutoBankingDecision::NavigateToBank {
-                    zone: location.zone.clone(),
-                    nav_waypoint: location.nav_waypoint.clone(),
-                    banker_name: location.banker_name.clone(),
-                };
-            }
+            && let Some(location) = location
+        {
+            return AutoBankingDecision::NavigateToBank {
+                zone: location.zone.clone(),
+                nav_waypoint: location.nav_waypoint.clone(),
+                banker_name: location.banker_name.clone(),
+            };
+        }
 
         if config.currency.enabled && context.platinum > config.currency.deposit_platinum_above {
             return AutoBankingDecision::DepositPlatinum {

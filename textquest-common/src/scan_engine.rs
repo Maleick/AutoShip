@@ -1022,8 +1022,7 @@ mod tests {
         db.eqmain_functions
             .insert("joinServer".to_string(), original_join_server + 0x200);
 
-        let reports =
-            scan_modules_into_offset_db(&[eqgame_image, eqmain_image], &entries, &mut db);
+        let reports = scan_modules_into_offset_db(&[eqgame_image, eqmain_image], &entries, &mut db);
 
         assert_eq!(reports.len(), 2);
         assert_eq!(reports[0].module, ScanModule::EqGame);

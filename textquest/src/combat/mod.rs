@@ -5,12 +5,12 @@ pub mod bard_swap;
 /// Camp loop combat integration — bridges camp state machine with combat
 /// actions.
 pub mod camp_loop;
-/// Per-class combat rotation strategy definitions.
-pub mod class_strategy;
 /// Complete Heal chain coordination for multi-cleric rotations.
 pub mod ch_chain;
 /// Charm and pet management primitives.
 pub mod charm;
+/// Per-class combat rotation strategy definitions.
+pub mod class_strategy;
 /// Combat coordinator — manages assist targets and broadcasts commands.
 pub mod coordinator;
 /// Structured combat event tracking — DPS meters, kill counts, damage

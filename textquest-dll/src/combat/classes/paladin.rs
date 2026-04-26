@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use textquest_common::combat::{
-    AbilityCandidate, EQExpansion, AbilitySet, CombatRole, ResolvedAbility, SpellEntry,
+    AbilityCandidate, AbilitySet, CombatRole, EQExpansion, ResolvedAbility, SpellEntry,
 };
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};

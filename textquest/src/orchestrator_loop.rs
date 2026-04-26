@@ -14,7 +14,10 @@ use crate::{
     credentials::store::CredentialStore,
     discord::webhook::WebhookSender,
     launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
-    metrics::{ProgressReport, ProgressTracker, SessionErrorKind, sample_process_memory_bytes, collector::MetricsCollector},
+    metrics::{
+        ProgressReport, ProgressTracker, SessionErrorKind, collector::MetricsCollector,
+        sample_process_memory_bytes,
+    },
     orchestrator::Orchestrator,
 };
 use std::{
@@ -663,10 +666,7 @@ impl OrchestratorLoop {
 
         for client_id in needs_restart {
             if self.orchestrator.is_banned_client(client_id) {
-                tracing::warn!(
-                    client_id,
-                    "Client banned — removing without relaunch"
-                );
+                tracing::warn!(client_id, "Client banned — removing without relaunch");
                 if let Some(session) = self.client_manager.remove(client_id) {
                     self.orchestrator.remove_client(session.pid);
                     self.orchestrator.mark_session_exited(client_id);
@@ -757,10 +757,7 @@ impl OrchestratorLoop {
                             );
                             self.orchestrator.remove_client(session.pid);
                         } else {
-                            tracing::warn!(
-                                client_id,
-                                "Skipping registration for banned client"
-                            );
+                            tracing::warn!(client_id, "Skipping registration for banned client");
                         }
                         continue;
                     }

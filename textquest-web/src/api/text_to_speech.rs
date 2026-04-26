@@ -5,17 +5,11 @@
 
 use std::sync::Arc;
 
-use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::AppState;
-
 
 /// Text-to-speech engine selection.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -159,9 +153,7 @@ impl Default for TextToSpeechState {
 }
 
 /// GET /api/tts/config
-pub async fn get_tts_config(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn get_tts_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let config = state.text_to_speech_state.config.read().await;
     (StatusCode::OK, Json(config.clone())).into_response()
 }
@@ -224,9 +216,15 @@ mod tests {
     #[test]
     fn default_tts_config_has_channels() {
         let config = TextToSpeechConfig::default();
-        assert!(!config.channels.is_empty(), "default config should have channels");
+        assert!(
+            !config.channels.is_empty(),
+            "default config should have channels"
+        );
         // At least Tell, Guild, Raid, Group should be present
-        assert!(config.channels.len() >= 4, "should have at least 4 channels");
+        assert!(
+            config.channels.len() >= 4,
+            "should have at least 4 channels"
+        );
     }
 
     #[test]

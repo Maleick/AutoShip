@@ -139,10 +139,9 @@ impl TrackingService {
         let now = SystemTime::now();
         let should_track = match self.last_track_time {
             None => true,
-            Some(last) => now
-                .duration_since(last)
-                .unwrap_or(Duration::ZERO)
-                >= self.cadence.interval,
+            Some(last) => {
+                now.duration_since(last).unwrap_or(Duration::ZERO) >= self.cadence.interval
+            }
         };
         if should_track {
             self.last_track_time = Some(now);
@@ -276,9 +275,7 @@ fn parse_bard_format(line: &str) -> Option<TrackEntry> {
     let inner = &line[paren_open + 1..paren_close];
     // inner: "North, 123 yards"
     let (dir_part, yard_part) = inner.split_once(", ")?;
-    let yards_str = yard_part
-        .trim_end_matches(" yards")
-        .trim();
+    let yards_str = yard_part.trim_end_matches(" yards").trim();
     let distance = yards_str.parse::<f32>().ok()?;
     Some(TrackEntry {
         name: name_part.to_string(),
@@ -321,8 +318,8 @@ mod tests {
 
     #[test]
     fn parse_bard_format_basic() {
-        let entry = parse_bard_format("Ignis the Undying (South, 456 yards)")
-            .expect("should parse");
+        let entry =
+            parse_bard_format("Ignis the Undying (South, 456 yards)").expect("should parse");
         assert_eq!(entry.name, "Ignis the Undying");
         assert!((entry.distance - 456.0).abs() < f32::EPSILON);
         assert!((entry.direction - 180.0).abs() < f32::EPSILON);

@@ -1,6 +1,6 @@
 pub mod ability_cooldowns;
-pub mod bandit_runtime;
 pub mod aggro;
+pub mod bandit_runtime;
 pub mod bandolier;
 pub mod buffs;
 pub mod cast_result_parser;

@@ -1,10 +1,10 @@
 //! Session aggregator — read JSONL events, compute derived metrics, store in SQLite.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::DateTime;
-use rusqlite::{params, Connection};
-use serde::{Deserialize};
-use serde_json::{json, Value};
+use rusqlite::{Connection, params};
+use serde::Deserialize;
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -30,8 +30,7 @@ pub struct SessionAggregator {
 impl SessionAggregator {
     /// Open metrics DB and ensure aggregate schema exists.
     pub fn new(db_path: &Path) -> Result<Self> {
-        let conn = Connection::open(db_path)
-            .context("Failed to open metrics database")?;
+        let conn = Connection::open(db_path).context("Failed to open metrics database")?;
         conn.execute_batch(AggregateSchema::SCHEMA)
             .context("Failed to initialize aggregate schema")?;
         Ok(Self { conn })
@@ -73,15 +72,19 @@ impl SessionAggregator {
         // Mark as aggregated
         self.mark_aggregated(session_id, events_path.to_string_lossy().as_ref())?;
 
-        tracing::info!("Compacted session {} with {} events", session_id, events.len());
+        tracing::info!(
+            "Compacted session {} with {} events",
+            session_id,
+            events.len()
+        );
         Ok(())
     }
 
     /// Compact all pending sessions in event_base_dir.
     pub fn compact_all_pending(&self, event_base_dir: &Path) -> Result<()> {
         // Find all session-* directories
-        let entries = fs::read_dir(event_base_dir)
-            .context("Failed to read event base directory")?;
+        let entries =
+            fs::read_dir(event_base_dir).context("Failed to read event base directory")?;
 
         let mut compacted = 0;
         for entry in entries {
@@ -191,13 +194,16 @@ impl SessionAggregator {
                         }
                     }
                     "Death" => {
-                        if let Some(cost) = event.details.get("death_cost").and_then(|v| v.as_i64()) {
+                        if let Some(cost) = event.details.get("death_cost").and_then(|v| v.as_i64())
+                        {
                             deaths += cost;
                         }
                     }
                     "Consumable" => {
-                        if let Some(cost) =
-                            event.details.get("consumable_cost").and_then(|v| v.as_i64())
+                        if let Some(cost) = event
+                            .details
+                            .get("consumable_cost")
+                            .and_then(|v| v.as_i64())
                         {
                             consumables += cost;
                         }
@@ -359,7 +365,10 @@ impl SessionAggregator {
                         .get("mana_cost")
                         .and_then(|v| v.as_i64())
                         .unwrap_or(0);
-                    ability_stats.insert(ability.to_string(), (damage + dmg_inc, uses + 1, mana + mana_inc));
+                    ability_stats.insert(
+                        ability.to_string(),
+                        (damage + dmg_inc, uses + 1, mana + mana_inc),
+                    );
                 }
             }
         }
@@ -514,9 +523,16 @@ impl SessionAggregator {
                     event.details.get("target_name").and_then(|v| v.as_str()),
                     event.details.get("zone").and_then(|v| v.as_str()),
                 ) {
-                    let is_named = event.details.get("is_named").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let is_named = event
+                        .details
+                        .get("is_named")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                     let key = format!("{}:{}", mob_name, zone);
-                    let (count, _, _) = kills_by_mob.remove(&key).unwrap_or((0, false, zone.to_string()));
+                    let (count, _, _) =
+                        kills_by_mob
+                            .remove(&key)
+                            .unwrap_or((0, false, zone.to_string()));
                     kills_by_mob.insert(key, (count + 1, is_named, zone.to_string()));
                 }
             }
@@ -590,7 +606,10 @@ impl SessionAggregator {
     }
 
     fn store_aggregates(&self, session_id: &str, aggregates: &Value) -> Result<()> {
-        let tx = self.conn.transaction().context("Failed to start transaction")?;
+        let tx = self
+            .conn
+            .transaction()
+            .context("Failed to start transaction")?;
 
         tx.execute(
             "INSERT OR REPLACE INTO session_aggregates (session_id, updated_at) VALUES (?, datetime('now'))",
@@ -599,7 +618,10 @@ impl SessionAggregator {
         .context("Failed to insert session_aggregates")?;
 
         // kill_time_per_mob
-        if let Some(kills) = aggregates.get("kill_time_per_mob").and_then(|v| v.as_object()) {
+        if let Some(kills) = aggregates
+            .get("kill_time_per_mob")
+            .and_then(|v| v.as_object())
+        {
             for (key, metrics) in kills {
                 if let Some(parts) = key.split(':').collect::<Vec<_>>().get(0..2) {
                     if parts.len() == 2 {
@@ -622,12 +644,27 @@ impl SessionAggregator {
         }
 
         // net_plat_per_hour_zone
-        if let Some(plat_data) = aggregates.get("net_plat_per_hour").and_then(|v| v.as_object()) {
+        if let Some(plat_data) = aggregates
+            .get("net_plat_per_hour")
+            .and_then(|v| v.as_object())
+        {
             for (zone, metrics) in plat_data {
-                let gross = metrics.get("gross_plat").and_then(|v| v.as_i64()).unwrap_or(0);
-                let deaths = metrics.get("deaths_cost").and_then(|v| v.as_i64()).unwrap_or(0);
-                let consumables = metrics.get("consumable_cost").and_then(|v| v.as_i64()).unwrap_or(0);
-                let net = metrics.get("net_plat").and_then(|v| v.as_i64()).unwrap_or(0);
+                let gross = metrics
+                    .get("gross_plat")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let deaths = metrics
+                    .get("deaths_cost")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let consumables = metrics
+                    .get("consumable_cost")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let net = metrics
+                    .get("net_plat")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
                 let duration_secs: i64 = 3600; // placeholder, would come from session metadata
                 let plat_per_hour = if duration_secs > 0 {
                     (net as f64 / duration_secs as f64) * 3600.0
@@ -659,11 +696,23 @@ impl SessionAggregator {
         }
 
         // spell_efficiency
-        if let Some(spells) = aggregates.get("spell_efficiency").and_then(|v| v.as_object()) {
+        if let Some(spells) = aggregates
+            .get("spell_efficiency")
+            .and_then(|v| v.as_object())
+        {
             for (spell_name, metrics) in spells {
-                let total = metrics.get("total_attempts").and_then(|v| v.as_i64()).unwrap_or(0);
-                let success = metrics.get("successful_casts").and_then(|v| v.as_i64()).unwrap_or(0);
-                let rate = metrics.get("success_rate").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let total = metrics
+                    .get("total_attempts")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let success = metrics
+                    .get("successful_casts")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let rate = metrics
+                    .get("success_rate")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
 
                 tx.execute(
                     "INSERT OR REPLACE INTO spell_efficiency (session_id, spell_name, total_attempts, successful_casts, success_rate)
@@ -692,12 +741,27 @@ impl SessionAggregator {
         }
 
         // ability_contribution
-        if let Some(abilities) = aggregates.get("ability_contribution").and_then(|v| v.as_object()) {
+        if let Some(abilities) = aggregates
+            .get("ability_contribution")
+            .and_then(|v| v.as_object())
+        {
             for (ability_name, metrics) in abilities {
-                let damage = metrics.get("damage_total").and_then(|v| v.as_i64()).unwrap_or(0);
-                let uses = metrics.get("times_used").and_then(|v| v.as_i64()).unwrap_or(0);
-                let mana = metrics.get("mana_spent").and_then(|v| v.as_i64()).unwrap_or(0);
-                let rank = metrics.get("contribution_rank").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let damage = metrics
+                    .get("damage_total")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let uses = metrics
+                    .get("times_used")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let mana = metrics
+                    .get("mana_spent")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let rank = metrics
+                    .get("contribution_rank")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
 
                 tx.execute(
                     "INSERT OR REPLACE INTO ability_contribution (session_id, ability_name, damage_total, times_used, mana_spent, contribution_rank)
@@ -709,7 +773,10 @@ impl SessionAggregator {
         }
 
         // route_node_death_rate
-        if let Some(nodes) = aggregates.get("route_node_deaths").and_then(|v| v.as_object()) {
+        if let Some(nodes) = aggregates
+            .get("route_node_deaths")
+            .and_then(|v| v.as_object())
+        {
             for (key, metrics) in nodes {
                 let parts: Vec<&str> = key.split(':').collect();
                 if parts.len() >= 4 {
@@ -719,9 +786,18 @@ impl SessionAggregator {
                         parts[2].parse::<f64>(),
                         parts[3].parse::<f64>(),
                     ) {
-                        let deaths = metrics.get("death_count").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let traversals = metrics.get("traversal_count").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let rate = metrics.get("death_rate").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let deaths = metrics
+                            .get("death_count")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let traversals = metrics
+                            .get("traversal_count")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let rate = metrics
+                            .get("death_rate")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
 
                         tx.execute(
                             "INSERT OR REPLACE INTO route_node_death_rate (session_id, zone, node_x, node_y, node_z, death_count, traversal_count, death_rate)
@@ -763,8 +839,14 @@ impl SessionAggregator {
                 let end_level = xp_data.get("end_level").and_then(|v| v.as_i64());
                 let xp_pct_start = xp_data.get("xp_percent_start").and_then(|v| v.as_f64());
                 let xp_pct_end = xp_data.get("xp_percent_end").and_then(|v| v.as_f64());
-                let xp_gained = xp_data.get("xp_gained_percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                let duration = xp_data.get("duration_seconds").and_then(|v| v.as_i64()).unwrap_or(0);
+                let xp_gained = xp_data
+                    .get("xp_gained_percent")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let duration = xp_data
+                    .get("duration_seconds")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
                 let xp_per_hour = xp_data.get("xp_per_hour").and_then(|v| v.as_f64());
 
                 tx.execute(
@@ -785,9 +867,18 @@ impl SessionAggregator {
                     if parts.len() == 2 {
                         let mob_name = parts[0];
                         let zone = parts[1];
-                        let kill_count = metrics.get("kill_count").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let is_named = metrics.get("is_named").and_then(|v| v.as_bool()).unwrap_or(false);
-                        let duration = metrics.get("duration_seconds").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let kill_count = metrics
+                            .get("kill_count")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let is_named = metrics
+                            .get("is_named")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let duration = metrics
+                            .get("duration_seconds")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
                         let kills_per_hour = metrics.get("kills_per_hour").and_then(|v| v.as_f64());
 
                         tx.execute(
@@ -804,11 +895,23 @@ impl SessionAggregator {
 
         // Plat Tracking
         if let Some(plat_data) = aggregates.get("plat_tracking").and_then(|v| v.as_object()) {
-            let gross = plat_data.get("gross_platinum").and_then(|v| v.as_i64()).unwrap_or(0);
-            let net = plat_data.get("net_platinum").and_then(|v| v.as_i64()).unwrap_or(0);
-            let duration = plat_data.get("duration_seconds").and_then(|v| v.as_i64()).unwrap_or(0);
+            let gross = plat_data
+                .get("gross_platinum")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let net = plat_data
+                .get("net_platinum")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let duration = plat_data
+                .get("duration_seconds")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
             let plat_per_hour = plat_data.get("platinum_per_hour").and_then(|v| v.as_f64());
-            let tx_count = plat_data.get("transaction_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let tx_count = plat_data
+                .get("transaction_count")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
 
             tx.execute(
                 "INSERT OR REPLACE INTO plat_summary_session
@@ -832,11 +935,12 @@ impl SessionAggregator {
     }
 
     fn mark_aggregated(&self, session_id: &str, jsonl_path: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT OR IGNORE INTO aggregated_sessions (session_id, jsonl_path) VALUES (?, ?)",
-            params![session_id, jsonl_path],
-        )
-        .context("Failed to mark aggregated")?;
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO aggregated_sessions (session_id, jsonl_path) VALUES (?, ?)",
+                params![session_id, jsonl_path],
+            )
+            .context("Failed to mark aggregated")?;
         Ok(())
     }
 }
@@ -951,7 +1055,7 @@ mod tests {
 
         assert_eq!(result["heal"]["total_attempts"], 3);
         assert_eq!(result["heal"]["successful_casts"], 2);
-        assert!((result["heal"]["success_rate"].as_f64().unwrap() - (2.0/3.0)).abs() < 0.01);
+        assert!((result["heal"]["success_rate"].as_f64().unwrap() - (2.0 / 3.0)).abs() < 0.01);
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use textquest_common::combat::{
-    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
-    KnownAbility, SpellEntry, TargetSelector,
+    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    EQExpansion, KnownAbility, SpellEntry, TargetSelector,
 };
 
 use crate::combat::{
@@ -114,8 +114,11 @@ impl RogueStrategy {
 
         // Assassinate: behind + piercer + target must be low-level (≤20).
         // Listed after Backstab so Backstab always fires first when both pass.
-        let mut assassinate =
-            rotation::group("Assassinate", TargetSelector::AutoTarget, CombatStateReq::Combat);
+        let mut assassinate = rotation::group(
+            "Assassinate",
+            TargetSelector::AutoTarget,
+            CombatStateReq::Combat,
+        );
         assassinate.steps_per_frame = 1;
         assassinate.entries = vec![rotation::entry_if(
             "Assassinate",

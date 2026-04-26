@@ -117,11 +117,11 @@ impl CausalGraph {
         let parent_id: u64 = u64::MAX;
 
         for ev in &mut events {
-            if explained.iter().any(|k| same_kind(k, &ev.kind))
-                && ev.severity >= Severity::Average {
-                    ev.severity = Severity::Minor;
-                    ev.caused_by = Some(parent_id);
-                }
+            if explained.iter().any(|k| same_kind(k, &ev.kind)) && ev.severity >= Severity::Average
+            {
+                ev.severity = Severity::Minor;
+                ev.caused_by = Some(parent_id);
+            }
         }
 
         events
@@ -167,14 +167,21 @@ fn node_to_kind(node: &CausalNode) -> Option<AnomalyKind> {
 fn same_kind(a: &AnomalyKind, b: &AnomalyKind) -> bool {
     matches!(
         (a, b),
-        (AnomalyKind::DpsDropEwma { .. }, AnomalyKind::DpsDropEwma { .. })
+        (
+            AnomalyKind::DpsDropEwma { .. },
+            AnomalyKind::DpsDropEwma { .. }
+        ) | (
+            AnomalyKind::DeathClusterPageHinkley,
+            AnomalyKind::DeathClusterPageHinkley
+        ) | (AnomalyKind::ManaCollapseMad, AnomalyKind::ManaCollapseMad)
             | (
-                AnomalyKind::DeathClusterPageHinkley,
-                AnomalyKind::DeathClusterPageHinkley
+                AnomalyKind::StuckRateBocpd { .. },
+                AnomalyKind::StuckRateBocpd { .. }
             )
-            | (AnomalyKind::ManaCollapseMad, AnomalyKind::ManaCollapseMad)
-            | (AnomalyKind::StuckRateBocpd { .. }, AnomalyKind::StuckRateBocpd { .. })
-            | (AnomalyKind::LootRateStlMad { .. }, AnomalyKind::LootRateStlMad { .. })
+            | (
+                AnomalyKind::LootRateStlMad { .. },
+                AnomalyKind::LootRateStlMad { .. }
+            )
     )
 }
 
@@ -244,9 +251,17 @@ mod tests {
             .find(|e| e.kind == AnomalyKind::ManaCollapseMad)
             .unwrap();
 
-        assert_eq!(dps.severity, Severity::Minor, "DPS suppressed by cleric debuff");
+        assert_eq!(
+            dps.severity,
+            Severity::Minor,
+            "DPS suppressed by cleric debuff"
+        );
         assert!(dps.caused_by.is_some());
-        assert_eq!(death.severity, Severity::Minor, "death suppressed by cleric debuff");
+        assert_eq!(
+            death.severity,
+            Severity::Minor,
+            "death suppressed by cleric debuff"
+        );
         // Mana is NOT a child of cleric debuff — should remain Major
         assert_eq!(mana.severity, Severity::Major, "mana not suppressed");
     }
@@ -272,7 +287,10 @@ mod tests {
     #[test]
     fn minor_events_not_demoted_further() {
         let g = CausalGraph::new();
-        let events = vec![make_event(AnomalyKind::DeathClusterPageHinkley, Severity::Minor)];
+        let events = vec![make_event(
+            AnomalyKind::DeathClusterPageHinkley,
+            Severity::Minor,
+        )];
         let result = g.explain_away(events, true, false, false);
         // Minor events stay Minor but do get the caused_by link removed
         // (already Minor — no change needed, but caused_by should not be set if already minor)

@@ -105,7 +105,6 @@ impl Default for RaidGroup {
     }
 }
 
-
 impl Default for RaidConfig {
     fn default() -> Self {
         Self {

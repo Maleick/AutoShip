@@ -75,7 +75,11 @@ impl DragCoordination {
 
         format!(
             "drag|{}|{:.2},{:.2},{:.2}|{}",
-            self.from_character, self.destination.x, self.destination.y, self.destination.z, assist_str
+            self.from_character,
+            self.destination.x,
+            self.destination.y,
+            self.destination.z,
+            assist_str
         )
     }
 }
@@ -144,8 +148,8 @@ mod tests {
     #[test]
     fn drag_coordination_with_assist_target() {
         let dest = Waypoint::new(100.0, 200.0, 50.0);
-        let coord = DragCoordination::new(DragChannel::Actors, "Wizard1", dest)
-            .with_assist_target("Tank1");
+        let coord =
+            DragCoordination::new(DragChannel::Actors, "Wizard1", dest).with_assist_target("Tank1");
 
         let msg = coord.as_message();
         assert!(msg.contains("assist:Tank1"));

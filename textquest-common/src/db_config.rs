@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use rusqlite::{
-    params, Connection, OptionalExtension,
-};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -53,13 +51,15 @@ impl DbConfig {
             .context("Time error")?
             .as_secs() as i64;
 
-        self.conn.execute(
-            "INSERT INTO config (module, key, value, created_at, updated_at)
+        self.conn
+            .execute(
+                "INSERT INTO config (module, key, value, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(module, key) DO UPDATE SET
              value=excluded.value, updated_at=excluded.updated_at",
-            params![module, key, value, now, now],
-        ).context("Failed to set config entry")?;
+                params![module, key, value, now, now],
+            )
+            .context("Failed to set config entry")?;
         Ok(())
     }
 
@@ -75,8 +75,11 @@ impl DbConfig {
     }
 
     pub fn get_all(&self, module: &str) -> Result<Vec<ConfigEntry>> {
-        let mut stmt = self.conn
-            .prepare("SELECT module, key, value, created_at, updated_at FROM config WHERE module = ?1")
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT module, key, value, created_at, updated_at FROM config WHERE module = ?1",
+            )
             .context("Failed to prepare statement")?;
 
         let entries = stmt
@@ -135,20 +138,14 @@ impl ConfigShare {
     }
 
     pub fn to_base64(&self) -> Result<String> {
-        let json = serde_json::to_string(self)
-            .context("Failed to serialize config share")?;
+        let json = serde_json::to_string(self).context("Failed to serialize config share")?;
         Ok(BASE64.encode(json))
     }
 
     pub fn from_base64(encoded: &str) -> Result<Self> {
-        let json = String::from_utf8(
-            BASE64
-                .decode(encoded)
-                .context("Failed to decode base64")?,
-        )
-        .context("Invalid UTF-8 in config share")?;
-        serde_json::from_str(&json)
-            .context("Failed to deserialize config share")
+        let json = String::from_utf8(BASE64.decode(encoded).context("Failed to decode base64")?)
+            .context("Invalid UTF-8 in config share")?;
+        serde_json::from_str(&json).context("Failed to deserialize config share")
     }
 
     pub fn apply_to_db(&self, db: &DbConfig) -> Result<()> {
@@ -163,7 +160,7 @@ impl ConfigShare {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use tempfile::NamedTempFile;
 
     #[test]

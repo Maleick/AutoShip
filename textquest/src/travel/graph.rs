@@ -1,7 +1,7 @@
+use petgraph::Directed;
 use petgraph::algo::astar;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use petgraph::Directed;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -115,7 +115,9 @@ impl EdgeCost {
                 if character.run_speed_mps <= 0.0 {
                     None
                 } else {
-                    Some(Duration::from_secs_f64(distance_meters / character.run_speed_mps))
+                    Some(Duration::from_secs_f64(
+                        distance_meters / character.run_speed_mps,
+                    ))
                 }
             }
             Self::CastSeconds { seconds, mana_cost } => {
@@ -164,7 +166,12 @@ impl EdgeRequirement {
             Self::Always => true,
             Self::CharacterHas(capability) => character.has_capability(capability),
             Self::PartyHas(capability) => party
-                .map(|party| party.members.iter().any(|member| member.has_capability(capability)))
+                .map(|party| {
+                    party
+                        .members
+                        .iter()
+                        .any(|member| member.has_capability(capability))
+                })
                 .unwrap_or(false),
             Self::PartyHasMana {
                 capability,
@@ -283,12 +290,8 @@ impl CharacterGraph {
 }
 
 pub trait TravelGraph {
-    fn shortest_path(
-        &self,
-        from: ZonePoint,
-        to: ZonePoint,
-        character: &Character,
-    ) -> Option<Route>;
+    fn shortest_path(&self, from: ZonePoint, to: ZonePoint, character: &Character)
+    -> Option<Route>;
 
     fn party_eta(&self, from: ZonePoint, to: ZonePoint, party: &Party) -> Duration;
 
@@ -507,7 +510,11 @@ mod tests {
         let from = point("pop", "Plane of Power", 0, 0, 0);
         let to = point("pof", "Plane of Fire", 1, 0, 0);
 
-        assert!(service.shortest_path(from.clone(), to.clone(), &wizard()).is_none());
+        assert!(
+            service
+                .shortest_path(from.clone(), to.clone(), &wizard())
+                .is_none()
+        );
 
         let route = service
             .shortest_path(from, to, &druid())
@@ -661,13 +668,7 @@ mod tests {
         let mut edges = Vec::new();
 
         for index in 0..150 {
-            zone_points.push(point(
-                &format!("z{index}"),
-                "LiveEra",
-                index,
-                0,
-                0,
-            ));
+            zone_points.push(point(&format!("z{index}"), "LiveEra", index, 0, 0));
             if index > 0 {
                 edges.push(EdgeTemplate {
                     from: format!("z{}", index - 1),

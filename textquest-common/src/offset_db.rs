@@ -939,17 +939,24 @@ mod tests {
         overlay
             .functions
             .insert("castSpell".to_string(), original_function + 0x40);
-        overlay
-            .player_zone
-            .insert("hpCurrent".to_string(), 0x3A0);
+        overlay.player_zone.insert("hpCurrent".to_string(), 0x3A0);
 
         base.overlay_from(&overlay);
 
         assert_eq!(base.client_date, "20991231");
         assert_eq!(base.eq_preferred_base, 0x1_8000_0000);
-        assert_eq!(base.get_global("pinstLocalPlayer"), Some(original_global + 0x20));
-        assert_eq!(base.get_function("castSpell"), Some(original_function + 0x40));
-        assert_eq!(base.get_global("pinstSpawnManager"), Some(original_spawn_manager));
+        assert_eq!(
+            base.get_global("pinstLocalPlayer"),
+            Some(original_global + 0x20)
+        );
+        assert_eq!(
+            base.get_function("castSpell"),
+            Some(original_function + 0x40)
+        );
+        assert_eq!(
+            base.get_global("pinstSpawnManager"),
+            Some(original_spawn_manager)
+        );
         assert_eq!(base.get_player_zone_offset("hpCurrent"), Some(0x3A0));
     }
 

@@ -29,10 +29,7 @@ pub fn draw_policy_screen(frame: &mut Frame, area: Rect, app: &mut App) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let header = themed_header_row(
-        &["Scope", "Version", "Source Bundle", "Promoted"],
-        t,
-    );
+    let header = themed_header_row(&["Scope", "Version", "Source Bundle", "Promoted"], t);
 
     let rows: Vec<Row> = app
         .policy_panel_state
@@ -52,17 +49,13 @@ pub fn draw_policy_screen(frame: &mut Frame, area: Rect, app: &mut App) {
 
             Row::new(vec![
                 Cell::from(entry.scope.as_str()).style(base_style),
-                Cell::from(entry.version.as_str()).style(
-                    if entry.version == "rule-based" {
-                        base_style.fg(t.text_secondary)
-                    } else {
-                        base_style.fg(t.text_accent)
-                    },
-                ),
+                Cell::from(entry.version.as_str()).style(if entry.version == "rule-based" {
+                    base_style.fg(t.text_secondary)
+                } else {
+                    base_style.fg(t.text_accent)
+                }),
                 Cell::from(entry.source_bundle.as_str()).style(base_style),
-                Cell::from(entry.promoted_at.as_str()).style(
-                    Style::default().fg(t.text_secondary),
-                ),
+                Cell::from(entry.promoted_at.as_str()).style(Style::default().fg(t.text_secondary)),
             ])
         })
         .collect();

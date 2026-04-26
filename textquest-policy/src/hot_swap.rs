@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use arc_swap::ArcSwap;
 
@@ -25,9 +28,7 @@ impl PolicySwapRegistry {
         let mut guard = self.slots.lock().expect("policy swap registry poisoned");
         guard
             .entry(scope.to_string())
-            .or_insert_with(|| {
-                Arc::new(ArcSwap::from_pointee(PolicyBundle::rule_based(scope)))
-            })
+            .or_insert_with(|| Arc::new(ArcSwap::from_pointee(PolicyBundle::rule_based(scope))))
             .clone()
     }
 

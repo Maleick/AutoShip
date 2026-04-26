@@ -165,11 +165,7 @@ impl BardSwapManager {
 
     /// Call before casting `song_name`.  Returns `EquipInstrument` if a swap
     /// is needed, `None` if already equipped or no instrument required.
-    pub fn before_cast(
-        &mut self,
-        client_id: ClientId,
-        song_name: &str,
-    ) -> Option<BardSwapCommand> {
+    pub fn before_cast(&mut self, client_id: ClientId, song_name: &str) -> Option<BardSwapCommand> {
         let config = self.configs.get(&client_id)?;
         if !config.enabled {
             return None;
@@ -324,6 +320,9 @@ mod tests {
     fn instrument_for_song_lookup_only() {
         let mgr = BardSwapManager::new();
         // No config set — returns None variant.
-        assert_eq!(mgr.instrument_for_song(99, "Anthem de Arms"), InstrumentType::None);
+        assert_eq!(
+            mgr.instrument_for_song(99, "Anthem de Arms"),
+            InstrumentType::None
+        );
     }
 }

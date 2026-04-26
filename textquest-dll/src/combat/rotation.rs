@@ -7,7 +7,9 @@
 //! their conditions, respecting step limits per frame.
 
 use serde::{Deserialize, Serialize};
-use textquest_common::combat::{ActionType, BurnState, CombatStateReq, ConditionExpr, TargetSelector};
+use textquest_common::combat::{
+    ActionType, BurnState, CombatStateReq, ConditionExpr, TargetSelector,
+};
 
 use super::strategy::CombatContext;
 
@@ -228,9 +230,7 @@ fn run_hook(hook: &ActivationHook, _ctx: &CombatContext) {
             }
         }
         ActivationHook::Bandolier(set_name) => {
-            if let Ok(mut mgr) =
-                crate::combat::bandolier::BANDOLIER_MANAGER.try_lock()
-            {
+            if let Ok(mut mgr) = crate::combat::bandolier::BANDOLIER_MANAGER.try_lock() {
                 if let Some(cmd) = mgr.activate_command(set_name, u64::from(_ctx.tick)) {
                     crate::hooks::game_loop::queue_slash_command(cmd);
                 }
@@ -296,15 +296,11 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::BurnReadyAndTriggered => {
             ctx.burn_state == BurnState::Ready && ctx.burnnow_triggered
         }
-        ConditionExpr::BehindTarget => ctx
-            .positional
-            .is_some_and(|p| p.is_behind_target),
-        ConditionExpr::RangedWeaponEquipped => ctx
-            .positional
-            .is_some_and(|p| p.ranged_weapon_equipped),
-        ConditionExpr::PiercerEquipped => ctx
-            .positional
-            .is_some_and(|p| p.piercer_equipped),
+        ConditionExpr::BehindTarget => ctx.positional.is_some_and(|p| p.is_behind_target),
+        ConditionExpr::RangedWeaponEquipped => {
+            ctx.positional.is_some_and(|p| p.ranged_weapon_equipped)
+        }
+        ConditionExpr::PiercerEquipped => ctx.positional.is_some_and(|p| p.piercer_equipped),
         ConditionExpr::TargetLevelBelow(max_level) => ctx
             .positional
             .is_some_and(|p| p.target_level > 0 && p.target_level < *max_level),
@@ -1334,7 +1330,10 @@ mod tests {
         };
         let ctx_with = build_ctx_positional(&player, Some(&target), &config, &pos_with);
         let ctx_without = build_ctx_positional(&player, Some(&target), &config, &pos_without);
-        assert!(evaluate_condition(&ConditionExpr::PiercerEquipped, &ctx_with));
+        assert!(evaluate_condition(
+            &ConditionExpr::PiercerEquipped,
+            &ctx_with
+        ));
         assert!(!evaluate_condition(
             &ConditionExpr::PiercerEquipped,
             &ctx_without
@@ -1349,7 +1348,10 @@ mod tests {
             ..PositionalContext::default()
         };
         let ctx = build_ctx_positional(&player, Some(&target), &config, &pos);
-        assert!(evaluate_condition(&ConditionExpr::RangedWeaponEquipped, &ctx));
+        assert!(evaluate_condition(
+            &ConditionExpr::RangedWeaponEquipped,
+            &ctx
+        ));
     }
 
     #[test]

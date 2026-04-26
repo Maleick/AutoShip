@@ -240,14 +240,10 @@ impl FindRouter {
         }
 
         if let (Some(graph), Some(zone)) = (zone_graph, current_zone)
-            && let Some(found) = find_in_adjacent(
-                &entries,
-                graph,
-                zone,
-                &normalized,
-            ) {
-                return Ok(Some(found));
-            }
+            && let Some(found) = find_in_adjacent(&entries, graph, zone, &normalized)
+        {
+            return Ok(Some(found));
+        }
 
         Ok(None)
     }
@@ -263,7 +259,8 @@ impl FindRouter {
         for file in fs::read_dir(path)
             .with_context(|| format!("Failed to read POI directory {}", path.display()))?
         {
-            let file = file.with_context(|| format!("Failed to read POI entry in {}", path.display()))?;
+            let file =
+                file.with_context(|| format!("Failed to read POI entry in {}", path.display()))?;
             let p = file.path();
             if !p.is_file() {
                 continue;
@@ -282,12 +279,10 @@ impl FindRouter {
                 continue;
             }
 
-            let raw = fs::read_to_string(&p).with_context(|| {
-                format!("Failed to read POI file {}", p.display())
-            })?;
-            let file: PoiFile = toml::from_str(&raw).with_context(|| {
-                format!("Failed to parse POI file {}", p.display())
-            })?;
+            let raw = fs::read_to_string(&p)
+                .with_context(|| format!("Failed to read POI file {}", p.display()))?;
+            let file: PoiFile = toml::from_str(&raw)
+                .with_context(|| format!("Failed to parse POI file {}", p.display()))?;
 
             let mut file_items = file
                 .poi
@@ -308,14 +303,13 @@ impl FindRouter {
 }
 
 fn normalize_name(value: &str) -> String {
-    value.trim().to_ascii_lowercase().replace([' ', '_', '-'], "")
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .replace([' ', '_', '-'], "")
 }
 
-fn find_in_zone(
-    entries: &[ZonePoiEntry],
-    zone: &str,
-    poi_query: &str,
-) -> Option<FindMatch> {
+fn find_in_zone(entries: &[ZonePoiEntry], zone: &str, poi_query: &str) -> Option<FindMatch> {
     let zone = normalize_name(zone);
     entries
         .iter()
@@ -359,7 +353,9 @@ fn find_in_adjacent(
 }
 
 fn normalize_zone(zone: &str) -> String {
-    zone.trim().to_ascii_lowercase().replace([' ', '_', '-'], "")
+    zone.trim()
+        .to_ascii_lowercase()
+        .replace([' ', '_', '-'], "")
 }
 
 impl TravelConfigFile {
@@ -788,21 +784,28 @@ mod tests {
             },
         );
 
-        let tmp = std::env::temp_dir().join(format!("textquest-find-router-{}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("textquest-find-router-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).expect("create fixture dir");
 
-        std::fs::write(tmp.join("qeynos.toml"), r#"
+        std::fs::write(
+            tmp.join("qeynos.toml"),
+            r#"
             [[poi]]
             name = "Mage"
             spawn_search = "Apprentice Mage"
-        "#)
+        "#,
+        )
         .expect("write current zone poi fixture");
-        std::fs::write(tmp.join("nro.toml"), r#"
+        std::fs::write(
+            tmp.join("nro.toml"),
+            r#"
             [[poi]]
             name = "Banker"
             spawn_search = "Moklin Bankkeeper"
-        "#)
+        "#,
+        )
         .expect("write adjacent zone poi fixture");
 
         let router = FindRouter::new(&tmp);

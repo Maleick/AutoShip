@@ -33,7 +33,11 @@ impl TransportVariant {
     /// Resolves unimplemented stubs to `Native`.
     #[must_use]
     pub fn effective(self) -> Self {
-        if self.is_implemented() { self } else { Self::Native }
+        if self.is_implemented() {
+            self
+        } else {
+            Self::Native
+        }
     }
 }
 
@@ -118,19 +122,31 @@ mod tests {
 
     #[test]
     fn netmq_deferred_effective_is_native() {
-        assert_eq!(TransportVariant::NetMqDeferred.effective(), TransportVariant::Native);
+        assert_eq!(
+            TransportVariant::NetMqDeferred.effective(),
+            TransportVariant::Native
+        );
     }
 
     #[test]
     fn implemented_effective_returns_self() {
-        assert_eq!(TransportVariant::Native.effective(), TransportVariant::Native);
+        assert_eq!(
+            TransportVariant::Native.effective(),
+            TransportVariant::Native
+        );
         assert_eq!(TransportVariant::Eqbc.effective(), TransportVariant::Eqbc);
-        assert_eq!(TransportVariant::DanNet.effective(), TransportVariant::DanNet);
+        assert_eq!(
+            TransportVariant::DanNet.effective(),
+            TransportVariant::DanNet
+        );
     }
 
     #[test]
     fn validate_rejects_zero_port() {
-        let cfg = TransportConfig { port: 0, ..Default::default() };
+        let cfg = TransportConfig {
+            port: 0,
+            ..Default::default()
+        };
         assert!(cfg.validate().is_err());
     }
 

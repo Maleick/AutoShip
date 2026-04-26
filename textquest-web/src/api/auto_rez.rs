@@ -1,10 +1,10 @@
 //! Auto-resurrection acceptance handling (MQ2Rez parity).
 
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -92,7 +92,6 @@ pub fn router() -> Router<Arc<AppState>> {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn hp_threshold_validation() {

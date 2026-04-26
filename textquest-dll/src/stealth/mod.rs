@@ -316,7 +316,10 @@ mod tests {
 
         // A second try_acquire_frame_owner must fail (owner already taken).
         let second = crate::stealth::timer_queue_sleep::try_acquire_frame_owner();
-        assert!(!second, "second acquire should fail while Frame holds owner");
+        assert!(
+            !second,
+            "second acquire should fail while Frame holds owner"
+        );
 
         // A simulated timer-queue CAS must also fail.
         let timer_cas = ENCRYPT_OWNER.compare_exchange(
@@ -325,7 +328,10 @@ mod tests {
             Ordering::Acquire,
             Ordering::Relaxed,
         );
-        assert!(timer_cas.is_err(), "timer-queue CAS must fail while Frame holds owner");
+        assert!(
+            timer_cas.is_err(),
+            "timer-queue CAS must fail while Frame holds owner"
+        );
 
         // Release and verify.
         crate::stealth::timer_queue_sleep::release_frame_owner();

@@ -62,10 +62,7 @@ impl EpsilonGreedyBandit {
     pub fn new(arm_labels: &[&str], epsilon: f32) -> Self {
         let n_arms = arm_labels.len();
         assert!(n_arms > 0, "must have at least one arm");
-        assert!(
-            (0.0..=1.0).contains(&epsilon),
-            "epsilon must be in [0, 1]"
-        );
+        assert!((0.0..=1.0).contains(&epsilon), "epsilon must be in [0, 1]");
         Self {
             n_arms,
             rewards_sum: vec![0.0; n_arms],
@@ -160,7 +157,9 @@ impl BanditPolicy for LinUCBBandit {
     fn select_arm(&mut self, context: &Context) -> (usize, f32) {
         let x_slice = &context[..self.d];
         // Compute UCB score for each arm, select max.
-        let (arm_id, score) = self.model.arms
+        let (arm_id, score) = self
+            .model
+            .arms
             .iter()
             .map(|arm| {
                 let s = arm.score(x_slice, self.model.alpha);

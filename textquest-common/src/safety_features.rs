@@ -168,7 +168,6 @@ pub enum ParanoidFilter {
     Friends,
 }
 
-
 /// Configuration for MQ2Paranoid — alert when PCs zone in/out.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParanoidConfig {

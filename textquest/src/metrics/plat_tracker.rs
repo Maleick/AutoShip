@@ -113,9 +113,7 @@ impl PlatTracker {
 
         let oldest_instant = oldest.instant.expect("filtered for Some");
         let newest_instant = newest.instant.expect("filtered for Some");
-        let elapsed_secs = newest_instant
-            .duration_since(oldest_instant)
-            .as_secs_f64();
+        let elapsed_secs = newest_instant.duration_since(oldest_instant).as_secs_f64();
 
         if elapsed_secs <= 0.0 {
             return 0.0;
@@ -137,7 +135,11 @@ impl PlatTracker {
     /// Net plat broken down by category for `character`.
     pub fn by_category(&self, character: &str) -> HashMap<PlatCategory, i64> {
         let mut map: HashMap<PlatCategory, i64> = HashMap::new();
-        for t in self.transactions.iter().filter(|t| t.character == character) {
+        for t in self
+            .transactions
+            .iter()
+            .filter(|t| t.character == character)
+        {
             *map.entry(t.category).or_insert(0) += t.delta;
         }
         map
@@ -218,7 +220,14 @@ mod tests {
         let b = base();
         // 100 plat gained at t=0, then 0 delta at t=1800s → net 100 over 30 min → 200/hr
         tracker.record("Warrior", 100, PlatCategory::Loot, None, 0, b);
-        tracker.record("Warrior", 0, PlatCategory::Loot, None, 1800, offset(b, 1800));
+        tracker.record(
+            "Warrior",
+            0,
+            PlatCategory::Loot,
+            None,
+            1800,
+            offset(b, 1800),
+        );
         let rate = tracker.plat_per_hour("Warrior", offset(b, 1800));
         let diff = (rate - 200.0_f64).abs();
         assert!(diff < 0.1, "expected ~200, got {rate}");
@@ -239,7 +248,14 @@ mod tests {
         let b = base();
         tracker.record("Rogue", 200, PlatCategory::Loot, None, 0, b);
         tracker.record("Rogue", -50, PlatCategory::Repair, None, 60, offset(b, 60));
-        tracker.record("Rogue", 300, PlatCategory::VendorSell, None, 120, offset(b, 120));
+        tracker.record(
+            "Rogue",
+            300,
+            PlatCategory::VendorSell,
+            None,
+            120,
+            offset(b, 120),
+        );
         assert_eq!(tracker.session_net("Rogue"), 450);
     }
 
@@ -299,10 +315,14 @@ mod tests {
         let mut store = PlatSessionStore::new();
         store.start_session("Paladin");
         let b = base();
-        store
-            .get_session_mut("Paladin")
-            .unwrap()
-            .record("Paladin", 100, PlatCategory::Loot, None, 0, b);
+        store.get_session_mut("Paladin").unwrap().record(
+            "Paladin",
+            100,
+            PlatCategory::Loot,
+            None,
+            0,
+            b,
+        );
         let net = store.get_session("Paladin").unwrap().session_net("Paladin");
         assert_eq!(net, 100);
     }

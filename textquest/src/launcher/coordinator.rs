@@ -7,12 +7,12 @@ use crate::{
         spawner,
     },
 };
+use reqwest;
 use std::{
     collections::{HashMap, VecDeque},
     path::Path,
     time::{Duration, Instant},
 };
-use reqwest;
 use textquest_common::{
     login::{AccountInfo, LoginError},
     types::ClientId,
@@ -377,7 +377,10 @@ impl LaunchCoordinator {
 
         self.last_server_status_check = Some(Instant::now());
         let timeout = Duration::from_secs(self.server_config.status_check_timeout_secs.max(1));
-        let available = match reqwest::blocking::Client::builder().timeout(timeout).build() {
+        let available = match reqwest::blocking::Client::builder()
+            .timeout(timeout)
+            .build()
+        {
             Ok(client) => match client.get(status_url).send() {
                 Ok(response) => {
                     if response.status().is_success() {

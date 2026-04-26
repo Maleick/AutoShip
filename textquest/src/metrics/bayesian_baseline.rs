@@ -28,8 +28,8 @@ impl GaussianPrior {
     pub fn weak(mean: f64) -> Self {
         Self {
             mu: mean,
-            lambda: 0.1,     // Low precision → high uncertainty
-            alpha: 1.0,      // Weak Gamma prior
+            lambda: 0.1, // Low precision → high uncertainty
+            alpha: 1.0,  // Weak Gamma prior
             beta: 0.1,
         }
     }
@@ -58,8 +58,9 @@ impl GaussianPrior {
 
         // Posterior precision and variance update.
         let delta = sample_mean - self.mu;
-        let new_beta =
-            self.beta + (n * sample_var / 2.0) + (self.lambda * n * delta.powi(2)) / (2.0 * new_lambda);
+        let new_beta = self.beta
+            + (n * sample_var / 2.0)
+            + (self.lambda * n * delta.powi(2)) / (2.0 * new_lambda);
 
         self.mu = posterior_mu;
         self.lambda = new_lambda;
@@ -110,7 +111,10 @@ pub struct BetaBinomialPrior {
 impl BetaBinomialPrior {
     /// Create a weakly-informative prior (α = β = 1 for uniform distribution).
     pub fn weak() -> Self {
-        Self { alpha: 1.0, beta: 1.0 }
+        Self {
+            alpha: 1.0,
+            beta: 1.0,
+        }
     }
 
     /// Create a prior biased toward success (α > β).
@@ -200,7 +204,7 @@ pub struct DeviationThresholds {
 impl Default for DeviationThresholds {
     fn default() -> Self {
         Self {
-            zscore_threshold: 1.5,       // 1.5 sigma deviation
+            zscore_threshold: 1.5,          // 1.5 sigma deviation
             rate_deviation_threshold: 0.15, // 15% deviation
         }
     }
@@ -251,13 +255,15 @@ impl CharacterBaseline {
 
         // Update Beta-Binomial priors and detect deviations.
         self.stuck_rate.update(stuck_successes, stuck_failures);
-        self.assist_success_rate.update(assist_successes, assist_failures);
+        self.assist_success_rate
+            .update(assist_successes, assist_failures);
         self.heal_success_rate.update(heal_successes, heal_failures);
 
         // Detect deviations and generate suggestions.
         let current_stuck_rate = self.stuck_rate.posterior_success_rate();
         let baseline_stuck_rate = self.stuck_rate.posterior_success_rate(); // Would use historical baseline
-        if (current_stuck_rate - baseline_stuck_rate).abs() > self.thresholds.rate_deviation_threshold
+        if (current_stuck_rate - baseline_stuck_rate).abs()
+            > self.thresholds.rate_deviation_threshold
         {
             suggestions.push(Suggestion {
                 metric: "stuck_rate".to_string(),
@@ -269,7 +275,8 @@ impl CharacterBaseline {
                 } else {
                     "medium".to_string()
                 },
-                recommendation: "Consider adjusting navigation parameters or route waypoints.".to_string(),
+                recommendation: "Consider adjusting navigation parameters or route waypoints."
+                    .to_string(),
             });
         }
 

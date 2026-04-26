@@ -45,7 +45,8 @@ impl TestPlugin {
 
 impl TextQuestPlugin for TestPlugin {
     fn metadata(&self) -> PluginMetadata {
-        PluginMetadata::new(&self.name, &self.version, "test plugin").with_manifest(self.manifest.clone())
+        PluginMetadata::new(&self.name, &self.version, "test plugin")
+            .with_manifest(self.manifest.clone())
     }
 
     fn on_load(&mut self, context: &mut PluginContext) -> PluginResult<()> {
@@ -207,8 +208,11 @@ fn integration_multiple_capabilities_per_domain() {
         .with_capability(PluginCapability::new(PluginDomain::Combat, "combat.a", "A"))
         .with_capability(PluginCapability::new(PluginDomain::Combat, "combat.b", "B"));
 
-    let plugin2 = TestPlugin::new("multi2")
-        .with_capability(PluginCapability::new(PluginDomain::Combat, "combat.c", "C"));
+    let plugin2 = TestPlugin::new("multi2").with_capability(PluginCapability::new(
+        PluginDomain::Combat,
+        "combat.c",
+        "C",
+    ));
 
     registry.register(Box::new(plugin1)).unwrap();
     registry.register(Box::new(plugin2)).unwrap();

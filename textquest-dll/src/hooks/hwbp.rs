@@ -452,15 +452,11 @@ pub fn unregister(slot: HwbpSlot) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub fn disable_current_thread_breakpoint(
-    slot: HwbpSlot,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn disable_current_thread_breakpoint(slot: HwbpSlot) -> Result<(), Box<dyn std::error::Error>> {
     platform::clear_breakpoint(slot).map_err(|e| -> Box<dyn std::error::Error> { e.into() })
 }
 
-pub fn enable_current_thread_breakpoint(
-    slot: HwbpSlot,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn enable_current_thread_breakpoint(slot: HwbpSlot) -> Result<(), Box<dyn std::error::Error>> {
     let address = get_address(slot);
     if address == 0 {
         return Err(format!("HWBP slot {:?} is not associated with a hook address", slot).into());

@@ -2,9 +2,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-mod py_trainer;
 mod evaluator;
 mod policy;
+mod py_trainer;
 
 #[derive(Parser)]
 #[command(name = "textquest-learn")]
@@ -74,10 +74,8 @@ async fn main() -> Result<()> {
                 epochs,
                 out,
             } => {
-                py_trainer::train(
-                    &algo, &warm_start, &ledger, &reward, &class, epochs, &out,
-                )
-                .await?;
+                py_trainer::train(&algo, &warm_start, &ledger, &reward, &class, epochs, &out)
+                    .await?;
             }
         },
     }

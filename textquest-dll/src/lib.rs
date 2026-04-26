@@ -24,9 +24,9 @@ mod boxr;
 #[allow(dead_code)]
 mod combat;
 #[allow(dead_code)]
-pub mod dannet_tlo;
-#[allow(dead_code)]
 pub mod commands;
+#[allow(dead_code)]
+pub mod dannet_tlo;
 #[allow(dead_code)]
 mod debug;
 #[allow(dead_code)]
@@ -46,11 +46,13 @@ mod login;
 #[allow(dead_code)]
 pub mod mq2;
 #[allow(dead_code)]
-mod replay;
-#[allow(dead_code)]
 mod nav;
 #[allow(dead_code)]
+pub mod net;
+#[allow(dead_code)]
 pub mod overlay;
+#[allow(dead_code)]
+mod replay;
 #[allow(dead_code)]
 mod rewards;
 #[allow(dead_code)]
@@ -61,8 +63,6 @@ mod syscall;
 pub mod timestamp;
 #[allow(dead_code)]
 mod tradeskill_trophy;
-#[allow(dead_code)]
-pub mod net;
 
 use std::{
     path::{Path, PathBuf},
@@ -659,16 +659,14 @@ fn current_exe_dir() -> Option<PathBuf> {
 
 #[allow(dead_code)]
 fn has_scanned_offsets() -> bool {
-    OFFSET_DB
-        .get()
-        .is_some_and(|db: &OffsetDatabase| {
-            !db.globals.is_empty()
-                || !db.functions.is_empty()
-                || !db.eqmain_globals.is_empty()
-                || !db.eqmain_functions.is_empty()
-                || !db.eqgraphics_globals.is_empty()
-                || !db.eqgraphics_functions.is_empty()
-        })
+    OFFSET_DB.get().is_some_and(|db: &OffsetDatabase| {
+        !db.globals.is_empty()
+            || !db.functions.is_empty()
+            || !db.eqmain_globals.is_empty()
+            || !db.eqmain_functions.is_empty()
+            || !db.eqgraphics_globals.is_empty()
+            || !db.eqgraphics_functions.is_empty()
+    })
 }
 
 #[derive(Debug)]
@@ -754,12 +752,21 @@ fn apply_shadow_scan_offsets(db: &mut OffsetDatabase) {
         return;
     }
 
-    let images: Vec<_> = snapshots.iter().map(ModuleSnapshot::as_module_image).collect();
+    let images: Vec<_> = snapshots
+        .iter()
+        .map(ModuleSnapshot::as_module_image)
+        .collect();
     let entries = textquest_common::pattern_db::shadow_scan_entries();
     let reports = textquest_common::scan_engine::scan_modules_into_offset_db(&images, &entries, db);
 
-    let scanned = reports.iter().map(|report| report.entries_scanned).sum::<usize>();
-    let found = reports.iter().map(|report| report.entries_found).sum::<usize>();
+    let scanned = reports
+        .iter()
+        .map(|report| report.entries_scanned)
+        .sum::<usize>();
+    let found = reports
+        .iter()
+        .map(|report| report.entries_found)
+        .sum::<usize>();
     let validated = reports
         .iter()
         .map(|report| report.entries_validated)

@@ -70,8 +70,7 @@ pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> 
         let name_ptr = (slot_base + offsets::XTARGET_SLOT_NAME as usize) as *const u8;
         let name = unsafe { read_c_string(name_ptr, EQ_MAX_NAME) };
 
-        let aggro_raw =
-            unsafe { read_i32(slot_base + offsets::XTARGET_SLOT_AGGRO_PCT as usize)? };
+        let aggro_raw = unsafe { read_i32(slot_base + offsets::XTARGET_SLOT_AGGRO_PCT as usize)? };
         let aggro_pct = aggro_raw.clamp(0, 100) as u8;
 
         slots.push(ExtendedTargetSlot {
@@ -343,7 +342,7 @@ mod tests {
     fn aggro_pct_clamp_to_valid_range() {
         // Simulate what the Windows reader does: raw_int.clamp(0, 100) as u8
         let raw_values: &[(i32, u8)] = &[
-            (-1, 0),   // negative raw → clamped to 0
+            (-1, 0), // negative raw → clamped to 0
             (0, 0),
             (50, 50),
             (100, 100),

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use crate::tui::{
     app::App,
-    ui::widgets::{truncate_inline, WidthClass},
+    ui::widgets::{WidthClass, truncate_inline},
 };
 
 // ─── Hotkey Configuration State ──────────────────────────────────────────────
@@ -34,7 +34,11 @@ impl HotkeysTab {
     }
 
     fn all() -> &'static [HotkeysTab] {
-        &[HotkeysTab::Available, HotkeysTab::Bindings, HotkeysTab::Profiles]
+        &[
+            HotkeysTab::Available,
+            HotkeysTab::Bindings,
+            HotkeysTab::Profiles,
+        ]
     }
 
     fn next(self) -> Self {
@@ -137,33 +141,55 @@ impl Default for HotkeysConfigState {
                 },
             ],
             current_bindings: vec![
-                ("help".to_string(), HotkeyBinding {
-                    command_id: "help".to_string(),
-                    key_sequence: "F1".to_string(),
-                }),
-                ("mode".to_string(), HotkeyBinding {
-                    command_id: "mode".to_string(),
-                    key_sequence: "F2".to_string(),
-                }),
-                ("assist".to_string(), HotkeyBinding {
-                    command_id: "assist".to_string(),
-                    key_sequence: "F3".to_string(),
-                }),
-            ].into_iter().collect(),
+                (
+                    "help".to_string(),
+                    HotkeyBinding {
+                        command_id: "help".to_string(),
+                        key_sequence: "F1".to_string(),
+                    },
+                ),
+                (
+                    "mode".to_string(),
+                    HotkeyBinding {
+                        command_id: "mode".to_string(),
+                        key_sequence: "F2".to_string(),
+                    },
+                ),
+                (
+                    "assist".to_string(),
+                    HotkeyBinding {
+                        command_id: "assist".to_string(),
+                        key_sequence: "F3".to_string(),
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
             saved_bindings: vec![
-                ("help".to_string(), HotkeyBinding {
-                    command_id: "help".to_string(),
-                    key_sequence: "F1".to_string(),
-                }),
-                ("mode".to_string(), HotkeyBinding {
-                    command_id: "mode".to_string(),
-                    key_sequence: "F2".to_string(),
-                }),
-                ("assist".to_string(), HotkeyBinding {
-                    command_id: "assist".to_string(),
-                    key_sequence: "F3".to_string(),
-                }),
-            ].into_iter().collect(),
+                (
+                    "help".to_string(),
+                    HotkeyBinding {
+                        command_id: "help".to_string(),
+                        key_sequence: "F1".to_string(),
+                    },
+                ),
+                (
+                    "mode".to_string(),
+                    HotkeyBinding {
+                        command_id: "mode".to_string(),
+                        key_sequence: "F2".to_string(),
+                    },
+                ),
+                (
+                    "assist".to_string(),
+                    HotkeyBinding {
+                        command_id: "assist".to_string(),
+                        key_sequence: "F3".to_string(),
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
             available_profiles: vec![
                 "default".to_string(),
                 "gaming".to_string(),
@@ -207,17 +233,14 @@ pub fn draw_hotkey_config(frame: &mut Frame, area: Rect, _app: &mut App) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // tab bar
-            Constraint::Min(8),      // content
-            Constraint::Length(2),   // footer
+            Constraint::Length(3), // tab bar
+            Constraint::Min(8),    // content
+            Constraint::Length(2), // footer
         ])
         .split(area);
 
     // ── Tab bar ──
-    let tab_names: Vec<&str> = HotkeysTab::all()
-        .iter()
-        .map(|t| t.label())
-        .collect();
+    let tab_names: Vec<&str> = HotkeysTab::all().iter().map(|t| t.label()).collect();
     let tab_widget = Tabs::new(tab_names)
         .block(Block::default().borders(Borders::BOTTOM))
         .select(match state.tab {
@@ -226,7 +249,11 @@ pub fn draw_hotkey_config(frame: &mut Frame, area: Rect, _app: &mut App) {
             HotkeysTab::Profiles => 2,
         })
         .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        .highlight_style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        );
 
     frame.render_widget(tab_widget, layout[0]);
 
@@ -248,14 +275,17 @@ fn draw_available_commands(frame: &mut Frame, area: Rect, state: &HotkeysConfigS
         .split(area);
 
     // Left: command list
-    let items: Vec<ListItem> = state.command_list
+    let items: Vec<ListItem> = state
+        .command_list
         .iter()
         .enumerate()
         .map(|(idx, cmd)| {
             let selected = idx == state.selected_command;
             let marker = if selected { "▶ " } else { "  " };
             let style = if selected {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -263,8 +293,7 @@ fn draw_available_commands(frame: &mut Frame, area: Rect, state: &HotkeysConfigS
         })
         .collect();
 
-    let list = List::new(items)
-        .block(Block::default().title("Commands").borders(Borders::ALL));
+    let list = List::new(items).block(Block::default().title("Commands").borders(Borders::ALL));
 
     frame.render_widget(list, split[0]);
 
@@ -281,9 +310,10 @@ fn draw_available_commands(frame: &mut Frame, area: Rect, state: &HotkeysConfigS
                 Span::raw(&cmd.category),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Description:", Style::default().add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "Description:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
             Line::from(&cmd.description),
         ])
         .block(Block::default().title("Details").borders(Borders::ALL))
@@ -300,7 +330,8 @@ fn draw_bindings_editor(frame: &mut Frame, area: Rect, state: &HotkeysConfigStat
         .split(area);
 
     // Left: current bindings list
-    let binding_items: Vec<ListItem> = state.command_list
+    let binding_items: Vec<ListItem> = state
+        .command_list
         .iter()
         .enumerate()
         .map(|(idx, cmd)| {
@@ -311,7 +342,9 @@ fn draw_bindings_editor(frame: &mut Frame, area: Rect, state: &HotkeysConfigStat
             let selected = idx == state.selected_binding;
             let marker = if selected { "▶ " } else { "  " };
             let style = if selected {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -319,8 +352,11 @@ fn draw_bindings_editor(frame: &mut Frame, area: Rect, state: &HotkeysConfigStat
         })
         .collect();
 
-    let bindings_list = List::new(binding_items)
-        .block(Block::default().title("Current Bindings").borders(Borders::ALL));
+    let bindings_list = List::new(binding_items).block(
+        Block::default()
+            .title("Current Bindings")
+            .borders(Borders::ALL),
+    );
 
     frame.render_widget(bindings_list, split[0]);
 
@@ -345,9 +381,7 @@ fn draw_bindings_editor(frame: &mut Frame, area: Rect, state: &HotkeysConfigStat
         Paragraph::new("")
     };
 
-    let edit_paragraph = conflict_text
-        .block(edit_block)
-        .alignment(Alignment::Center);
+    let edit_paragraph = conflict_text.block(edit_block).alignment(Alignment::Center);
 
     frame.render_widget(edit_paragraph, split[1]);
 }
@@ -359,14 +393,17 @@ fn draw_profiles_manager(frame: &mut Frame, area: Rect, state: &HotkeysConfigSta
         .split(area);
 
     // Available profiles
-    let profile_items: Vec<ListItem> = state.available_profiles
+    let profile_items: Vec<ListItem> = state
+        .available_profiles
         .iter()
         .enumerate()
         .map(|(idx, name)| {
             let selected = idx == state.selected_profile;
             let marker = if selected { "▶ " } else { "  " };
             let style = if selected {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -374,8 +411,8 @@ fn draw_profiles_manager(frame: &mut Frame, area: Rect, state: &HotkeysConfigSta
         })
         .collect();
 
-    let profiles_list = List::new(profile_items)
-        .block(Block::default().title("Profiles").borders(Borders::ALL));
+    let profiles_list =
+        List::new(profile_items).block(Block::default().title("Profiles").borders(Borders::ALL));
 
     frame.render_widget(profiles_list, split[0]);
 
@@ -398,22 +435,20 @@ fn draw_profiles_manager(frame: &mut Frame, area: Rect, state: &HotkeysConfigSta
 }
 
 fn draw_footer(frame: &mut Frame, area: Rect, state: &HotkeysConfigState) {
-    let hints = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled("TAB", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" next  "),
-            Span::styled("Shift+TAB", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" prev  "),
-            Span::styled("↑↓", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" select  "),
-            Span::styled("S", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" save  "),
-            Span::styled("R", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" revert  "),
-            Span::styled("Q", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" close"),
-        ]),
-    ])
+    let hints = Paragraph::new(vec![Line::from(vec![
+        Span::styled("TAB", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(" next  "),
+        Span::styled("Shift+TAB", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(" prev  "),
+        Span::styled("↑↓", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(" select  "),
+        Span::styled("S", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(" save  "),
+        Span::styled("R", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(" revert  "),
+        Span::styled("Q", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(" close"),
+    ])])
     .block(Block::default().borders(Borders::TOP))
     .alignment(Alignment::Left);
 

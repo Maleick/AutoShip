@@ -193,7 +193,7 @@ mod inner {
     use std::sync::atomic::Ordering;
     use std::sync::{Mutex, MutexGuard};
 
-    use super::{SleepOwner, TIMER_ACTIVE, TimerQueueError, ENCRYPT_OWNER};
+    use super::{ENCRYPT_OWNER, SleepOwner, TIMER_ACTIVE, TimerQueueError};
 
     /// Global owner state.  `try_lock()` is used from the timer callback so
     /// it never blocks the pool thread if the frame path holds the lock.
@@ -712,7 +712,10 @@ timer_enabled = false
         crate::hooks::integrity::SAFE_MODE.store(false, Ordering::Release);
 
         // Confirm pre-condition: nothing encrypted yet.
-        assert!(!crate::stealth::is_encrypted(), "pre: should not be encrypted");
+        assert!(
+            !crate::stealth::is_encrypted(),
+            "pre: should not be encrypted"
+        );
 
         // Run the encrypt phase through stack_spoof::with_spoofed_stack —
         // same code path as the Windows timer callback.

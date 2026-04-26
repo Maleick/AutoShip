@@ -96,7 +96,7 @@ impl LogoutProcessControl for SystemProcessControl {
         #[cfg(windows)]
         {
             use windows::Win32::System::Threading::{
-                OpenProcess, TerminateProcess, PROCESS_TERMINATE,
+                OpenProcess, PROCESS_TERMINATE, TerminateProcess,
             };
 
             unsafe {
@@ -135,7 +135,9 @@ pub enum LogoutOutcome {
 #[derive(Debug, Error)]
 pub enum LogoutError {
     /// An IPC command was rejected after all retry attempts.
-    #[error("logout command `{command}` failed for client {client_id} after {attempts} attempts: {message}")]
+    #[error(
+        "logout command `{command}` failed for client {client_id} after {attempts} attempts: {message}"
+    )]
     CommandFailed {
         client_id: ClientId,
         command: String,
@@ -143,7 +145,9 @@ pub enum LogoutError {
         message: String,
     },
     /// An IPC command could not be delivered after all retry attempts.
-    #[error("logout command `{command}` could not be delivered to client {client_id} after {attempts} attempts")]
+    #[error(
+        "logout command `{command}` could not be delivered to client {client_id} after {attempts} attempts"
+    )]
     CommandDelivery {
         client_id: ClientId,
         command: String,
@@ -433,12 +437,12 @@ impl LogoutSequencer {
 
             if started.elapsed() >= timeout {
                 self.state_machine.fail_timeout();
-                self.process_control.force_kill(self.client_id).map_err(|source| {
-                    LogoutError::ForceKill {
+                self.process_control
+                    .force_kill(self.client_id)
+                    .map_err(|source| LogoutError::ForceKill {
                         client_id: self.client_id,
                         source,
-                    }
-                })?;
+                    })?;
                 return Ok(LogoutOutcome::ForceKilled);
             }
 
@@ -574,7 +578,12 @@ mod tests {
 
         assert_eq!(outcome, LogoutOutcome::Exited);
         assert_eq!(slash_commands(&sent), vec!["/disband", "/quit"]);
-        assert!(killed.lock().expect("killed process log should lock").is_empty());
+        assert!(
+            killed
+                .lock()
+                .expect("killed process log should lock")
+                .is_empty()
+        );
         assert!(matches!(sequencer.phase(), LoginPhase::Exited));
     }
 
@@ -594,7 +603,10 @@ mod tests {
         let outcome = sequencer.logout_with_outcome().await.unwrap();
 
         assert_eq!(outcome, LogoutOutcome::ForceKilled);
-        assert_eq!(*killed.lock().expect("killed process log should lock"), vec![77]);
+        assert_eq!(
+            *killed.lock().expect("killed process log should lock"),
+            vec![77]
+        );
         assert!(matches!(sequencer.phase(), LoginPhase::Exited));
     }
 
@@ -615,9 +627,6 @@ mod tests {
         let outcome = sequencer.logout_with_outcome().await.unwrap();
 
         assert_eq!(outcome, LogoutOutcome::Exited);
-        assert_eq!(
-            slash_commands(&sent),
-            vec!["/disband", "/disband", "/quit"]
-        );
+        assert_eq!(slash_commands(&sent), vec!["/disband", "/disband", "/quit"]);
     }
 }

@@ -17,8 +17,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::AppState;
 use super::json_error;
+use crate::AppState;
 
 /// Status of a single tuning suggestion.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,7 +127,10 @@ impl SuggestionState {
 
     pub async fn get_unread_count(&self) -> Result<usize, String> {
         let suggestions = self.suggestions.read().await;
-        Ok(suggestions.iter().filter(|s| s.status == SuggestionStatus::New).count())
+        Ok(suggestions
+            .iter()
+            .filter(|s| s.status == SuggestionStatus::New)
+            .count())
     }
 
     pub async fn update_status(
@@ -204,8 +207,11 @@ pub async fn list_suggestions(State(state): State<Arc<AppState>>) -> impl IntoRe
             .into_response(),
         (Err(error), _) | (_, Err(error)) => {
             tracing::error!(%error, "Failed to list suggestions");
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list suggestions")
-                .into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list suggestions",
+            )
+            .into_response()
         }
     }
 }
@@ -220,8 +226,11 @@ pub async fn get_unread_count(State(state): State<Arc<AppState>>) -> impl IntoRe
             .into_response(),
         Err(error) => {
             tracing::error!(%error, "Failed to get unread count");
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get unread count")
-                .into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get unread count",
+            )
+            .into_response()
         }
     }
 }
@@ -235,8 +244,11 @@ pub async fn get_suggestion(
         Ok(s) => s,
         Err(error) => {
             tracing::error!(%error, suggestion_id = id, "Failed to fetch suggestion");
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch suggestion")
-                .into_response();
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch suggestion",
+            )
+            .into_response();
         }
     };
 
@@ -269,16 +281,23 @@ pub async fn update_suggestion(
                 .into_response(),
             Err(error) => {
                 tracing::error!(%error, "Failed to get unread count");
-                json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get unread count")
-                    .into_response()
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get unread count",
+                )
+                .into_response()
             }
         },
-        Ok(None) => json_error(StatusCode::NOT_FOUND, format!("Suggestion {id} not found"))
-            .into_response(),
+        Ok(None) => {
+            json_error(StatusCode::NOT_FOUND, format!("Suggestion {id} not found")).into_response()
+        }
         Err(error) => {
             tracing::error!(%error, suggestion_id = id, "Failed to update suggestion");
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update suggestion")
-                .into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update suggestion",
+            )
+            .into_response()
         }
     }
 }
@@ -293,14 +312,21 @@ pub async fn dismiss_suggestion(
         .update_status(id, SuggestionStatus::Dismissed)
         .await
     {
-        Ok(Some(_)) => (StatusCode::OK, Json(serde_json::json!({ "dismissed": true })))
+        Ok(Some(_)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "dismissed": true })),
+        )
             .into_response(),
-        Ok(None) => json_error(StatusCode::NOT_FOUND, format!("Suggestion {id} not found"))
-            .into_response(),
+        Ok(None) => {
+            json_error(StatusCode::NOT_FOUND, format!("Suggestion {id} not found")).into_response()
+        }
         Err(error) => {
             tracing::error!(%error, suggestion_id = id, "Failed to dismiss suggestion");
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to dismiss suggestion")
-                .into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to dismiss suggestion",
+            )
+            .into_response()
         }
     }
 }
@@ -315,14 +341,21 @@ pub async fn accept_suggestion(
         .update_status(id, SuggestionStatus::Accepted)
         .await
     {
-        Ok(Some(_)) => (StatusCode::OK, Json(serde_json::json!({ "accepted": true })))
+        Ok(Some(_)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "accepted": true })),
+        )
             .into_response(),
-        Ok(None) => json_error(StatusCode::NOT_FOUND, format!("Suggestion {id} not found"))
-            .into_response(),
+        Ok(None) => {
+            json_error(StatusCode::NOT_FOUND, format!("Suggestion {id} not found")).into_response()
+        }
         Err(error) => {
             tracing::error!(%error, suggestion_id = id, "Failed to accept suggestion");
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to accept suggestion")
-                .into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to accept suggestion",
+            )
+            .into_response()
         }
     }
 }

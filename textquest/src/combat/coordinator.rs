@@ -242,7 +242,10 @@ impl CombatCoordinator {
 
             let zone = state.zone_short_name.clone();
             let group_id = client_groups.get(&pid).copied().unwrap_or(0);
-            let class_token = client_class_names.get(&pid).map(String::as_str).unwrap_or("");
+            let class_token = client_class_names
+                .get(&pid)
+                .map(String::as_str)
+                .unwrap_or("");
             let role = classify_member_role_for_heals(class_token, local_player.class_id);
             let is_dead = state.combat_status == CombatStatus::Dead
                 || local_player.hp_current <= 0
@@ -300,12 +303,7 @@ impl CombatCoordinator {
                 if let Some(cleric_pid) = chain.tick() {
                     let target_id = chain.target_id();
                     let spell_slot = chain.spell_slot();
-                    tracing::info!(
-                        cleric_pid,
-                        target_id,
-                        spell_slot,
-                        "CH chain: firing cleric"
-                    );
+                    tracing::info!(cleric_pid, target_id, spell_slot, "CH chain: firing cleric");
                     commands.push((
                         cleric_pid,
                         Command::SetTarget {

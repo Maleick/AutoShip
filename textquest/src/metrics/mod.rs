@@ -5,7 +5,6 @@
 //! admin-monitoring keeps a bounded in-memory session store for low-latency
 //! operational snapshots.
 
-pub mod anomaly;
 pub mod admin_monitoring;
 pub mod baseline_scorecard;
 pub mod bayesian_baseline;
@@ -29,7 +28,6 @@ pub use admin_monitoring::{
     AdminMonitoringRetention, AdminMonitoringStore, MonitoredSessionState, SessionErrorKind,
     SessionMonitoringSnapshot, sample_process_memory_bytes,
 };
-pub use event_hooks::EventHookContext;
 pub use baseline_scorecard::{
     BaselineScorecard, CombatDelta, CombatMetrics, CoordinationDelta, EconomyDelta, EconomyMetrics,
     GroupCoordinationMetrics, MovementDelta, MovementMetrics, ScorecardDelta,
@@ -43,7 +41,7 @@ pub use collector::{
     CharacterMovementMetrics, FleetMetrics, LootEvent, MetricsCollector, TimeWindow,
     TimeWindowMetrics,
 };
-pub use session_recorder::{SessionEvent, SessionEventKind, SessionRecorder, SessionRecorderConfig};
+pub use event_hooks::EventHookContext;
 pub use events::{FleetEvent, FleetEventLog};
 pub use kill_reporter::KillReporter;
 pub use kill_session_store::KillSessionStore;
@@ -56,8 +54,8 @@ pub use performance::{
 };
 pub use plat_tracker::{PlatCategory, PlatSessionStore, PlatTracker, PlatTransaction};
 pub use progress::{ClientProgressSnapshot, ProgressReport, ProgressTracker};
-pub use anomaly::{
-    AnomalyEvent, AnomalyId, AnomalyPipeline, AnomalySeverity, SessionSnapshot,
+pub use session_recorder::{
+    SessionEvent, SessionEventKind, SessionRecorder, SessionRecorderConfig,
 };
 pub use store::MetricsStore;
 pub use types::{

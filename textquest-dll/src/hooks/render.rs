@@ -60,9 +60,9 @@ pub fn mode() -> RenderMode {
 
 #[cfg(windows)]
 mod inner {
+    use super::hwbp::{self, HwbpSlot};
     use std::sync::atomic::{AtomicU8, Ordering};
     use textquest_common::offsets;
-    use super::hwbp::{self, HwbpSlot};
 
     const UNSET_SLOT: u8 = 0xFF;
     static RENDER_SLOT: AtomicU8 = AtomicU8::new(UNSET_SLOT);
@@ -97,7 +97,9 @@ mod inner {
             let return_addr = unsafe { *(context.Rsp as *const usize) };
             context.Rip = return_addr as u64;
             // Emulate a real `ret`: pop the return address from the stack.
-            context.Rsp = context.Rsp.saturating_add(std::mem::size_of::<usize>() as u64);
+            context.Rsp = context
+                .Rsp
+                .saturating_add(std::mem::size_of::<usize>() as u64);
         }
 
         true
@@ -113,7 +115,7 @@ mod inner {
                 return Err(
                     "No HWBP slots available for render hook; cannot install without JMP hooks"
                         .into(),
-                )
+                );
             }
         };
         set_render_slot(slot);

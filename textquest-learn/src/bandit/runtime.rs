@@ -3,8 +3,8 @@
 //! The runtime is generic over the RNG so the DLL can supply a fast PRNG while
 //! tests use a seeded deterministic RNG.
 
-use rand::SeedableRng;
 use rand::rngs::SmallRng;
+use rand::SeedableRng;
 use siphasher::sip::SipHasher13;
 use std::hash::Hasher;
 use std::io::Write;
@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::bandit::{
-    context::{CTX_DIM, ContextSpec, ContextVec},
+    context::{ContextSpec, ContextVec, CTX_DIM},
     linucb::LinUcbArm,
     model::{AlgorithmTag, ModelFile},
     shadow::{PolicyMode, ShadowLog},
@@ -249,9 +249,9 @@ impl BanditRuntime {
 mod tests {
     use super::*;
     use crate::bandit::{
-        context::{CTX_DIM, ContextSpec},
+        context::{ContextSpec, CTX_DIM},
         linucb::LinUcbModel,
-        model::{AlgorithmTag, BanditScope, MODEL_FILE_VERSION, ModelFile},
+        model::{AlgorithmTag, BanditScope, ModelFile, MODEL_FILE_VERSION},
         shadow::ShadowLog,
     };
 

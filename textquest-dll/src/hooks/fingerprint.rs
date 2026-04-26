@@ -467,9 +467,7 @@ mod inner {
         if address == 0 {
             None
         } else {
-            Some(unsafe {
-                std::mem::transmute::<usize, EnumSystemFirmwareTablesFn>(address)
-            })
+            Some(unsafe { std::mem::transmute::<usize, EnumSystemFirmwareTablesFn>(address) })
         }
     }
 
@@ -487,7 +485,9 @@ mod inner {
             let return_addr = unsafe { *(context.Rsp as *const usize) };
             context.Rip = return_addr as u64;
             // Emulate a real `ret`: pop the return address from the stack.
-            context.Rsp = context.Rsp.saturating_add(std::mem::size_of::<usize>() as u64);
+            context.Rsp = context
+                .Rsp
+                .saturating_add(std::mem::size_of::<usize>() as u64);
         }
     }
 
@@ -552,9 +552,7 @@ mod inner {
     }
 
     #[cfg_attr(windows, unsafe(link_section = ".tq"))]
-    fn get_system_firmware_table_callback(
-        exception_info: *mut (),
-    ) -> bool {
+    fn get_system_firmware_table_callback(exception_info: *mut ()) -> bool {
         let context = unsafe {
             let exception_info = &mut *(exception_info
                 as *mut windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS);
@@ -601,9 +599,7 @@ mod inner {
     }
 
     #[cfg_attr(windows, unsafe(link_section = ".tq"))]
-    fn enum_system_firmware_tables_callback(
-        exception_info: *mut (),
-    ) -> bool {
+    fn enum_system_firmware_tables_callback(exception_info: *mut ()) -> bool {
         let context = unsafe {
             let exception_info = &mut *(exception_info
                 as *mut windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS);
@@ -800,10 +796,7 @@ mod inner {
         if let Some(slot) = enum_system_firmware_slot() {
             if hwbp::is_active(slot) {
                 if let Err(e) = hwbp::unregister(slot) {
-                    tracing::warn!(
-                        "Failed to remove EnumSystemFirmwareTables HWBP: {}",
-                        e
-                    );
+                    tracing::warn!("Failed to remove EnumSystemFirmwareTables HWBP: {}", e);
                 }
             }
         }

@@ -1,7 +1,7 @@
 use textquest_common::{
     combat::{
-        AbilityCandidate, AbilitySet, EQExpansion, ActionType, CombatRole, CombatStateReq, ConditionExpr,
-        SpellEntry, TargetSelector,
+        AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+        EQExpansion, SpellEntry, TargetSelector,
     },
     nav::Waypoint,
     types::SpawnData,

@@ -58,7 +58,8 @@ pub fn weighted_importance_sampling(
         importance_weighted_returns.push(traj_return);
     }
 
-    let mean = importance_weighted_returns.iter().sum::<f32>() / importance_weighted_returns.len() as f32;
+    let mean =
+        importance_weighted_returns.iter().sum::<f32>() / importance_weighted_returns.len() as f32;
     let variance = importance_weighted_returns
         .iter()
         .map(|r| (r - mean).powi(2))
@@ -92,11 +93,7 @@ pub fn fitted_q_evaluation(
     }
 
     let mean = q_values.iter().sum::<f32>() / q_values.len() as f32;
-    let variance = q_values
-        .iter()
-        .map(|q| (q - mean).powi(2))
-        .sum::<f32>()
-        / q_values.len() as f32;
+    let variance = q_values.iter().map(|q| (q - mean).powi(2)).sum::<f32>() / q_values.len() as f32;
 
     let std_dev = variance.sqrt();
     let ci = 1.96 * std_dev / (q_values.len() as f32).sqrt();
