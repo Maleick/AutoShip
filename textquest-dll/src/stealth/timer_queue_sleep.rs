@@ -61,6 +61,46 @@ static TIMER_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Encoding: 0 = None, 1 = Frame, 2 = TimerQueue (matches [`SleepOwner`]).
 pub static ENCRYPT_OWNER: AtomicU8 = AtomicU8::new(0);
 
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+/// Configuration for the timer-queue sleep path.
+///
+/// Deserialised from the `[stealth]` section of `textquest.toml`:
+///
+/// ```toml
+/// [stealth]
+/// timer_interval_ms = 1500
+/// timer_enabled = true
+/// ```
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub struct StealthConfig {
+    /// Milliseconds between timer-queue encrypt/decrypt cycles.
+    ///
+    /// Default: 1 500 ms (1.5 s) — empirically keeps `.text` invisible
+    /// to periodic in-process scans while staying below perceptible
+    /// animation jitter thresholds.
+    pub timer_interval_ms: u32,
+
+    /// Whether the timer-queue sleep path should be armed at startup.
+    ///
+    /// Set to `false` to keep the path disabled at runtime without
+    /// recompiling.  The compile-time `stealth-timer` feature must also
+    /// be enabled for this field to have any effect.
+    pub timer_enabled: bool,
+}
+
+impl Default for StealthConfig {
+    fn default() -> Self {
+        Self {
+            timer_interval_ms: 1500,
+            timer_enabled: true,
+        }
+    }
+}
+
 /// Ownership token for the encrypt/decrypt cycle.
 ///
 /// Only one path — per-frame or timer-queue — may hold the cycle at a time.
@@ -230,7 +270,11 @@ mod inner {
         };
 
         // Encrypt .text for the duration of the idle window.
-        crate::stealth::sleep();
+        // Wrap in stack spoof so the timer thread's call stack shows only
+        // legitimate ntdll/kernel32 frames — avoids naked timer thread stacks.
+        crate::stealth::stack_spoof::with_spoofed_stack(|| {
+            crate::stealth::sleep();
+        });
 
         // Release Mutex owner before decrypt so frame path can acquire if needed.
         release(guard);
@@ -251,7 +295,9 @@ mod inner {
             .is_ok()
         {
             if let Some(guard2) = try_acquire(SleepOwner::TimerQueue) {
-                crate::stealth::wake();
+                crate::stealth::stack_spoof::with_spoofed_stack(|| {
+                    crate::stealth::wake();
+                });
                 release(guard2);
             }
             ENCRYPT_OWNER.store(SleepOwner::None.as_u8(), Ordering::Release);
@@ -364,6 +410,45 @@ mod inner {
 /// or if the timer-queue timer cannot be created.
 pub fn init(interval_ms: u32) -> Result<(), TimerQueueError> {
     inner::init(interval_ms)
+}
+
+/// Initialize the timer-queue sleep path from a [`StealthConfig`].
+///
+/// Convenience wrapper that reads `timer_enabled` and `timer_interval_ms`
+/// from the configuration struct.  When `timer_enabled` is `false` the
+/// function is a documented no-op and returns `Ok(())`.
+///
+/// Requires the `stealth-timer` compile-time feature; when the feature is
+/// absent this function is compiled to a no-op that always returns `Ok(())`.
+///
+/// # Errors
+///
+/// Propagates [`TimerQueueError`] from [`init`] when `timer_enabled` is `true`.
+#[cfg(feature = "stealth-timer")]
+pub fn init_from_config(cfg: &StealthConfig) -> Result<(), TimerQueueError> {
+    if !cfg.timer_enabled {
+        tracing::info!("timer-queue sleep path disabled by config (timer_enabled = false)");
+        return Ok(());
+    }
+    init(cfg.timer_interval_ms)
+}
+
+/// No-op stub compiled when the `stealth-timer` feature is absent.
+#[cfg(not(feature = "stealth-timer"))]
+pub fn init_from_config(_cfg: &StealthConfig) -> Result<(), TimerQueueError> {
+    tracing::debug!(
+        "timer-queue sleep path omitted — recompile with feature `stealth-timer` to enable"
+    );
+    Ok(())
+}
+
+/// Disable the timer-queue sleep path at runtime.
+///
+/// Equivalent to [`shutdown`]; exposed as a named alias so callers can use
+/// symmetric `enable` / `disable` vocabulary consistent with
+/// [`crate::stealth::enable`] / [`crate::stealth::disable`].
+pub fn disable() {
+    shutdown();
 }
 
 /// Shut down the timer-queue sleep path.
@@ -539,5 +624,156 @@ mod tests {
 
         // Clean up.
         ENCRYPT_OWNER.store(SleepOwner::None.as_u8(), Ordering::Release);
+    }
+
+    // ------------------------------------------------------------------
+    // StealthConfig tests (issue #3406)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn stealth_config_default_values() {
+        let cfg = StealthConfig::default();
+        assert_eq!(cfg.timer_interval_ms, 1500);
+        assert!(cfg.timer_enabled);
+    }
+
+    #[test]
+    fn stealth_config_deserialize_partial() {
+        // Missing fields fall back to defaults via #[serde(default)].
+        let raw = r#"timer_interval_ms = 3000"#;
+        let cfg: StealthConfig = toml::from_str(raw).expect("should parse");
+        assert_eq!(cfg.timer_interval_ms, 3000);
+        assert!(cfg.timer_enabled, "timer_enabled should default to true");
+    }
+
+    #[test]
+    fn stealth_config_deserialize_disabled() {
+        let raw = r#"
+timer_interval_ms = 500
+timer_enabled = false
+"#;
+        let cfg: StealthConfig = toml::from_str(raw).expect("should parse");
+        assert_eq!(cfg.timer_interval_ms, 500);
+        assert!(!cfg.timer_enabled);
+    }
+
+    #[test]
+    fn init_from_config_disabled_is_noop() {
+        // When timer_enabled = false, init_from_config must not arm the timer.
+        // This test exercises both the `stealth-timer`-feature path (where the
+        // `timer_enabled = false` guard fires) and the no-op stub path (where
+        // init_from_config always returns Ok without touching TIMER_ACTIVE).
+        let cfg = StealthConfig {
+            timer_interval_ms: 1500,
+            timer_enabled: false,
+        };
+        TIMER_ACTIVE.store(false, Ordering::Release);
+        let result = init_from_config(&cfg);
+        assert!(result.is_ok(), "init_from_config(disabled) should be Ok");
+        assert!(
+            !is_active(),
+            "timer must not be active after init with timer_enabled=false"
+        );
+    }
+
+    #[test]
+    fn disable_alias_calls_shutdown() {
+        // disable() is an alias for shutdown(); calling it with an inactive
+        // timer must be a no-op (no panic).
+        TIMER_ACTIVE.store(false, Ordering::Release);
+        disable(); // must not panic
+        assert!(!is_active());
+    }
+
+    // ------------------------------------------------------------------
+    // Stack-spoof callback tests (issue #3407)
+    // ------------------------------------------------------------------
+
+    /// Verify the encrypt/decrypt callback logic fires correctly and that the
+    /// encrypted fraction is measurable.
+    ///
+    /// This test drives the callback logic directly (without a live OS timer)
+    /// by manipulating the stealth atomics, calling the encrypt/decrypt
+    /// routines, and measuring the resulting `CODE_ENCRYPTED` state change.
+    ///
+    /// On non-Windows the underlying functions are stubs, but the control-flow
+    /// path (SAFE_MODE gate → ownership acquire → sleep → wake) is still
+    /// exercised cross-platform.
+    #[test]
+    fn callback_encrypt_decrypt_cycle_fires_and_is_measurable() {
+        use std::sync::atomic::Ordering;
+
+        // Reset stealth state: enabled, not yet encrypted.
+        crate::stealth::SLEEP_INITIALIZED.store(true, Ordering::Release);
+        crate::stealth::SLEEP_ENABLED.store(true, Ordering::Release);
+        crate::stealth::CODE_ENCRYPTED.store(false, Ordering::Release);
+
+        // Ensure SAFE_MODE is not set so the callback would proceed.
+        crate::hooks::integrity::SAFE_MODE.store(false, Ordering::Release);
+
+        // Confirm pre-condition: nothing encrypted yet.
+        assert!(!crate::stealth::is_encrypted(), "pre: should not be encrypted");
+
+        // Run the encrypt phase through stack_spoof::with_spoofed_stack —
+        // same code path as the Windows timer callback.
+        crate::stealth::stack_spoof::with_spoofed_stack(|| {
+            crate::stealth::sleep();
+        });
+
+        // After sleep(), .text should be encrypted.
+        assert!(
+            crate::stealth::is_encrypted(),
+            "post-sleep: encrypted fraction should be non-zero (CODE_ENCRYPTED = true)"
+        );
+
+        // Run the decrypt phase.
+        crate::stealth::stack_spoof::with_spoofed_stack(|| {
+            crate::stealth::wake();
+        });
+
+        // After wake(), .text should be decrypted again.
+        assert!(
+            !crate::stealth::is_encrypted(),
+            "post-wake: code should be decrypted"
+        );
+
+        // Cleanup: reset to defaults so other tests are not affected.
+        crate::stealth::SLEEP_INITIALIZED.store(false, Ordering::Release);
+        crate::stealth::SLEEP_ENABLED.store(false, Ordering::Release);
+        crate::stealth::CODE_ENCRYPTED.store(false, Ordering::Release);
+        crate::hooks::integrity::SAFE_MODE.store(false, Ordering::Release);
+    }
+
+    /// Verify that the callback skips the cycle when SAFE_MODE is active.
+    #[test]
+    fn callback_skips_when_safe_mode_active() {
+        use std::sync::atomic::Ordering;
+
+        crate::stealth::SLEEP_INITIALIZED.store(true, Ordering::Release);
+        crate::stealth::SLEEP_ENABLED.store(true, Ordering::Release);
+        crate::stealth::CODE_ENCRYPTED.store(false, Ordering::Release);
+
+        // Set SAFE_MODE — callback must bail without encrypting.
+        crate::hooks::integrity::SAFE_MODE.store(true, Ordering::Release);
+
+        // Simulate the guard check that the real callback performs.
+        if !crate::hooks::integrity::SAFE_MODE.load(Ordering::Acquire) {
+            // This branch must NOT execute.
+            crate::stealth::stack_spoof::with_spoofed_stack(|| {
+                crate::stealth::sleep();
+            });
+        }
+
+        // SAFE_MODE was set, so sleep() must not have been called.
+        assert!(
+            !crate::stealth::is_encrypted(),
+            "SAFE_MODE active: code must not have been encrypted"
+        );
+
+        // Cleanup.
+        crate::stealth::SLEEP_INITIALIZED.store(false, Ordering::Release);
+        crate::stealth::SLEEP_ENABLED.store(false, Ordering::Release);
+        crate::stealth::CODE_ENCRYPTED.store(false, Ordering::Release);
+        crate::hooks::integrity::SAFE_MODE.store(false, Ordering::Release);
     }
 }

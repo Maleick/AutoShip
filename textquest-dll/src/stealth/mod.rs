@@ -30,9 +30,9 @@ pub mod trampoline;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-static SLEEP_ENABLED: AtomicBool = AtomicBool::new(false);
-static SLEEP_INITIALIZED: AtomicBool = AtomicBool::new(false);
-static CODE_ENCRYPTED: AtomicBool = AtomicBool::new(false);
+pub(crate) static SLEEP_ENABLED: AtomicBool = AtomicBool::new(false);
+pub(crate) static SLEEP_INITIALIZED: AtomicBool = AtomicBool::new(false);
+pub(crate) static CODE_ENCRYPTED: AtomicBool = AtomicBool::new(false);
 static SLEEP_CYCLE_LOCKED: AtomicBool = AtomicBool::new(false);
 
 /// RAII guard for the sleep-cycle spin lock.
