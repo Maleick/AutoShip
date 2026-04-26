@@ -39,11 +39,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use textquest_common::{
-    account_safety::{
-        self,
-        BannedAccountRegistry,
-        BanHandlingResult,
-    },
+    account_safety::{self, BanHandlingResult, BannedAccountRegistry},
     character_config::{CharacterConfigMap, RewardAutomationConfig, load_character_configs},
     combat::HateTargetCategory,
     ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
@@ -699,16 +695,8 @@ impl Orchestrator {
         let inputs_hash = crate::session_replay::canonical_inputs_hash(&decision_inputs);
 
         let commands = match self.operating_mode {
-            OperatingMode::Camp => self.tick_camp(
-                camp_snapshot,
-                &decision_inputs,
-                &inputs_hash,
-            ),
-            OperatingMode::Hunt => self.tick_hunt(
-                hunt_snapshot,
-                &decision_inputs,
-                &inputs_hash,
-            ),
+            OperatingMode::Camp => self.tick_camp(camp_snapshot, &decision_inputs, &inputs_hash),
+            OperatingMode::Hunt => self.tick_hunt(hunt_snapshot, &decision_inputs, &inputs_hash),
         };
         // Filter to in-scope PIDs so the operator's routing scope is respected
         // by camp/hunt loop commands just as it is for TUI-initiated commands.
@@ -744,10 +732,16 @@ impl Orchestrator {
             .collect();
 
         self.record_decision_batch("cross_group", &decision_inputs, &inputs_hash, &emergency);
-        self.record_ipc_decisions("rotation", &decision_inputs, &inputs_hash, &heal_commands_scoped);
+        self.record_ipc_decisions(
+            "rotation",
+            &decision_inputs,
+            &inputs_hash,
+            &heal_commands_scoped,
+        );
         self.record_xassist_decisions(&decision_inputs, &inputs_hash, &xassist_commands);
 
-        let count = scoped.len() + emergency.len() + xassist_commands.len() + heal_commands_scoped.len();
+        let count =
+            scoped.len() + emergency.len() + xassist_commands.len() + heal_commands_scoped.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
@@ -1870,7 +1864,7 @@ impl Orchestrator {
             };
 
             for message in messages {
-                if account_safety::detect_ban_message(&message.text) {
+                if should_handle_chat_line_as_ban_signal(&message.text) {
                     self.handle_ban_detection(pid, "chat", message.text.clone());
                     continue;
                 }
@@ -2101,8 +2095,7 @@ impl Orchestrator {
                 true
             }
             None => {
-                self.security_alert_cooldowns
-                    .insert(key.to_string(), now);
+                self.security_alert_cooldowns.insert(key.to_string(), now);
                 true
             }
         }
@@ -2210,6 +2203,14 @@ impl Orchestrator {
     }
 }
 
+fn should_handle_chat_line_as_ban_signal(text: &str) -> bool {
+    // Player-authored chat channels are attacker-controlled and must not trigger
+    // account safety remediations. Ban/suspension detection is limited to
+    // unparsed system-style lines.
+    textquest_common::chat::parse_chat_text(text).is_none()
+        && account_safety::detect_ban_message(text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2226,6 +2227,20 @@ mod tests {
     fn runtime_snapshot_test_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    #[test]
+    fn ban_detection_ignores_player_chat_content() {
+        assert!(!should_handle_chat_line_as_ban_signal(
+            "Scammer tells you, 'your account has been suspended'"
+        ));
+    }
+
+    #[test]
+    fn ban_detection_accepts_system_style_messages() {
+        assert!(should_handle_chat_line_as_ban_signal(
+            "Your account has been suspended due to violation of terms"
+        ));
     }
 
     fn test_config() -> CampConfig {
