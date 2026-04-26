@@ -1,0 +1,265 @@
+#==============================================================================
+# Plane of Innovation Camp Configuration
+#==============================================================================
+# Issue: #3367 — Define Plane of Innovation safe spots, pull points, and route
+# Parent: #1775 (Plane of Innovation farming progression)
+# Related: #1721 (camp-config leaf)
+#
+# Zone: Plane of Innovation (planeinnovation)
+# Access: PoP expansion; requires Plane of Knowledge key or flagging access.
+#         Level 50+ soft minimum; 55+ recommended for factory primary.
+#
+# Camp Location Strategy:
+# - Primary camp anchor: Factory floor east ledge, sitting above the main
+#   construct spawn floor. The ledge provides a safe medding position with
+#   line-of-sight to factory pull corridors without direct aggro from roaming
+#   servomechanisms.
+# - Primary pull point: North factory corner wall — mobs reset toward camp
+#   without cascading into the Machinery sector (planar construct bosses).
+# - Secondary pull point: West conveyor access ramp — alternate approach for
+#   pulling Gear Construct clusters without triggering east-ledge adds.
+# - Safe spot fallback: South factory alcove, inside the equipment bay —
+#   use this when main ledge aggro is hot or after a bad train.
+#
+# Pull-range Coverage:
+# - pull_radius = 300 covers the full factory floor construct population
+#   (animated constructs, servomechanisms, gear constructs, whirring golems).
+# - Machinery sector (Gorgoleth, Sovereign of Machinery, planar lords) sits
+#   beyond pull_radius; boundary is enforced by leash_radius = 450.
+# - West conveyor extends ~250 units from pull_point; still within range.
+# - North ledge approach adds ~30 units; still within range.
+#
+# Zone Notes:
+# - Factory constructs spawn in waves; mana thresholds prevent adds on OOM pulls.
+# - Levitation works in PoP zones but the factory floor geometry is flat;
+#   levitation has no practical effect here.
+# - Multibox: Druid box healer + Warrior tank in standard ADPS rotation.
+# - Roaming constructs patrol factory aisles every ~90s; avoid crossing aisles
+#   mid-pull to prevent accidental social aggro.
+#
+# References:
+# - Waypoints, pull sectors, and respawn patterns: docs/wiki/Plane-of-Innovation-Primary-Camp.md
+# - EverQuest coordinate system: XY plane is horizontal, Z is vertical
+# - Factory construct respawn cadence: ~6 minutes (community baseline, unverified live)
+
+name = "plane-of-innovation"
+zone = "planeinnovation"
+
+#==============================================================================
+# Camp Layout
+#==============================================================================
+
+# Primary camp anchor: factory east ledge.
+# Safe medding position above the main spawn floor; LoS to pull corridor.
+camp_center = [150.0, -280.0, -45.0]
+
+# Primary pull handoff: north factory corner.
+# Pull resets toward camp here; prevents widening into Machinery sector.
+pull_point = [180.0, -320.0, -45.0]
+
+# Pull radius covers full factory floor without reaching Machinery sector.
+pull_radius = 300
+
+# Tight camp radius for multibox stack on east ledge.
+camp_radius = 35
+
+# Leash radius enforces factory-only boundary; Machinery sector starts ~460 out.
+leash_radius = 450
+
+#==============================================================================
+# Safe Spots
+# These are documented positions where the 6-box stack can safely med or
+# retreat when the primary camp anchor is compromised. Listed in priority order.
+#==============================================================================
+
+# safe_spot_1: Primary camp anchor (east ledge above factory floor).
+# Access: Walk up factory east ramp from the entry corridor.
+# Notes: Default med position; LoS to main pull corridor.
+safe_spot_primary = [150.0, -280.0, -45.0]
+
+# safe_spot_2: South factory alcove (inside equipment bay).
+# Access: Follow south wall from camp_center ~80 units.
+# Notes: Fallback when east ledge has hot aggro; alcove blocks roamer LoS.
+safe_spot_fallback = [150.0, -200.0, -45.0]
+
+# safe_spot_3: Entry corridor staging point.
+# Access: Zone-in corridor, ~200 units north of factory floor.
+# Notes: Emergency retreat; use when full factory floor is compromised or
+#        after a train. Exit is within 50 units.
+safe_spot_emergency = [150.0, -100.0, -40.0]
+
+#==============================================================================
+# Pull Points
+# Named pull positions with access notes and pull-range context.
+#==============================================================================
+
+# pull_point_primary: North factory corner (default).
+# Access: Advance from camp_center north ~40 units along east ledge lip.
+# Range: Covers factory floor constructs + west conveyor approach.
+# Avoid: Do not advance past this point toward Machinery sector.
+pull_point_primary = [180.0, -320.0, -45.0]
+
+# pull_point_west: West conveyor access ramp.
+# Access: Descend east ledge ramp, cross factory floor to west conveyor (~120 units).
+# Range: Covers Gear Construct and Whirring Golem clusters on west conveyor.
+# Notes: Use when east ledge is clear; do not use with active factory floor aggro.
+pull_point_west = [60.0, -320.0, -45.0]
+
+# pull_point_south: South factory corridor mouth.
+# Access: Follow south wall from camp_center ~60 units to corridor entrance.
+# Range: Covers Brass Guardian and Steam Golem spawns in south corridor.
+# Notes: Lower mob density than north; use for chain-pull recovery cycle.
+pull_point_south = [150.0, -220.0, -45.0]
+
+#==============================================================================
+# Route: Factory Floor Loop (6 waypoints)
+# Full factory floor traversal covering primary construct spawn clusters.
+# One complete loop pulls animated constructs, servomechanisms, gear constructs,
+# whirring golems, brass guardians, and steam golems.
+#
+# Waypoint format: [x, y, z]
+# Traverse order: wp1 → wp2 → wp3 → wp4 → wp5 → wp6 → return to camp_center
+#==============================================================================
+
+[[route]]
+label = "factory_floor_loop"
+description = "Primary factory floor loop. Covers all construct clusters. One lap ~6min respawn cycle."
+
+# wp1: East ledge descent — step off ledge to factory floor level.
+# Begins the loop from camp_center; descent ramp is ~10 units.
+[[route.waypoints]]
+x = 150.0
+y = -280.0
+z = -48.0
+label = "east_ledge_descent"
+notes = "Step off camp ledge to factory floor. Verify no roamer in north aisle before advancing."
+
+# wp2: North aisle east wall — primary animated construct spawn cluster.
+# Pull range covers 3-4 animated constructs in the east aisle pocket.
+[[route.waypoints]]
+x = 170.0
+y = -330.0
+z = -48.0
+label = "north_aisle_east"
+notes = "Animated construct cluster. Pull north; reset to east wall if adds. Stop: do not cross north threshold into Machinery sector."
+
+# wp3: North aisle center — servomechanism spawn band.
+# Clockwork servomechanisms patrol the center aisle; pull individually.
+[[route.waypoints]]
+x = 110.0
+y = -340.0
+z = -48.0
+label = "north_aisle_center"
+notes = "Servomechanism band. Single pulls preferred; social aggro risk if 2+ activated simultaneously."
+
+# wp4: West conveyor mouth — gear construct and whirring golem clusters.
+# Access the west conveyor approach from north aisle center.
+[[route.waypoints]]
+x = 60.0
+y = -320.0
+z = -48.0
+label = "west_conveyor_mouth"
+notes = "Gear construct + whirring golem cluster. Pull east toward center aisle to avoid conveyor path geometry."
+
+# wp5: South corridor mouth — brass guardian and steam golem spawns.
+# Lower density than north; use for chain-pull recovery between north cycles.
+[[route.waypoints]]
+x = 80.0
+y = -240.0
+z = -48.0
+label = "south_corridor_mouth"
+notes = "Brass guardian + steam golem. Pull north. Do not follow into south corridor beyond this point (single-file geometry)."
+
+# wp6: East ledge base — return staging before ascending back to camp.
+# Final check for roamers before ascending to east ledge med position.
+[[route.waypoints]]
+x = 140.0
+y = -260.0
+z = -48.0
+label = "east_ledge_base"
+notes = "Return staging point. Verify east aisle clear before ascending ledge ramp. Ascend ~10 units to camp_center."
+
+#==============================================================================
+# Mana Thresholds
+#==============================================================================
+
+# Constructs spam moderate DoT and moderate melee; healer needs frequent top-offs.
+rest_mana_pct = 70
+pull_mana_pct = 50
+
+#==============================================================================
+# Level Range
+#==============================================================================
+
+# PoP factory floor: 55-65 bracket (TLP-era grouping, soft PoP flagging range).
+level_range = [55, 65]
+
+#==============================================================================
+# Pull Targets: Factory Constructs
+#==============================================================================
+
+pull_mob_names = [
+  "an animated construct",
+  "a clockwork servomechanism",
+  "a gear construct",
+  "a whirring golem",
+  "a mechanical champion",
+  "an unstable construct",
+  "a brass guardian",
+  "a steam golem",
+]
+
+#==============================================================================
+# Protected Named / Boss Mobs: Do Not Pull
+#==============================================================================
+# These are zone named mobs, planar lords, or quest NPCs beyond the factory floor.
+# The Machinery sector starts north of pull_point_primary; hard-stop enforced by leash_radius.
+
+ignore_mob_names = [
+  "Gorgoleth",
+  "Planar Fissure",
+  "a planar construct lord",
+  "Mechanotus",
+  "Sovereign of Machinery",
+  "Maestro of Rancor",
+  "Master of Fetid Gloom",
+  "Prophet of Decay",
+  "Quillmane",
+  "a sentinel construct",
+  "a guardian of machinery",
+  "Taskmaster of Trusag",
+  "Taskmaster of Rathe",
+  "an imprisoned prophet",
+]
+
+#==============================================================================
+# Burn List: Named Rare Spawns (Harvest on Sight)
+#==============================================================================
+# These rare factory floor named mobs are high-value; burn on sight if they
+# spawn within leash_radius. Do not chase into Machinery sector.
+
+burn_mob_names = [
+  "Gorgoleth",
+  "Planar Fissure",
+  "a planar construct lord",
+  "Mechanotus",
+]
+
+#==============================================================================
+# Return Behavior
+#==============================================================================
+
+# Prevent puller from snapping back to camp with live aggro.
+# Factory floor aisles are narrow; a returning puller with adds cascades into
+# the med stack and can pull from adjacent aisle roamers simultaneously.
+return_no_aggro = true
+
+#==============================================================================
+# Progression Chain
+#==============================================================================
+
+# Next camp: move to Underfoot after outleveling PoP factory (65+).
+next_camp = "underfoot_primary"
+
+# Fallback: return to Dreadlands if group is undergeared for PoP factory.
+prev_camp = "dreadlands_primary"
