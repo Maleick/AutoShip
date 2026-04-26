@@ -338,6 +338,45 @@ If an operator remains actively present, pauses sessions on demand, and aborts o
 | Semi-attended overnight runs (operator away, session monitored by alerts) | Blocked | Requires completion of `#866` GM-alert detection, `#865` error recovery, and explicit session-abort on alert. Cannot launch until infrastructure and live proof exist. | Close `#866` and `#865`, then run a monitored overnight test with live alert capture and operator standing by for pause/abort. |
 | Fully unattended overnight runs (no operator intervention expected) | Blocked | Requires all overnight infrastructure plus live proof that sessions can run 8+ hours without intervention, including automatic failure recovery and account-safety validation. | Not feasible until overnight testing infrastructure is complete, live-tested, and accounts have accumulated evidence of safe overnight execution. |
 
+## Issue #3392 — Nodding Blue Lily Forage Session Status
+
+**Status: BLOCKED — requires live attended EQ session**
+
+This sub-issue owns the attended Nodding Blue Lily forage baseline for issue `#1839`.
+A live EverQuest Sebilis session with operator-driven `/forage` cadence is required to
+satisfy the acceptance criteria. Agents cannot execute in-game sessions.
+
+### Zero-hit sample record (agent-verified gap)
+
+No live forage session has been conducted. The following is an **honest zero-hit
+placeholder** recorded per acceptance criteria: "Zero-hit sample recorded honestly if
+no Lily appears."
+
+| Session date | Zone | Duration (min) | Forage attempts | Successes | Nodding Blue Lily hits | Operator mode |
+|---|---|---|---|---|---|---|
+| (none) | Sebilis | 0 | 0 | 0 | 0 | N/A — blocked, no live access |
+
+When a live session is completed:
+- Record raw forage log link (do not copy counts into repo body)
+- Fill in the table above with actual session data
+- Update evidence state in the main table to `Live-validated`
+- Remove the BLOCKED note from this section
+
+### What an operator must do to close this issue
+
+1. Enter Sebilis with a Shaman or other forager.
+2. Enable the `/forage` loop via `textquest/src/camp/forage.rs` (`enabled = true`,
+   `interval_ms = 3000` default) or use operator-driven `/forage` commands.
+3. Run for a minimum 30-minute attended window.
+4. Record: total attempts, total successes (any forage result), Nodding Blue Lily
+   hits specifically, and session duration.
+5. If zero Lily hits occur, record the zero honestly — do not retry until a
+   meaningful sample size (≥ 50 attempts) is reached.
+6. Link the raw forage log (e.g., session log file or screenshot) as a PR comment.
+   Do not copy raw counts into the wiki body.
+7. Update the table above and the evidence state in the main Current Evidence State
+   table for the `Nodding Blue Lily forage baseline` row.
+
 ## Exit criteria
 
 Do not call Sebilis a validated farming hub until the template has at least:
