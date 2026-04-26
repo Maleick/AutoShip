@@ -7,7 +7,7 @@
 //! layer rather than a complete MQ2 runtime.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::{c_char, c_void},
     fs, io,
     path::{Path, PathBuf},
@@ -125,7 +125,8 @@ impl PluginCandidate {
 pub struct MacroQuestPluginLoader {
     plugins_dir: PathBuf,
     configs: BTreeMap<String, PluginConfig>,
-    loaded: std::collections::BTreeSet<String>,
+    loaded: BTreeSet<String>,
+    loaded_handles: BTreeMap<String, LoadedMacroQuestPlugin>,
 }
 
 impl std::fmt::Debug for MacroQuestPluginLoader {
@@ -134,6 +135,10 @@ impl std::fmt::Debug for MacroQuestPluginLoader {
             .field("plugins_dir", &self.plugins_dir)
             .field("configs", &self.configs)
             .field("loaded", &self.loaded)
+            .field(
+                "tracked_handles",
+                &self.loaded_handles.keys().collect::<Vec<_>>(),
+            )
             .finish()
     }
 }
@@ -144,7 +149,8 @@ impl MacroQuestPluginLoader {
         Self {
             plugins_dir: plugins_dir.into(),
             configs: BTreeMap::new(),
-            loaded: std::collections::BTreeSet::new(),
+            loaded: BTreeSet::new(),
+            loaded_handles: BTreeMap::new(),
         }
     }
 
@@ -156,7 +162,8 @@ impl MacroQuestPluginLoader {
         Self {
             plugins_dir: plugins_dir.into(),
             configs,
-            loaded: std::collections::BTreeSet::new(),
+            loaded: BTreeSet::new(),
+            loaded_handles: BTreeMap::new(),
         }
     }
 
@@ -232,6 +239,7 @@ impl MacroQuestPluginLoader {
         for conflict in &conflicts {
             if self.is_loaded(conflict) {
                 self.loaded.remove(conflict);
+                self.loaded_handles.remove(conflict);
                 tracing::info!(
                     plugin = %plugin_name,
                     unloaded = %conflict,
@@ -258,15 +266,13 @@ impl MacroQuestPluginLoader {
         candidate: &PluginCandidate,
         api: &TextQuestMq2Api,
     ) -> Result<LoadedMacroQuestPlugin, PluginLoadError> {
-        self.load_with_context(candidate, api, &std::collections::BTreeSet::new(), &mut std::collections::BTreeSet::new())
+        self.load_with_context(candidate, api)
     }
 
     fn load_with_context(
         &mut self,
         candidate: &PluginCandidate,
         api: &TextQuestMq2Api,
-        loaded_names: &std::collections::BTreeSet<String>,
-        force_unloaded: &mut std::collections::BTreeSet<String>,
     ) -> Result<LoadedMacroQuestPlugin, PluginLoadError> {
         let config = self.config_for(&candidate.name);
         if !config.enabled {
@@ -282,8 +288,10 @@ impl MacroQuestPluginLoader {
         // Load the plugin
         let loaded = load_platform(candidate, api)?;
 
-        // Track the loaded plugin by name
+        // Track the loaded plugin and handle by name
         self.loaded.insert(candidate.name.clone());
+        self.loaded_handles
+            .insert(candidate.name.clone(), loaded.clone());
 
         tracing::info!(
             plugin = %candidate.name,
@@ -312,23 +320,12 @@ impl MacroQuestPluginLoader {
             })?;
 
         let mut loaded = Vec::new();
-        let mut loaded_names = std::collections::BTreeSet::new();
-        let mut force_unloaded: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
         for candidate in candidates {
             if !self.config_for(&candidate.name).enabled {
                 continue;
             }
-            // Skip plugins that a prior manifest declared must be unloaded.
-            if force_unloaded.contains(&candidate.name) {
-                tracing::info!(
-                    plugin = %candidate.name,
-                    "skipping plugin: force-unloaded by a prior manifest"
-                );
-                continue;
-            }
-            let plugin = self.load_with_context(&candidate, api, &loaded_names, &mut force_unloaded)?;
-            loaded_names.insert(candidate.name.clone());
+            let plugin = self.load_with_context(&candidate, api)?;
             loaded.push(plugin);
         }
         Ok(loaded)
@@ -336,15 +333,13 @@ impl MacroQuestPluginLoader {
 }
 
 /// Loaded plugin handle. Dropping the handle shuts the plugin down on Windows.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LoadedMacroQuestPlugin {
     candidate: PluginCandidate,
     /// EQ slash command declared by the plugin's manifest, if any.
     pub pause_command: Option<String>,
     #[cfg(windows)]
-    library: windows::Win32::Foundation::HMODULE,
-    #[cfg(windows)]
-    shutdown: Option<unsafe extern "system" fn()>,
+    handle: std::sync::Arc<WindowsLoadedPluginHandle>,
 }
 
 impl LoadedMacroQuestPlugin {
@@ -372,7 +367,10 @@ pub enum PluginLoadError {
     #[error("plugin {path} returned init status {status}")]
     InitFailed { path: PathBuf, status: i32 },
     #[error("plugin {plugin} requires {missing:?} to be loaded first")]
-    MissingRequiredPlugins { plugin: String, missing: Vec<String> },
+    MissingRequiredPlugins {
+        plugin: String,
+        missing: Vec<String>,
+    },
     #[error("plugin {plugin} requires {required:?} which failed to unload: {reason}")]
     ConflictUnloadFailed {
         plugin: String,
@@ -486,13 +484,19 @@ fn load_platform(
     Ok(LoadedMacroQuestPlugin {
         candidate: candidate.clone(),
         pause_command: None, // set by load_with_context after platform load
-        library,
-        shutdown,
+        handle: std::sync::Arc::new(WindowsLoadedPluginHandle { library, shutdown }),
     })
 }
 
 #[cfg(windows)]
-impl Drop for LoadedMacroQuestPlugin {
+#[derive(Debug)]
+struct WindowsLoadedPluginHandle {
+    library: windows::Win32::Foundation::HMODULE,
+    shutdown: Option<unsafe extern "system" fn()>,
+}
+
+#[cfg(windows)]
+impl Drop for WindowsLoadedPluginHandle {
     fn drop(&mut self) {
         use windows::Win32::System::LibraryLoader::FreeLibrary;
 
@@ -554,5 +558,36 @@ mod tests {
 
         assert!(loader.config_for("mq2lua").enabled);
         assert!(!loader.config_for("mq2eqbc").enabled);
+    }
+
+    #[test]
+    fn unload_conflicts_drops_tracked_plugin_handles() {
+        let mut configs = BTreeMap::new();
+        configs.insert(
+            "rgmercs".to_string(),
+            PluginConfig {
+                enabled: true,
+                settings: BTreeMap::new(),
+                required_plugins: Vec::new(),
+                conflicts_with: vec!["mq2melee".to_string()],
+            },
+        );
+
+        let mut loader = MacroQuestPluginLoader::with_configs("plugins", configs);
+        let candidate = PluginCandidate {
+            name: "mq2melee".to_string(),
+            path: PathBuf::from("mq2melee.dll"),
+        };
+        loader.loaded.insert(candidate.name.clone());
+        loader
+            .loaded_handles
+            .insert(candidate.name.clone(), make_loaded_non_windows(candidate));
+
+        loader
+            .unload_conflicts("rgmercs")
+            .expect("unload conflicts should succeed");
+
+        assert!(!loader.is_loaded("mq2melee"));
+        assert!(!loader.loaded_handles.contains_key("mq2melee"));
     }
 }
