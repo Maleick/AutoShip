@@ -19,12 +19,54 @@
 pub mod client;
 pub mod server;
 
+use std::io;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt};
+
 pub use client::EqbcClient;
 pub use server::EqbcServer;
 
 /// Maximum line length accepted from any peer. Prevents memory exhaustion from
 /// malformed or adversarial clients.
 pub const MAX_LINE_BYTES: usize = 4096;
+
+/// Read one newline-delimited UTF-8 line with a hard byte cap.
+///
+/// Returns:
+/// - `Ok(Some(line))` when a line (or EOF-terminated fragment) is read,
+/// - `Ok(None)` on EOF with no bytes read,
+/// - `Err(InvalidData)` for oversized lines or invalid UTF-8.
+pub(crate) async fn read_bounded_line<R>(
+    reader: &mut R,
+    max_line_bytes: usize,
+) -> io::Result<Option<String>>
+where
+    R: AsyncBufRead + Unpin,
+{
+    let mut buf = Vec::with_capacity(max_line_bytes.saturating_add(1));
+    let read = reader
+        .take((max_line_bytes.saturating_add(1)) as u64)
+        .read_until(b'\n', &mut buf)
+        .await?;
+
+    if read == 0 {
+        return Ok(None);
+    }
+
+    if buf.len() > max_line_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "EQBC line exceeds MAX_LINE_BYTES",
+        ));
+    }
+
+    while matches!(buf.last(), Some(b'\n' | b'\r')) {
+        buf.pop();
+    }
+
+    let line = String::from_utf8(buf)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "EQBC line is not valid UTF-8"))?;
+    Ok(Some(line))
+}
 
 /// Decoded EQBC wire message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +149,7 @@ impl EqbcMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::BufReader;
 
     #[test]
     fn round_trip_broadcast() {
@@ -141,5 +184,27 @@ mod tests {
     #[test]
     fn unknown_line_returns_none() {
         assert!(EqbcMessage::parse("GARBAGE:stuff").is_none());
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_rejects_oversized_line() {
+        let payload = vec![b'A'; MAX_LINE_BYTES + 10];
+        let mut reader = BufReader::new(payload.as_slice());
+
+        let err = read_bounded_line(&mut reader, MAX_LINE_BYTES)
+            .await
+            .expect_err("expected oversized line to be rejected");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_accepts_line_with_newline() {
+        let payload = b"PING\n";
+        let mut reader = BufReader::new(payload.as_slice());
+
+        let line = read_bounded_line(&mut reader, MAX_LINE_BYTES)
+            .await
+            .expect("read should succeed");
+        assert_eq!(line, Some("PING".to_string()));
     }
 }

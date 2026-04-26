@@ -3,20 +3,16 @@
 //! The server accepts client connections, tracks registered character names,
 //! and relays BROADCAST/TARGET messages to the appropriate recipients.
 
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
     sync::{broadcast, Mutex},
     time::{self, Duration},
 };
 use tracing::{debug, info, warn};
 
-use super::{EqbcMessage, MAX_LINE_BYTES};
+use super::{read_bounded_line, EqbcMessage, MAX_LINE_BYTES};
 
 /// Event emitted by the server when a routed command arrives.
 #[derive(Debug, Clone)]
@@ -94,7 +90,7 @@ async fn handle_client(
     event_tx: broadcast::Sender<ServerEvent>,
 ) {
     let (reader, mut writer) = stream.into_split();
-    let mut lines = BufReader::new(reader).lines();
+    let mut reader = BufReader::new(reader);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(64);
     let mut character_name: Option<String> = None;
 
@@ -104,13 +100,9 @@ async fn handle_client(
 
     loop {
         tokio::select! {
-            line = lines.next_line() => {
+            line = read_bounded_line(&mut reader, MAX_LINE_BYTES) => {
                 match line {
                     Ok(Some(raw)) => {
-                        if raw.len() > MAX_LINE_BYTES {
-                            warn!("EQBC oversized line from {addr}, dropping");
-                            continue;
-                        }
                         let Some(msg) = EqbcMessage::parse(&raw) else { continue };
                         match msg {
                             EqbcMessage::Identity { name } => {

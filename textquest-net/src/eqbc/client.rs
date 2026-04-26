@@ -2,14 +2,14 @@
 
 use std::net::SocketAddr;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncWriteExt, BufReader},
     net::TcpStream,
     sync::{broadcast, mpsc},
     time::{self, Duration},
 };
 use tracing::{debug, info, warn};
 
-use super::{EqbcMessage, MAX_LINE_BYTES};
+use super::{read_bounded_line, EqbcMessage, MAX_LINE_BYTES};
 
 /// Events delivered to the owning orchestrator session.
 #[derive(Debug, Clone)]
@@ -50,10 +50,7 @@ impl EqbcClient {
     /// # Errors
     ///
     /// Returns an error if the initial connection cannot be made.
-    pub async fn connect(
-        server_addr: SocketAddr,
-        character_name: String,
-    ) -> anyhow::Result<Self> {
+    pub async fn connect(server_addr: SocketAddr, character_name: String) -> anyhow::Result<Self> {
         let (cmd_tx, cmd_rx) = mpsc::channel::<ClientCommand>(64);
         let (event_tx, _) = broadcast::channel::<ClientEvent>(128);
         let event_tx2 = event_tx.clone();
@@ -112,8 +109,7 @@ async fn run_client(
                 info!("EQBC connected to {server_addr} as {character_name}");
                 let _ = event_tx.send(ClientEvent::Connected);
 
-                if let Err(e) =
-                    session_loop(&character_name, stream, &mut cmd_rx, &event_tx).await
+                if let Err(e) = session_loop(&character_name, stream, &mut cmd_rx, &event_tx).await
                 {
                     warn!("EQBC session ended: {e}");
                 }
@@ -145,11 +141,17 @@ async fn session_loop(
     event_tx: &broadcast::Sender<ClientEvent>,
 ) -> anyhow::Result<()> {
     let (reader, mut writer) = stream.into_split();
-    let mut lines = BufReader::new(reader).lines();
+    let mut reader = BufReader::new(reader);
 
     // Register with the hub
     writer
-        .write_all(EqbcMessage::Identity { name: character_name.to_string() }.encode().as_bytes())
+        .write_all(
+            EqbcMessage::Identity {
+                name: character_name.to_string(),
+            }
+            .encode()
+            .as_bytes(),
+        )
         .await?;
 
     let mut ping_interval = time::interval(Duration::from_secs(30));
@@ -157,14 +159,10 @@ async fn session_loop(
 
     loop {
         tokio::select! {
-            line = lines.next_line() => {
+            line = read_bounded_line(&mut reader, MAX_LINE_BYTES) => {
                 match line? {
                     None => return Ok(()),
                     Some(raw) => {
-                        if raw.len() > MAX_LINE_BYTES {
-                            warn!("EQBC oversized server line, skipping");
-                            continue;
-                        }
                         let Some(msg) = EqbcMessage::parse(&raw) else { continue };
                         match msg {
                             EqbcMessage::Execute { command } => {
