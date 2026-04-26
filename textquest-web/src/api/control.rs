@@ -52,19 +52,7 @@ pub struct CommandResponse {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorResponse {
-    pub error: String,
-}
-
-fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-}
+use crate::error::json_error_pair as json_error;
 
 pub async fn relay_command(
     State(state): State<Arc<AppState>>,

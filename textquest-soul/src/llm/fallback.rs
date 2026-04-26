@@ -781,7 +781,7 @@ mod tests {
                 agreeableness: 0.5,
                 ..Default::default()
             };
-            let text = r.respond_to_player("Dave", "Hey", &traits, MoodState::Neutral);
+            let text = r.respond_to_player("Dave", "Hey", &traits, MoodState::Neutral, &[]);
             if text.contains("Dave") {
                 found_with_name = true;
                 break;

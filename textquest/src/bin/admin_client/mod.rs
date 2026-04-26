@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 use std::io::Read;
+use textquest_common::api_types::ErrorResponse;
 
 pub struct AdminClient {
     base_url: String,
@@ -74,11 +75,6 @@ pub struct BackupRestoreResponse {
     pub session_id: u32,
     pub backup_id: String,
     pub message: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ErrorResponse {
-    pub error: String,
 }
 
 impl AdminClient {

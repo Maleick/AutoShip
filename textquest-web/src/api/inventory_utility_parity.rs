@@ -4,24 +4,12 @@ use std::{
 };
 
 use axum::{Json, extract::State, http::StatusCode};
-use serde::Serialize;
+use textquest_common::api_types::ErrorResponse;
 use textquest_common::inventory_utility::InventoryUtilityConfig;
 
 use crate::AppState;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ErrorResponse {
-    error: String,
-}
-
-fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-}
+use crate::error::json_error_pair as json_error;
 
 fn config_path() -> PathBuf {
     crate::api::textquest_config_path()

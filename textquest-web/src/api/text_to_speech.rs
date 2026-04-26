@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     response::IntoResponse,
 };
@@ -16,7 +16,6 @@ use tokio::sync::RwLock;
 
 use crate::AppState;
 
-use super::json_error;
 
 /// Text-to-speech engine selection.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

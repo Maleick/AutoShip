@@ -69,7 +69,7 @@ impl PageHinkleyDetector {
         let rate = count as f64 / window_min;
 
         // Drain old deaths outside the window
-        while self.deaths.front().map_or(false, |&t| t < cutoff) {
+        while self.deaths.front().is_some_and(|&t| t < cutoff) {
             self.deaths.pop_front();
         }
 

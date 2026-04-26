@@ -86,7 +86,7 @@ fn percentile_sorted(sorted: &[f64], p: f64) -> f64 {
     }
     let n = sorted.len();
     let idx = (p * (n - 1) as f64) as usize;
-    if n % 2 == 0 && p == 0.5 {
+    if n.is_multiple_of(2) && p == 0.5 {
         (sorted[idx] + sorted[(idx + 1).min(n - 1)]) / 2.0
     } else {
         sorted[idx]

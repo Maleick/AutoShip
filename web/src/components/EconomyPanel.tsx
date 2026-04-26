@@ -44,7 +44,9 @@ function SectionHeader({
         {icon}
       </div>
       <div>
-        <h3 className="font-archaic text-lg text-white leading-tight">{title}</h3>
+        <h3 className="font-archaic text-lg text-white leading-tight">
+          {title}
+        </h3>
         {subtitle && (
           <p className="text-[10px] uppercase tracking-widest text-white/40 font-rune">
             {subtitle}
@@ -55,13 +57,7 @@ function SectionHeader({
   );
 }
 
-function FieldRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function FieldRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-white/5">
       <span className="text-xs text-white/60 font-rune uppercase tracking-wide">
@@ -228,13 +224,15 @@ function KronoFarmPanel() {
   const [settings, setSettings] = useState<KronoSettings>({ ...kronoSettings });
   const [saved, setSaved] = useState(false);
 
-  function update<K extends keyof KronoSettings>(key: K, val: KronoSettings[K]) {
+  function update<K extends keyof KronoSettings>(
+    key: K,
+    val: KronoSettings[K],
+  ) {
     setSettings((prev) => ({ ...prev, [key]: val }));
     setSaved(false);
   }
 
   function save() {
-    // TODO: PUT /api/economy/krono-settings
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -313,21 +311,21 @@ function VendorRouteEditor() {
 
   function commitEdit() {
     setRoutes((prev) =>
-      prev.map((r) => (r.id === editId ? ({ ...r, ...editBuf } as VendorRoute) : r))
+      prev.map((r) =>
+        r.id === editId ? ({ ...r, ...editBuf } as VendorRoute) : r,
+      ),
     );
     setEditId(null);
     setEditBuf({});
-    // TODO: PUT /api/economy/vendor-routes/:id
   }
 
   function deleteRoute(id: string) {
     setRoutes((prev) => prev.filter((r) => r.id !== id));
-    // TODO: DELETE /api/economy/vendor-routes/:id
   }
 
   function toggleRoute(id: string) {
     setRoutes((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
+      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)),
     );
   }
 
@@ -342,7 +340,6 @@ function VendorRouteEditor() {
     };
     setRoutes((prev) => [...prev, newRoute]);
     startEdit(newRoute);
-    // TODO: POST /api/economy/vendor-routes
   }
 
   return (
@@ -490,7 +487,7 @@ function VendorRouteEditor() {
                 </button>
               </div>
             </div>
-          )
+          ),
         )}
       </div>
 
@@ -513,12 +510,11 @@ function BankingRulesPanel() {
   function updateRule<K extends keyof BankingRule>(
     id: string,
     key: K,
-    val: BankingRule[K]
+    val: BankingRule[K],
   ) {
     setRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, [key]: val } : r))
+      prev.map((r) => (r.id === id ? { ...r, [key]: val } : r)),
     );
-    // TODO: PUT /api/economy/banking-rules/:id
   }
 
   return (
@@ -531,10 +527,7 @@ function BankingRulesPanel() {
 
       <div className="space-y-4">
         {rules.map((rule) => (
-          <div
-            key={rule.id}
-            className="bg-void/40 border border-white/5 p-4"
-          >
+          <div key={rule.id} className="bg-void/40 border border-white/5 p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="font-archaic text-sm text-white">
                 {rule.item_category}
@@ -551,9 +544,7 @@ function BankingRulesPanel() {
                 </label>
                 <NumberInput
                   value={rule.deposit_threshold}
-                  onChange={(v) =>
-                    updateRule(rule.id, "deposit_threshold", v)
-                  }
+                  onChange={(v) => updateRule(rule.id, "deposit_threshold", v)}
                 />
               </div>
               <div>
@@ -582,14 +573,13 @@ function TradeskillSupplyPanel() {
 
   function toggleSupply(id: string) {
     setSupplies((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
+      prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)),
     );
-    // TODO: PUT /api/economy/tradeskill/:id
   }
 
   function updateQuantity(id: string, qty: number) {
     setSupplies((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, restock_quantity: qty } : s))
+      prev.map((s) => (s.id === id ? { ...s, restock_quantity: qty } : s)),
     );
   }
 

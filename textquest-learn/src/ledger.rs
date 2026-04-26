@@ -7,33 +7,49 @@ use std::path::Path;
 // Schema version for replay bundle compatibility tracking
 const SCHEMA_VERSION: &str = "1.0";
 
-/// Single (state, action, reward, next_state) tuple from replay bundle
+/// Single (state, action, reward, next_state) tuple from replay bundle.
+///
+/// The ledger stores both the canonical compact `state_blob` (binary PC +
+/// engaged-NPC vector) and the higher-level JSON `context` produced at
+/// replay-bundle time. Behavior-cloning training reads `context` because
+/// schema-versioned JSON is what the dataset builder flattens; downstream
+/// RL consumers read `state_blob` for the compact form.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperienceEntry {
     // Identifiers
     pub session_id: String,
     pub timestamp: u64, // ms, session-relative
+    #[serde(default)]
     pub pc_id: String,
 
     // Classification/sharding
     pub class: String,
+    #[serde(default)]
     pub camp_id: String,
 
     // Policy attribution
+    #[serde(default)]
     pub policy_version: String, // commit SHA of orchestrator
 
     // State and action
+    #[serde(default)]
     pub state_blob: Vec<u8>, // compact binary encoding of PC + engaged-NPC vectors
-    pub action: u32,         // discrete action ID
-    pub action_id: String,   // canonical action label ("cast:CH", "med", "pull:<npc>", etc.)
+    /// Schema-versioned context as JSON (preferred by behavior-cloning trainer).
+    #[serde(default)]
+    pub context: serde_json::Value,
+    pub action: u32, // discrete action ID
+    #[serde(default)]
+    pub action_id: String, // canonical action label ("cast:CH", "med", "pull:<npc>", etc.)
 
     // Reward signal
     pub reward: f32, // offline reward; from L-2 spec
 
     // Transition
+    #[serde(default)]
     pub next_state_blob: Vec<u8>, // state at t + Δ
 
     // Episode boundary
+    #[serde(default)]
     pub terminal: bool, // death, zone change, camp break
 }
 
@@ -86,6 +102,11 @@ pub struct ExperienceLedger {
 }
 
 impl ExperienceLedger {
+    /// Load all entries from a JSONL ledger directory (alias of `load_from_path`).
+    pub fn load_from_dir(path: &Path) -> Result<Self> {
+        Self::load_from_path(path)
+    }
+
     /// Load all entries from a JSONL ledger file or directory
     pub fn load_from_path(path: &Path) -> Result<Self> {
         let mut entries = Vec::new();
@@ -156,9 +177,11 @@ impl ExperienceLedger {
     pub fn get_segment(
         &self,
         session_id: &str,
-        start_idx: usize,
-        end_idx: usize,
+        start_idx: u64,
+        end_idx: u64,
     ) -> Vec<&ExperienceEntry> {
+        let start_idx = start_idx as usize;
+        let end_idx = end_idx as usize;
         self.get_entries_for_session(session_id)
             .into_iter()
             .enumerate()
@@ -213,6 +236,7 @@ mod tests {
             camp_id: "camp_a".to_string(),
             policy_version: "abc123def".to_string(),
             state_blob: vec![1, 2, 3, 4],
+            context: serde_json::Value::Null,
             action: 1,
             action_id: action_id.to_string(),
             reward: 10.5,

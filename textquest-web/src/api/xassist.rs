@@ -9,6 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use textquest_common::api_types::ErrorResponse;
 use tokio::sync::RwLock;
 
 use crate::AppState;
@@ -66,11 +67,6 @@ pub fn demo_xassist_configs() -> XAssistConfigs {
         },
     );
     Arc::new(RwLock::new(configs))
-}
-
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
 }
 
 fn json_error(status: StatusCode, message: impl Into<String>) -> AxumResponse {

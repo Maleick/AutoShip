@@ -93,7 +93,7 @@ impl SqliteConfigStore {
 
         let config = stmt
             .query_row(params![character_name, server_name, group_name], |row| {
-                Ok(row.get::<_, String>(0)?)
+                row.get::<_, String>(0)
             })
             .optional()?;
 
@@ -116,7 +116,7 @@ impl SqliteConfigStore {
 
         let groups = stmt
             .query_map(params![character_name, server_name], |row| {
-                Ok(row.get::<_, String>(0)?)
+                row.get::<_, String>(0)
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
@@ -204,6 +204,8 @@ mod tests {
             hp_threshold: None,
             entries: vec![],
             current_step: 0,
+        burn_duration_ticks: None,
+        burn_cooldown_duration_ticks: None,
         }
     }
 

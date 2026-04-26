@@ -42,7 +42,7 @@ mod acceptance_tests {
     /// AC3: Posteriors persist across sessions in `posteriors` table.
     fn ac3_persistence_across_sessions() -> anyhow::Result<()> {
         let store = PosteriorStore::open_memory()?;
-        let mut bb = BetaBinomial::with_prior(50.0, 30.0);
+        let bb = BetaBinomial::with_prior(50.0, 30.0);
 
         // Session 1: Save posterior
         store.save_beta_binomial("warrior_1", "spell_landing", &bb)?;

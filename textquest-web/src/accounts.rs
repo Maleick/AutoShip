@@ -30,7 +30,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::{AppState, api::ErrorResponse};
+use crate::AppState;
+use textquest_common::api_types::ErrorResponse;
 
 type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ErrorResponse>)>;
 
@@ -519,14 +520,7 @@ pub fn router() -> Router<std::sync::Arc<AppState>> {
         .route("/{name}/test", post(test_account))
 }
 
-fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-}
+use crate::error::json_error_pair as json_error;
 
 fn lock_store(
     state: &AppState,

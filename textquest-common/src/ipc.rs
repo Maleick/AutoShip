@@ -3089,7 +3089,7 @@ mod tests {
     #[test]
     fn command_stick_to_roundtrip() {
         use crate::{
-            nav::{StickBreakConditions, StickConfig, StickDistance},
+            nav::{StickConfig, StickDistance},
             protocol::{decode, encode},
         };
         let config = StickConfig {

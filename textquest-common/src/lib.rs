@@ -7,6 +7,8 @@
 #[doc(hidden)]
 pub use paste;
 
+/// Shared HTTP API wire types used across web server, SDK, and admin clients.
+pub mod api_types;
 /// Audio alert configuration, registry, and playback backend scaffolding.
 pub mod audio_alerts;
 /// Voice trigger engine, queue, and operator controls.

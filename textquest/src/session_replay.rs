@@ -1,10 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashMap},
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::{BufWriter, Write},
     path::PathBuf,
     sync::{Mutex, OnceLock},

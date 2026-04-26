@@ -329,6 +329,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         }
     }
 
@@ -352,6 +355,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: Some(positional),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         }
     }
 
@@ -693,7 +699,7 @@ mod tests {
         // Opener and Assassinate both fail; low endurance means Burn also fails
         let selected = rotation::execute_rotations(&mut groups, &ctx);
         assert!(
-            selected.map_or(true, |a| a.entry_name != "Backstab"),
+            selected.is_none_or(|a| a.entry_name != "Backstab"),
             "Backstab must not fire from front"
         );
     }
@@ -718,7 +724,7 @@ mod tests {
 
         let selected = rotation::execute_rotations(&mut groups, &ctx);
         assert!(
-            selected.map_or(true, |a| a.entry_name != "Backstab"),
+            selected.is_none_or(|a| a.entry_name != "Backstab"),
             "Backstab must not fire without a piercer"
         );
     }

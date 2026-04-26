@@ -8,7 +8,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use textquest_common::ipc::AutoRezConfig;
 
 use crate::AppState;
 
@@ -25,20 +24,7 @@ pub struct PutAutoRezConfig {
     pub min_xp_pct: u8,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ErrorResponse {
-    pub error: String,
-}
-
-fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-        .into_response()
-}
+use crate::error::json_error;
 
 /// Get current auto-rez configuration and status.
 pub async fn get_auto_rez(State(state): State<Arc<AppState>>) -> Response {
@@ -93,7 +79,7 @@ pub fn router() -> Router<Arc<AppState>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn hp_threshold_validation() {

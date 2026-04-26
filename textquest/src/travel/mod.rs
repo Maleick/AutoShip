@@ -239,8 +239,8 @@ impl FindRouter {
             return Ok(Some(found));
         }
 
-        if let (Some(graph), Some(zone)) = (zone_graph, current_zone) {
-            if let Some(found) = find_in_adjacent(
+        if let (Some(graph), Some(zone)) = (zone_graph, current_zone)
+            && let Some(found) = find_in_adjacent(
                 &entries,
                 graph,
                 zone,
@@ -248,7 +248,6 @@ impl FindRouter {
             ) {
                 return Ok(Some(found));
             }
-        }
 
         Ok(None)
     }
@@ -303,7 +302,7 @@ impl FindRouter {
             entries.append(&mut file_items);
         }
 
-        entries.sort_by(|a, b| normalize_name(&a.definition.name).cmp(&normalize_name(&b.definition.name)));
+        entries.sort_by_key(|a| normalize_name(&a.definition.name));
         Ok(entries)
     }
 }

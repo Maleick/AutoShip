@@ -28,6 +28,10 @@ credentials.db*
 # Playwright MCP
 .playwright-mcp/
 
+# fastembed model cache (downloaded at runtime; never commit, ~130MB)
+.fastembed_cache/
+**/.fastembed_cache/
+
 # Local Claude workspace artifacts (runtime, not config)
 .claude/worktrees/
 logs/

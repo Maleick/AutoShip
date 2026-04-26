@@ -22,6 +22,22 @@ pub(crate) fn demo_app_state() -> Arc<AppState> {
     demo_app_state_with_snapshot(&live_name)
 }
 
+/// Like `demo_app_state` but with auth enabled and a fixed token.
+pub(crate) fn demo_app_state_with_auth(token: &str) -> Arc<AppState> {
+    let live_name = format!("test-live-sessions-{}.json", uuid::Uuid::new_v4());
+    let arc = demo_app_state_with_snapshot(&live_name);
+    // Rebuild as a fresh Arc so the inner fields can be overridden where needed.
+    // Since auth_disabled and api_token are plain values (not Mutex/RwLock),
+    // construct a new state via the helper and patch via Arc::try_unwrap.
+    let mut state = match Arc::try_unwrap(arc) {
+        Ok(s) => s,
+        Err(_) => unreachable!("demo_app_state_with_snapshot returned shared Arc"),
+    };
+    state.auth_disabled = false;
+    state.api_token = Some(token.to_string());
+    Arc::new(state)
+}
+
 pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
     let admin_name = format!("test-admin-sessions-{name}");
     let (event_tx, _) = tokio::sync::broadcast::channel::<String>(8);
@@ -86,5 +102,17 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
         session_logs_owner: tokio::sync::RwLock::new(HashMap::new()),
+        raid_config: tokio::sync::RwLock::new(api::RaidConfig::default()),
+        raid_config_path: std::env::temp_dir().join(format!(
+            "textquest-test-raid-{}.toml",
+            uuid::Uuid::new_v4()
+        )),
+        raid_config_write_lock: tokio::sync::Mutex::new(()),
+        sound_config: tokio::sync::RwLock::new(api::sound::SoundConfig::default()),
+        text_to_speech_state: Arc::new(api::text_to_speech::TextToSpeechState::default()),
+        self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::default()),
+        suggestion_state: Arc::new(api::suggestions::SuggestionState::default()),
+        config_change_history: tokio::sync::RwLock::new(Vec::new()),
+        last_config_change: tokio::sync::RwLock::new(None),
     })
 }

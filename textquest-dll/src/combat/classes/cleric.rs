@@ -544,6 +544,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         assert!(!cleric.should_assist(&ctx));
     }
@@ -573,6 +576,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -604,6 +610,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -635,6 +644,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         assert!(cleric.select_spell(&ctx).is_none());
@@ -660,6 +672,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         assert!(cleric.should_cancel_heal(&ctx));
     }
@@ -684,6 +699,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         assert!(!cleric.should_cancel_heal(&ctx));
     }
@@ -726,6 +744,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -771,6 +792,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -814,6 +838,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -855,6 +882,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         // In combat with everyone healthy — should return None (med)
@@ -887,6 +917,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
@@ -931,6 +964,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -965,6 +1001,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(cleric.select_target(&ctx), Some(11));
@@ -1017,6 +1056,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(cleric.select_spell(&ctx).unwrap().name, "Radiant Cure");
@@ -1061,6 +1103,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         // Emergency heal fires before cure — keeping the member alive is
@@ -1105,6 +1150,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -1146,6 +1194,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -1288,6 +1339,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -1333,6 +1387,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         assert!(cleric.select_spell(&ctx).is_none());

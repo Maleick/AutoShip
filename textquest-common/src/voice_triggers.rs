@@ -246,7 +246,9 @@ impl VoiceMatch {
 /// Predicate tree for built-in and custom triggers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum VoicePredicate {
+    #[default]
     Always,
     AllOf { conditions: Vec<VoicePredicate> },
     AnyOf { conditions: Vec<VoicePredicate> },
@@ -265,11 +267,6 @@ pub enum VoicePredicate {
     IdleTooLong { seconds: u64 },
 }
 
-impl Default for VoicePredicate {
-    fn default() -> Self {
-        Self::Always
-    }
-}
 
 impl VoicePredicate {
     #[must_use]
@@ -658,6 +655,7 @@ impl TtsCoalescer {
 
 /// Queue that applies debouncing and priority ordering.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct VoiceQueue {
     heap: BinaryHeap<QueuedVoiceAlert>,
     debouncer: HashMap<VoiceTriggerId, Instant>,
@@ -672,16 +670,6 @@ pub enum VoiceQueueOutcome {
     DroppedAmbientBusy,
 }
 
-impl Default for VoiceQueue {
-    fn default() -> Self {
-        Self {
-            heap: BinaryHeap::new(),
-            debouncer: HashMap::new(),
-            coalescer: TtsCoalescer::default(),
-            sequence: 0,
-        }
-    }
-}
 
 impl VoiceQueue {
     #[must_use]
@@ -942,7 +930,7 @@ fn redact_privacy(text: &str) -> String {
 
 fn trim_clause(text: &str) -> String {
     text.trim()
-        .trim_end_matches(|ch| matches!(ch, '.' | '!' | '?'))
+        .trim_end_matches(['.', '!', '?'])
         .trim()
         .to_string()
 }

@@ -336,6 +336,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         }
     }
 
@@ -580,6 +583,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
@@ -623,6 +629,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
@@ -679,6 +688,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
@@ -723,6 +735,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)

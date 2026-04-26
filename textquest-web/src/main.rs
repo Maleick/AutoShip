@@ -40,6 +40,7 @@ use textquest::{alerts::AlertStore, config::AlertingConfig};
 mod accounts;
 mod api;
 mod dll_ws;
+mod error;
 mod live_ipc;
 #[cfg(test)]
 mod test_support;
@@ -104,8 +105,8 @@ pub struct AppState {
     pub spawn_alerts: Arc<api::spawn_alerts::SpawnAlertState>,
     /// In-memory vendor item watch configuration and alert history.
     pub vendor_watch_state: Arc<api::vendor_watch::VendorWatchState>,
-    /// Inventory-utility parity pack config for RedGuides extension mappings,
-    /// rule editing, and legacy provenance reporting.
+    /// Inventory-utility parity pack config for RedGuides extension mappings
+    /// and rule editing.
     pub inventory_utility_parity:
         tokio::sync::RwLock<textquest_common::inventory_utility::InventoryUtilityConfig>,
     /// Disk location where the inventory-utility parity config persists.
@@ -1083,6 +1084,11 @@ mod tests {
             ),
             session_control_state: api::session_control::SessionControlState::new(),
             session_logs: tokio::sync::RwLock::new(HashMap::new()),
+            session_logs_owner: tokio::sync::RwLock::new(HashMap::new()),
+            self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::default()),
+            suggestion_state: Arc::new(api::suggestions::SuggestionState::default()),
+            config_change_history: tokio::sync::RwLock::new(Vec::new()),
+            last_config_change: tokio::sync::RwLock::new(None),
         })
     }
 

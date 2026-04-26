@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn registry_no_match() {
-        let mut reg = RewardRegistry::new();
+        let reg = RewardRegistry::new();
         let found = reg.get("paladin", "unknown");
         assert!(found.is_none());
     }

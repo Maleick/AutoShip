@@ -56,20 +56,7 @@ pub struct PutAutoCampConfig {
     pub afk_timeout_minutes: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ErrorResponse {
-    pub error: String,
-}
-
-fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-        .into_response()
-}
+use crate::error::json_error;
 
 /// Get current auto-camp configuration and status.
 pub async fn get_auto_camp(State(_state): State<Arc<AppState>>) -> Response {

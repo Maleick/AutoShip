@@ -341,6 +341,7 @@ mod tests {
     async fn put_alert_config_updates_state_and_logs_audit_alert() {
         let state = test_state();
         let mut updated = AlertingConfig {
+            audio: Default::default(),
             enable_discord: true,
             enable_email: true,
             discord_webhook_url: "https://discord.example/webhook".into(),

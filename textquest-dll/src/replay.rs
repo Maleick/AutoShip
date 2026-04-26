@@ -181,9 +181,14 @@ struct TrackedNpc {
     last_seen_ms: u64,
 }
 
-#[derive(Debug)]
 struct EventWriter {
     encoder: zstd::stream::write::Encoder<'static, File>,
+}
+
+impl std::fmt::Debug for EventWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EventWriter").finish_non_exhaustive()
+    }
 }
 
 impl EventWriter {
@@ -645,8 +650,8 @@ impl ReplayRecorder {
         PcState {
             character_id: spawn.spawn_id,
             hp: clamp_to_u32(spawn.hp_current),
-            mana: clamp_to_u32(spawn.mana_current),
-            end: clamp_to_u32(spawn.endurance_current),
+            mana: clamp_to_u32(i64::from(spawn.mana_current)),
+            end: clamp_to_u32(i64::from(spawn.endurance_current)),
             x: spawn.x,
             y: spawn.y,
             z: spawn.z,

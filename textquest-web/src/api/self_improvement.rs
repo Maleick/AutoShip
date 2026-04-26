@@ -88,11 +88,10 @@ impl SelfImprovementState {
     /// Record a raw session event.
     pub async fn record_event(&self, session_id: u32, event: SessionEvent) -> Result<(), String> {
         let mut events = self.events.write().await;
-        if !events.contains_key(&session_id) && events.len() >= MAX_TRACKED_SESSIONS {
-            if let Some(oldest_session_id) = events.keys().copied().min() {
+        if !events.contains_key(&session_id) && events.len() >= MAX_TRACKED_SESSIONS
+            && let Some(oldest_session_id) = events.keys().copied().min() {
                 events.remove(&oldest_session_id);
             }
-        }
 
         let session_events = events.entry(session_id).or_insert_with(Vec::new);
         if session_events.len() >= MAX_EVENTS_PER_SESSION {
@@ -111,15 +110,14 @@ impl SelfImprovementState {
     /// Record suggestion.
     pub async fn add_suggestion(&self, suggestion: ImprovementSuggestion) {
         let mut suggestions = self.suggestions.write().await;
-        if suggestions.len() >= MAX_SUGGESTIONS && !suggestions.contains_key(&suggestion.id) {
-            if let Some(oldest_suggestion_id) = suggestions
+        if suggestions.len() >= MAX_SUGGESTIONS && !suggestions.contains_key(&suggestion.id)
+            && let Some(oldest_suggestion_id) = suggestions
                 .iter()
                 .min_by_key(|(_id, suggestion)| suggestion.created_at)
                 .map(|(id, _suggestion)| id.clone())
             {
                 suggestions.remove(&oldest_suggestion_id);
             }
-        }
         suggestions.insert(suggestion.id.clone(), suggestion);
     }
 
@@ -141,11 +139,10 @@ impl SelfImprovementState {
     /// Update session metrics.
     pub async fn set_session_metrics(&self, session_id: u32, metrics: SessionMetrics) {
         let mut all_metrics = self.metrics.write().await;
-        if !all_metrics.contains_key(&session_id) && all_metrics.len() >= MAX_TRACKED_SESSIONS {
-            if let Some(oldest_session_id) = all_metrics.keys().copied().min() {
+        if !all_metrics.contains_key(&session_id) && all_metrics.len() >= MAX_TRACKED_SESSIONS
+            && let Some(oldest_session_id) = all_metrics.keys().copied().min() {
                 all_metrics.remove(&oldest_session_id);
             }
-        }
         all_metrics.insert(session_id, metrics);
     }
 }

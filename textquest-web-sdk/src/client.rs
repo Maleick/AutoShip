@@ -280,7 +280,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,
@@ -490,7 +493,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,
@@ -552,7 +558,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,
@@ -571,7 +580,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,
@@ -733,7 +745,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,
@@ -774,7 +789,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::CREATED => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,
@@ -817,7 +835,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,
@@ -856,7 +877,10 @@ impl Client {
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
             status => {
-                let error = response.text().await.unwrap_or_default();
+                let error = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read error body>".to_string());
                 Err(Error::ApiError {
                     status: status.as_u16(),
                     message: error,

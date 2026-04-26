@@ -903,7 +903,7 @@ fn dbscan_clusters(
         while let Some(next_idx) = queue.pop() {
             if !visited[next_idx] {
                 visited[next_idx] = true;
-                let mut next_neighbors = region_query(groups, next_idx, eps);
+                let next_neighbors = region_query(groups, next_idx, eps);
                 if next_neighbors.len() + 1 >= min_samples {
                     queue.extend(next_neighbors);
                     queue.sort_unstable();

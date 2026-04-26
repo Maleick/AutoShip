@@ -8085,13 +8085,19 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "clap",
+ "ndarray 0.16.1",
  "rand 0.9.4",
+ "rusqlite",
  "serde",
  "serde_json",
  "serde_yaml",
  "siphasher",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -65,20 +65,7 @@ pub struct PutParanoidConfig {
     pub check_spawn_patterns: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ErrorResponse {
-    pub error: String,
-}
-
-fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-        .into_response()
-}
+use crate::error::json_error;
 
 /// Get current paranoid configuration and status.
 pub async fn get_paranoid(State(_state): State<Arc<AppState>>) -> Response {

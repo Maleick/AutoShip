@@ -384,7 +384,7 @@ mod tests {
     async fn list_admin_sessions_rejects_unauthenticated_access() {
         use axum::{
             body::Body,
-            http::{Request, StatusCode, header},
+            http::{Request, StatusCode},
         };
         use tower::ServiceExt;
 
@@ -413,18 +413,11 @@ mod tests {
     async fn list_admin_sessions_accepts_valid_token() {
         use axum::{
             body::Body,
-            http::{Request, StatusCode, header},
+            http::{Request, StatusCode},
         };
         use tower::ServiceExt;
 
-        let state = crate::test_support::demo_app_state();
-        // Override auth to require a token (not disabled)
-        let state = Arc::new({
-            let mut s = (*state).clone();
-            s.auth_disabled = false;
-            s.api_token = Some("test-secret-token".to_string());
-            s
-        });
+        let state = crate::test_support::demo_app_state_with_auth("test-secret-token");
         let app = router().with_state(state);
 
         let response = app

@@ -175,22 +175,7 @@ impl Default for AutoGroupState {
     }
 }
 
-// ── Error helpers ─────────────────────────────────────────────────────────────
-
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
-    error: String,
-}
-
-fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-        .into_response()
-}
+use crate::error::json_error;
 
 // ── Request / response types ──────────────────────────────────────────────────
 
@@ -373,69 +358,13 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
-    use std::sync::Mutex;
-    use tokio::sync::{RwLock, broadcast};
+    
+    use tokio::sync::broadcast;
     use tower::ServiceExt;
 
     fn make_test_state() -> Arc<AppState> {
-        let (event_tx, _) = broadcast::channel::<String>(8);
-        Arc::new(AppState {
-            event_tx,
-            account_store: Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: RwLock::new(crate::api::demo_character_configs()),
-            character_config_path: std::env::temp_dir().join("tq-test-cfg.json"),
-            character_config_write_lock: tokio::sync::Mutex::new(()),
-            chat_log_write_lock: tokio::sync::Mutex::new(()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
-            player_watch_config: RwLock::new(crate::api::PlayerWatchConfig::default()),
-            player_watch_write_lock: tokio::sync::Mutex::new(()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            vendor_watch_state: crate::api::vendor_watch::VendorWatchState::new_demo(),
-            timestamp_configs: RwLock::new(std::collections::HashMap::new()),
-            timestamp_config_write_lock: tokio::sync::Mutex::new(()),
-            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
-            alert_store: textquest::alerts::AlertStore::open_memory().expect("alert store"),
-            alert_config: RwLock::new(textquest::config::AlertingConfig::default()),
-            alerting_config_path: std::env::temp_dir()
-                .join(format!("tq-test-alerting-{}.toml", uuid::Uuid::new_v4())),
-            api_token: None,
-            auth_disabled: true, // Tests bypass auth
-            live_session_snapshot_path: std::env::temp_dir().join("tq-test-sessions.json"),
-            admin_session_snapshot_path: std::env::temp_dir().join("tq-test-admin-sessions.json"),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
-            say_detection: Some(Arc::new(
-                crate::api::say_detection::SayDetectionState::new_demo(),
-            )),
-            session_controls: RwLock::new(std::collections::HashMap::new()),
-            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
-            tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
-            auto_group_settings: tokio::sync::RwLock::new(
-                textquest_common::auto_group::AutoGroupSettings::default(),
-            ),
-            auto_group_config_path: std::env::temp_dir().join("tq-test-auto-group.json"),
-            auto_group_state: AutoGroupState::new_demo(),
-            inventory_utility_parity: tokio::sync::RwLock::new(
-                textquest_common::inventory_utility::InventoryUtilityConfig::default(),
-            ),
-            inventory_utility_parity_path: std::env::temp_dir()
-                .join("tq-test-inventory-utility.json"),
-            inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
-            extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
-                std::env::temp_dir().join(format!(
-                    "textquest-auto-group-test-extension-catalog-{}.json",
-                    uuid::Uuid::new_v4()
-                )),
-            ),
-            session_logs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
-            session_control_state: crate::api::session_control::SessionControlState::new(),
-        })
+        let (_event_tx, _) = broadcast::channel::<String>(8);
+        crate::test_support::demo_app_state()
     }
 
     async fn json_response(router: Router, req: Request<Body>) -> (StatusCode, Value) {

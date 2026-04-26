@@ -48,6 +48,7 @@ use std::{
     path::{Path as StdPath, PathBuf},
     sync::{Arc, OnceLock},
 };
+use textquest_common::api_types::ErrorResponse;
 use textquest::chat_log::{
     ChatChannel, ChatLogConfig as CoreChatLogConfig, LogLevel, RotationStrategy,
 };
@@ -76,6 +77,7 @@ pub struct RaidGroup {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
+#[derive(Default)]
 pub struct ChChainConfig {
     pub enabled: bool,
     pub target: Option<String>,
@@ -103,16 +105,6 @@ impl Default for RaidGroup {
     }
 }
 
-impl Default for ChChainConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            target: None,
-            cleric_order: Vec::new(),
-            interval_ms: 0,
-        }
-    }
-}
 
 impl Default for RaidConfig {
     fn default() -> Self {
@@ -253,11 +245,6 @@ pub fn mount_admin_sessions(
     router: axum::Router<std::sync::Arc<AppState>>,
 ) -> axum::Router<std::sync::Arc<AppState>> {
     router.nest("/admin/sessions", admin_sessions::router())
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ErrorResponse {
-    pub error: String,
 }
 
 fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
@@ -2435,6 +2422,7 @@ mod tests {
                 &["Arcane Fury", "Hero's Fortitude"],
                 180,
             )),
+            improve_auto_promote: None,
         };
         let Json(saved) =
             put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))

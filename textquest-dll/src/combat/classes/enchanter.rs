@@ -702,6 +702,9 @@ mod tests {
             target_is_mezzed: target.is_some_and(strategy::is_mezzed),
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         }
     }
 
@@ -1097,6 +1100,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         let status = ctx.pet_status();
         assert!(
@@ -1127,6 +1133,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         let status = ctx.pet_status();
         assert!(!status.has_pet(), "no MyPet slot means charm is broken");
@@ -1195,6 +1204,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         assert_eq!(
             pet_attack_action(&ctx),
@@ -1247,6 +1259,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
             positional: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         assert_eq!(
             pet_attack_action(&ctx),

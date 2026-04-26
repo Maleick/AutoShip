@@ -13,7 +13,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 
@@ -121,17 +121,17 @@ async fn put_config(
         )
             .into_response();
     }
-    // TODO: persist via the orchestrator config layer and restart transport
+    // FIXME: not persisted; orchestrator config layer + transport restart wiring still pending
     (StatusCode::OK, Json(body)).into_response()
 }
 
 async fn get_peers(_state: State<TransportAppState>) -> Json<Vec<PeerView>> {
-    // TODO: wire to live EQBC peer list + DanNet peer registry
+    // FIXME: returns empty until wired to live EQBC peer list + DanNet peer registry
     Json(vec![])
 }
 
 async fn get_vitals(_state: State<TransportAppState>) -> Json<Vec<VitalsView>> {
-    // TODO: wire to VitalsRegistry snapshot
+    // FIXME: returns empty until wired to VitalsRegistry snapshot
     Json(vec![])
 }
 
@@ -139,7 +139,7 @@ async fn post_bc(
     _state: State<TransportAppState>,
     Json(body): Json<BcRequest>,
 ) -> impl IntoResponse {
-    // TODO: forward to EqbcClient::bc()
+    // FIXME: logs only; forward to EqbcClient::bc() not yet wired
     tracing::info!("API /bc: {}", body.command);
     StatusCode::ACCEPTED
 }
@@ -148,7 +148,7 @@ async fn post_bct(
     _state: State<TransportAppState>,
     Json(body): Json<BctRequest>,
 ) -> impl IntoResponse {
-    // TODO: forward to EqbcClient::bct()
+    // FIXME: logs only; forward to EqbcClient::bct() not yet wired
     tracing::info!("API /bct {} -> {}", body.target, body.command);
     StatusCode::ACCEPTED
 }
@@ -157,7 +157,7 @@ async fn post_dgae(
     _state: State<TransportAppState>,
     Json(body): Json<DgaeRequest>,
 ) -> impl IntoResponse {
-    // TODO: forward to DanNetNode::dgae() or dggaexecute()
+    // FIXME: logs only; forward to DanNetNode::dgae() / dggaexecute() not yet wired
     tracing::info!("API /dgae {:?}: {}", body.group, body.command);
     StatusCode::ACCEPTED
 }

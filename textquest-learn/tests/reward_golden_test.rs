@@ -34,7 +34,7 @@ clamp: [-1.0, 1.0]
     signals.insert("antidetect.risk_score".into(), 0.0);
 
     let reward = cfg.evaluate(&signals).expect("should evaluate");
-    let expected = 0.7 * 0.8 + 0.2 * 0.9 + (-1.0) * 0.0; // 0.56 + 0.18 = 0.74
+    let expected = 0.7 * 0.8 + 0.2 * 0.9 + -0.0; // 0.56 + 0.18 = 0.74
     assert!((reward - expected).abs() < 1e-6);
 
     // Scenario 2: bad encounter with ban risk
@@ -43,7 +43,7 @@ clamp: [-1.0, 1.0]
     signals.insert("antidetect.risk_score".into(), 0.5);
 
     let reward = cfg.evaluate(&signals).expect("should evaluate");
-    let expected = (0.7 * 0.1 + 0.2 * 0.2 + (-1.0) * 0.5).clamp(-1.0, 1.0); // 0.07 + 0.04 - 0.5 = -0.39
+    let expected: f32 = (0.7_f32 * 0.1 + 0.2 * 0.2 + -0.5).clamp(-1.0, 1.0); // 0.07 + 0.04 - 0.5 = -0.39
     assert!((reward - expected).abs() < 1e-6);
 }
 
@@ -83,7 +83,7 @@ clamp: [-1.0, 1.0]
     signals.insert("antidetect.risk_score".into(), 0.0);
 
     let reward = cfg.evaluate(&signals).expect("should evaluate");
-    let expected = 0.6 * 1.0 + 0.2 * 0.9 + (-0.1) * 0.1 + (-1.0) * 0.0; // 0.6 + 0.18 - 0.01 = 0.77
+    let expected = 0.6 * 1.0 + 0.2 * 0.9 + (-0.1) * 0.1 + -0.0; // 0.6 + 0.18 - 0.01 = 0.77
     assert!((reward - expected).abs() < 1e-6);
 
     // Scenario 2: poor healing with overheal spam
