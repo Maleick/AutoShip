@@ -726,8 +726,6 @@ fn build_api_router() -> Router<Arc<AppState>> {
             put(api::update_vendor_route).delete(api::delete_vendor_route),
         )
         .route("/economy/wealth", get(api::get_wealth))
-        .route("/soul", get(api::soul::list_soul_states))
-        .route("/soul/{character_id}", get(api::soul::get_soul_state))
         .nest("/alerts", api::alerts::router())
         .nest("/suggestions", api::suggestions::router())
         .route(
@@ -1071,6 +1069,38 @@ mod tests {
 
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(body["error"], "API route not found");
+    }
+
+    #[tokio::test]
+    async fn soul_debrief_post_route_is_reachable() {
+        let app = build_app(build_test_app_state());
+        let payload = json!({
+            "session_id": "session-123",
+            "character_id": 42u64,
+            "wins": ["Held aggro on pull"],
+            "losses": ["Late taunt swap once"],
+            "suggestions": ["Use taunt on cooldown"],
+            "duration_secs": 900u64,
+            "damage_dealt": 45000u64,
+            "damage_taken": 21000u64,
+            "mobs_defeated": 18u32,
+            "deaths": 1u32,
+            "created_at": "2026-04-25T00:00:00Z"
+        });
+
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .method("POST")
+                .uri("/api/soul/debrief")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "debrief_received");
     }
 
     #[tokio::test]
