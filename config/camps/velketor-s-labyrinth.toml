@@ -1,0 +1,220 @@
+#==============================================================================
+# Velketor's Labyrinth — General Labyrinth Camp Configuration
+#==============================================================================
+# Issue: #3365 — Define Velketor's Labyrinth safe spots, pull points, and route
+# Parent: #1774 — Camp config leaf: Velketor's Labyrinth
+# Related: config/camps/velketors_labyrinth_frenzy.toml (#1720, 57-59 bracket)
+#
+# Zone Context:
+# - Zone: Velketor's Labyrinth (Velious era, level 55+ general labyrinth route)
+# - Entry: Great Divide at approximately (-6770, +3130); exit at (581, -65)
+# - No levitation — slippery ledges, pit traps, narrow corridors throughout
+# - Mobs: Giant spiders (see-invis, rogues), geonids, snowdrift golems, Icepaw kobolds
+# - All mobs in the labyrinth section are blue to level 58-60
+# - Trains are common; aggro radius is inconsistent on slippery ramp geometry
+#
+# Safe Spots (documented in comments — schema gap, see issue #1900):
+#
+#   safe_spot_entrance:
+#     coords: [240.0, -20.0, 0.0]
+#     notes: Wide hallway just inside the zone entrance; no wanderers,
+#            low aggro risk. Primary safe med point for zone entry and
+#            full wipe recovery. Recommended for initial group staging.
+#
+#   safe_spot_mid_hall:
+#     coords: [310.0, 15.0, 0.0]
+#     notes: Mid-corridor alcove between the entrance safe area and the
+#            first spider pocket. Wall indent keeps group off roam paths.
+#            Preferred med point for sustained labyrinth pulls.
+#
+#   safe_spot_upper_alcove:
+#     coords: [370.0, 35.0, -10.0]
+#     notes: Elevated alcove above the first geonid cluster. Requires
+#            careful positioning to avoid the pit drop to the east.
+#            Used as a secondary med point for mid-zone pulls only.
+#
+# Pull Points (documented in comments — schema gap, see issue #1900):
+#
+#   pull_point_entrance_corner:
+#     coords: [280.0, 10.0, 0.0]
+#     notes: First turn inside zone entrance. LOS handoff from entrance mobs
+#            that keeps pulls contained to the entry hall without widening
+#            into the mid-corridor spider pocket.
+#
+#   pull_point_mid_corridor:
+#     coords: [345.0, 30.0, 0.0]
+#     notes: Mid-corridor choke between the entrance hallway and the geonid
+#            shelf. Primary pull handoff for the main labyrinth loop. Mobs
+#            reset back into the corridor, not the pit.
+#
+#   pull_point_geonid_shelf:
+#     coords: [390.0, 50.0, 0.0]
+#     notes: Edge of the geonid shelf above the spider ramp. LOS handoff for
+#            geonid pulls only. Do not use for spider pulls — rogue spiders
+#            backstab at this position before reaching the camp anchor.
+#
+# Safe-Spot Recovery Behavior:
+#   1. On wipe: all members gate to bind point and return to zone entrance.
+#   2. Stage at safe_spot_entrance [240.0, -20.0, 0.0] — fully rebuff here.
+#   3. Re-buff rotation: cleric CH chain + shaman slow before advancing.
+#   4. Advance one waypoint at a time (see route below); clear incrementally.
+#   5. Do not advance past safe_spot_mid_hall until the entry hall is clear.
+#   6. Abort and reset if a train forms — do not try to outrun in the labyrinth.
+#   return_no_aggro = true enforces this at the engine level.
+#
+# 6-Waypoint Route: labyrinth_main_loop
+# (documented in comments — schema gap for runtime routing, see issue #1900)
+#
+#   waypoint[0] — zone_entry_staging:
+#     coords: [240.0, -20.0, 0.0]
+#     notes: Zone entry safe staging area. Group assembles here after zone-in.
+#            Clear any wandering entrance mobs before advancing.
+#
+#   waypoint[1] — entrance_corner_pull:
+#     coords: [280.0, 10.0, 0.0]
+#     notes: First LOS corner. Puller aggros entrance hall mobs and snaps
+#            to this corner for tank intercept. Keep group back at waypoint[0].
+#
+#   waypoint[2] — mid_hall_med_anchor:
+#     coords: [310.0, 15.0, 0.0]
+#     notes: Primary med anchor for the main loop. Group sits here while
+#            puller cycles entrance and first geonid pockets. Wall alcove
+#            keeps the stack off the roam corridor.
+#
+#   waypoint[3] — mid_corridor_pull_handoff:
+#     coords: [345.0, 30.0, 0.0]
+#     notes: Pull handoff for the mid-corridor spider and geonid cluster.
+#            Puller chains this point back to waypoint[2] for each pull.
+#            Abort to waypoint[2] if a second mob adds during the pull.
+#
+#   waypoint[4] — geonid_shelf_edge:
+#     coords: [390.0, 50.0, 0.0]
+#     notes: Outer edge of the geonid shelf. Puller advances here only after
+#            mid-corridor is clear. Do not pull spiders from this position —
+#            rogue backstabs land before the tank can intercept. Geonids only.
+#
+#   waypoint[5] — upper_alcove_reset:
+#     coords: [370.0, 35.0, -10.0]
+#     notes: Upper alcove reset point. If a pull goes wide or a geonid
+#            social-aggroes past waypoint[4], snap the group here for a
+#            controlled reset. Has LOS back to waypoint[2] for retreat.
+#            Do not advance further east — pit drop zone begins at (420, 60).
+#
+#==============================================================================
+
+name = "velketor-s-labyrinth"
+zone = "velketor"
+
+#==============================================================================
+# Camp Layout
+#==============================================================================
+
+# Primary camp anchor: mid-hallway alcove at the safe med point between the
+# entrance corridor and first spider/geonid pockets. Keeps the 6-box stack
+# off roam paths and away from the pit drop east of this position.
+# Corresponds to waypoint[2] — mid_hall_med_anchor in the main loop route.
+camp_center = [310.0, 15.0, 0.0]
+
+# Primary pull handoff: mid-corridor choke point at the edge of the geonid
+# approach. Puller snaps mobs here for tank intercept. Corresponds to
+# waypoint[3] — mid_corridor_pull_handoff.
+pull_point = [345.0, 30.0, 0.0]
+
+# Pull radius covers the entrance hall, first spider pockets, and the near
+# geonid cluster. Does not extend to the geonid shelf or pit zone (>420, 60).
+pull_radius = 150
+
+# Tight camp radius to keep the 6-box stack in the alcove and off the corridor
+# roam path. Expand only if the group has established full corridor control.
+camp_radius = 30
+
+# Leash radius long enough to recover bad pulls back into the entrance corridor,
+# short enough to drop before the pit drop zone or Frenzy shelf boundary.
+leash_radius = 120
+
+#==============================================================================
+# Mana Thresholds
+#==============================================================================
+
+# Rest until healer reaches 70% mana. Labyrinth spiders backstab and hit hard;
+# allow full recovery after rogue-heavy pulls before initiating the next cycle.
+rest_mana_pct = 70
+
+# Do not pull below 45% mana. Geonid/spider clusters can chain-social and
+# the hallway geometry limits kiting — healer needs a buffer for spike pulls.
+pull_mana_pct = 45
+
+#==============================================================================
+# Level Range
+#==============================================================================
+
+# Level 55-60: General labyrinth route. All mobs blue to 58+; accessible
+# from 55 with a solid group comp (tank + healer + ADPS support).
+# Transition to velketors_labyrinth_frenzy at 57+ for better XP density.
+level_range = [55, 60]
+
+#==============================================================================
+# Pull Targets
+#==============================================================================
+
+pull_mob_names = [
+  "a blizzard spider",
+  "a blizzard hunter",
+  "a crystalline hunter",
+  "a crystalline watcher",
+  "a shard spider",
+  "a velium broodling",
+  "a velium stalker",
+  "a geonid",
+  "a snowdrift golem",
+  "an Icepaw kobold",
+  "an Icepaw kobold warrior",
+  "an Icepaw kobold priest",
+  "an Icepaw champion",
+]
+
+#==============================================================================
+# Protected Mobs — Do Not Engage
+#==============================================================================
+# Named mobs, bosses, or faction-critical spawns outside this camp's scope.
+
+ignore_mob_names = [
+  "Bled",                          # Golem pocket out of scope; summons and respawns
+  "Bledrek",                       # Hard-stop; never extend pulls toward golem pocket
+  "Gregendek Icepaw",              # CH-capable cleric; upper-dogs area out of scope
+  "Jelek Icepaw",                  # Upper-dogs area; optional with active driver only
+  "Khelkar Icepaw",                # Upper-dogs area; ramp-down room out of scope
+  "Lord Doljonijiarnimorinar",      # Level 65 undead lord; hard-stop
+  "The Brood Master",              # Named boss; out of scope for this camp
+  "The Brood Mother",              # Named boss; out of scope for this camp
+  "Tpos Icepaw",                   # Upper-dogs shadowknight; optional named only
+  "Velketor the Sorcerer",         # Zone boss; never engaged
+]
+
+#==============================================================================
+# Burn List — Named Rare Spawns (Harvest on Sight)
+#==============================================================================
+
+burn_mob_names = [
+  "a Frenzied Velium Broodling",  # Frenzied variant; rare named on the Frenzy shelf
+  "a Frenzied Velium Stalker",    # Frenzied variant; rare named on the Frenzy shelf
+  "Crystal Eyes",                 # Named spider; spawn at approximately (479, 2)
+]
+
+#==============================================================================
+# Return Behavior
+#==============================================================================
+
+# Do not auto-snap puller to camp while carrying live aggro. Velketor's
+# slippery ramps and pit traps make forced returns catastrophic — a
+# returning puller with hot mobs will wipe the med stack or cascade into
+# the protected geonid shelf.
+return_no_aggro = true
+
+#==============================================================================
+# Progression Chain
+#==============================================================================
+
+# Advance to the Frenzy camp configuration when the group reaches 57+.
+# Frenzy provides better XP density on the spider shelf for fully geared groups.
+next_camp = "velketors_labyrinth_frenzy"
