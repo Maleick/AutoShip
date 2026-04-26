@@ -3,7 +3,7 @@
 use std::{path::Path, sync::Mutex};
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 
 /// Schema for the fleet metrics database.
 ///
@@ -445,11 +445,7 @@ impl MetricsStore {
     }
 
     /// Load recent XP sessions for a character (newest first).
-    pub fn recent_xp_sessions(
-        &self,
-        character: &str,
-        limit: u32,
-    ) -> Result<Vec<XpSessionRow>> {
+    pub fn recent_xp_sessions(&self, character: &str, limit: u32) -> Result<Vec<XpSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
@@ -517,11 +513,7 @@ impl MetricsStore {
     }
 
     /// Load recent kill sessions for a character (newest first).
-    pub fn recent_kill_sessions(
-        &self,
-        character: &str,
-        limit: u32,
-    ) -> Result<Vec<KillSessionRow>> {
+    pub fn recent_kill_sessions(&self, character: &str, limit: u32) -> Result<Vec<KillSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
@@ -588,13 +580,23 @@ impl MetricsStore {
 
         let avg_pph: Option<f64> = conn
             .query_row(
-                "SELECT AVG(CAST(amount AS REAL) / NULLIF(duration_secs, 0) * 3600.0) FROM \
-                 (SELECT amount, \
-                   CAST(strftime('%s', session_end) - strftime('%s', session_start) AS INTEGER) \
-                   AS duration_secs \
-                  FROM plat_ledger \
-                  WHERE character = ?1 AND amount > 0 \
-                  ORDER BY timestamp DESC LIMIT ?2)",
+                "SELECT CASE \
+                    WHEN duration_secs > 0 THEN CAST(total_amount AS REAL) / duration_secs * 3600.0 \
+                    ELSE NULL \
+                  END \
+                 FROM ( \
+                    SELECT \
+                      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) \
+                        AS total_amount, \
+                      CAST(strftime('%s', MAX(timestamp)) - strftime('%s', MIN(timestamp)) \
+                        AS INTEGER) AS duration_secs \
+                    FROM ( \
+                      SELECT timestamp, amount \
+                      FROM plat_ledger \
+                      WHERE character = ?1 \
+                      ORDER BY timestamp DESC LIMIT ?2 \
+                    ) \
+                 )",
                 params![character, window_sessions * 10],
                 |row| row.get(0),
             )
@@ -973,5 +975,30 @@ mod tests {
         let store = MetricsStore::open_memory().unwrap();
         let rows = store.recent_plat("Ghost", 10).unwrap();
         assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn session_aggregate_rates_handles_plat_ledger_without_session_columns() {
+        let store = MetricsStore::open_memory().unwrap();
+        store
+            .save_xp_session("Char_A", 10.0, 15.0, 0.0, 0.5, 10, 10, 0, 300, 1000.0, 0.0)
+            .unwrap();
+        store
+            .save_kill_session(
+                "Char_A",
+                Some("gfaydark"),
+                30,
+                0,
+                360.0,
+                300,
+                Some("a_gnoll"),
+            )
+            .unwrap();
+        store.insert_plat("Char_A", 100, 100, None, None).unwrap();
+
+        let rates = store.session_aggregate_rates("Char_A", 5).unwrap();
+        assert_eq!(rates.avg_kills_per_hour, 360.0);
+        assert_eq!(rates.avg_xp_per_hour, 1000.0);
+        assert_eq!(rates.avg_plat_per_hour, 0.0);
     }
 }
