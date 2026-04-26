@@ -17,6 +17,9 @@ pub mod box_chat;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
+/// Return-state machine — NoAggro/NotLooting gates and jitter pre-move delay.
+#[allow(dead_code)]
+pub mod navigation;
 /// MQ2Log-style per-character chat output logging.
 pub mod chat_log;
 /// Circuit breaker for mass failure protection — 3-state (Closed/Open/HalfOpen)
