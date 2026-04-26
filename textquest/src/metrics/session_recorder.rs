@@ -38,6 +38,7 @@ impl Default for SessionRecorderConfig {
 #[serde(rename_all = "lowercase")]
 pub enum SessionEventKind {
     Combat,
+    Movement,
     Death,
     Stuck,
     Pull,
@@ -60,7 +61,7 @@ pub struct SessionEvent {
 
 impl SessionEvent {
     /// Create a new session event with current timestamp.
-    pub fn new(kind: SessionEventKind, data: serde_json::json::Value) -> Self {
+    pub fn new(kind: SessionEventKind, data: serde_json::Value) -> Self {
         Self {
             ts: current_timestamp_ms(),
             kind,
