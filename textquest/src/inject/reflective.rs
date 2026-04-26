@@ -495,7 +495,10 @@ fn dllmain_shellcode_ops(
         GeneralRegister::R10
     };
     let scratch_for_entry = GeneralRegister::R11;
-    let scratch_for_base = GeneralRegister::R10;
+    let scratch_for_base = match entry_reg {
+        GeneralRegister::R10 => GeneralRegister::R11,
+        _ => GeneralRegister::R10,
+    };
 
     let mut base_load_ops = if rng.next_usize(2) == 0 {
         vec![ShellcodeInstruction::new(mov_reg_imm64(
