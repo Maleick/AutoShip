@@ -843,9 +843,9 @@ impl PluginRegistry {
                     conflicting = %conflicting,
                     "Force-unloading conflicting plugin per manifest"
                 );
+                self.cleanup_plugin_registrations(conflicting);
                 self.plugins.remove(conflicting);
                 self.health.remove(conflicting);
-                self.trackers.remove(conflicting);
                 self.manifests.remove(conflicting);
                 self.conflict_status.remove(conflicting);
                 force_unloaded.push(conflicting.clone());
@@ -922,16 +922,8 @@ impl PluginRegistry {
                     disabled_reason: health
                         .and_then(|h| h.disable_reason())
                         .map(|s| s.to_string()),
-                    manifest: self
-                        .manifests
-                        .get(name)
-                        .cloned()
-                        .unwrap_or_default(),
-                    conflict_status: self
-                        .conflict_status
-                        .get(name)
-                        .cloned()
-                        .unwrap_or_default(),
+                    manifest: self.manifests.get(name).cloned().unwrap_or_default(),
+                    conflict_status: self.conflict_status.get(name).cloned().unwrap_or_default(),
                     pause_command: self
                         .manifests
                         .get(name)
@@ -1401,6 +1393,78 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn enforce_manifest_force_unload_cleans_up_registrations() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let mut registry = PluginRegistry::new();
+        let fired = Arc::new(AtomicU32::new(0));
+        let fired_hotkey = Arc::clone(&fired);
+        let fired_command = Arc::clone(&fired);
+
+        registry.plugin_register_hotkey(
+            "mq2melee",
+            "alt+9",
+            Box::new(move || {
+                fired_hotkey.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+        registry.plugin_register_command(
+            "mq2melee",
+            "/mq2melee test",
+            Box::new(move |_| {
+                fired_command.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+
+        registry.plugins.insert(
+            "mq2melee".to_string(),
+            PluginHandle {
+                metadata: PluginMetadata {
+                    name: "mq2melee".to_string(),
+                    path: PathBuf::from("mq2melee.dll"),
+                    version: None,
+                },
+            },
+        );
+
+        let manifest = PluginManifest {
+            force_unload: vec!["mq2melee".to_string()],
+            ..Default::default()
+        };
+
+        let status = registry
+            .enforce_manifest_contract("rgmercs", manifest)
+            .expect("force_unload should succeed");
+        assert_eq!(
+            status,
+            ConflictStatus::ConflictingPlugins(vec!["mq2melee".to_string()])
+        );
+        assert!(
+            !registry.plugins.contains_key("mq2melee"),
+            "conflicting plugin should be removed"
+        );
+        assert!(
+            !registry.hotkey_registry().lock().unwrap().fire("alt+9"),
+            "force-unload must remove hotkey callbacks"
+        );
+        assert!(
+            !registry
+                .command_registry()
+                .lock()
+                .unwrap()
+                .dispatch("/mq2melee test"),
+            "force-unload must remove command callbacks"
+        );
+        assert_eq!(
+            fired.load(Ordering::Relaxed),
+            0,
+            "callbacks should never execute after force-unload"
+        );
+    }
+
     #[test]
     fn rgmercs_detected_returns_false_on_empty_registry() {
         let registry = PluginRegistry::new();
@@ -1416,14 +1480,8 @@ mod tests {
             "first pause should return true"
         );
         assert!(registry.combat_engine_paused);
-        assert!(
-            !registry.pause_combat_engine(),
-            "second pause is a no-op"
-        );
-        assert!(
-            registry.resume_combat_engine(),
-            "resume should return true"
-        );
+        assert!(!registry.pause_combat_engine(), "second pause is a no-op");
+        assert!(registry.resume_combat_engine(), "resume should return true");
         assert!(!registry.combat_engine_paused);
     }
 
