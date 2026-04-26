@@ -29,6 +29,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Session 2026-04-25 learnings** — CLAUDE.md gotchas updated with `git rebase -X ours` caveats, AutoShip PR# vs issue# distinction, codex model fallback chain, sub-issue file overlap pattern
 
+## [0.7.0] - 2026-04-26
+
+### Features
+
+- **Burndown wave — ~227 PRs merged** — Comprehensive AutoShip sweep across M7/M8 and supporting systems. Major areas:
+  - **Anti-detection / memcheck** — PRNG-aware server-memcheck handler (A1), OUTBOUND_MSG_COUNTER hook (A2/A3/A4), checksum-disconnect detector + operator alert (A5), gargoyle-style waitable timer registration, timer-queue encrypt/decrypt with stack-spoof wrapper, mutex owner flag for per-frame/timer-queue path exclusion (#3515–#3525)
+  - **MezTracker** — Immune list with zone-change expiry, wired into ENC and BRD rotation modules (#3535, #3564)
+  - **TargetScanner** — XTarget aggro% offset reader, configurable priority ordering, safe-targeting predicate, TUI panel exposure (#3529–#3532)
+  - **Zone graph / multi-zone navigation** — Multi-zone A* pathfinding across zone graph, TUI zone-graph visualization panel, zone-transition prerequisites (level/faction/quest) (#3588–#3592)
+  - **Security hardening** — serde length guards on loot-rules PUT, chat-pattern-rules import, and remaining write endpoints (#3526–#3528)
+  - **MQ2 parity** — MQ2LinkDB item-link database, MQ2Cast result codes + Cast.Active state (#2944–#2945)
+  - **TUI personality selector** — Per-character personality/model selector with hot-switch support (#3593)
+  - **Farming research** — Sebilis access-route, Nodding Blue Lily baselines, Underfoot/Plane of Innovation/Velketor's spawn coordinates and validation (#3556–#3570)
+  - **Orchestration** — Zone-transition validation, pull-safety notes, multi-zone pathing, MQ2 rgmercs depth gaps (#3554, #3584, #3591)
+  - **OpenVanilla audit** — 2026-04-25 redguides coverage audit committed (#2901 area)
+
+### Bug Fixes
+
+- Reflective shellcode register-setup ordering fixed (#2935)
+- HWBP callbacks stack-pop repair (#2936)
+- Decompiled signature path constrained to export dir (#2937)
+- Branch-protection workflow restricted to admins (#2938)
+- Credentials page table JSX broken fix (#2939)
+- TUI duplicate `cast_state_color` import removed (#2940)
+- Checkpoint symlink clobber writes prevented (#2941)
+
+### Security
+
+- Deploy registry login secret hardening (#2942)
+- Admin session snapshot endpoint guarded behind auth (#2948)
+- Session logs ownership check added (#2946)
+- DB migrations for sessions.db applied (#2949)
+
 ## [0.6.0] - 2026-04-14
 
 ### Features

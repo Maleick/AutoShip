@@ -4,6 +4,7 @@
 
 - Live is the primary product target going forward.
 - Test is historical and reference-only.
+- **Machine-test epic** — GitHub issue #3596 tracks ~176 deferred issues that require live Windows/EQ validation before they can be closed. These were deferred during the 2026-04-26 burndown wave and are not `agent:ready` until live-validation evidence is provided.
 - `TextQuest-Ghidra` is canonical for immutable snapshots, manifests, baseline selection, curated Ghidra evidence, and Ghidra intake and analysis flow.
 - `TextQuest` is canonical for code, `docs/wiki/`, runbooks, automation, and lightweight references that point at canonical evidence.
 - `docs/wiki/` is the canonical documentation surface. The GitHub wiki is a lightweight landing page only.

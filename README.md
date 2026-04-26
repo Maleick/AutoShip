@@ -56,16 +56,18 @@ A Rust workspace that reads live game state from EverQuest via `ReadProcessMemor
 
 | Category             | What it does                                                                 |
 | -------------------- | ---------------------------------------------------------------------------- |
-| **DLL Injection**    | Rust `cdylib` injected into running EQ clients via reflective loader         |
-| **IPC Pipeline**     | Named pipes for commands (bidirectional) + shared memory for live game state |
-| **Camp Automation**  | Six-phase camp loop: pull → fight → loot → med → buff → recover              |
-| **Combat Engine**    | Class-driven rotation engine for all 16 classes, CH chain, CC handling       |
-| **Login Automation** | Credential store, staggered launch, login FSM, post-login sequencing         |
-| **Navigation**       | Navmesh pathfinding (MQ2Nav format), waypoint tooling, stuck detection       |
-| **TUI Dashboard**    | Seven-screen operator surface with command mode, themes, privacy mode        |
-| **Soul Engine**      | LLM-backed character personalities, persistent memory, social dynamics       |
-| **Web Dashboard**    | Axum + React SPA for configuration and monitoring (`textquest-web`)          |
-| **Packet Monitor**   | Live WSASend/WSARecv capture with opcode filtering and decode                |
+| **DLL Injection**    | Rust `cdylib` injected into running EQ clients via reflective loader                 |
+| **IPC Pipeline**     | Named pipes for commands (bidirectional) + shared memory for live game state         |
+| **Camp Automation**  | Six-phase camp loop: pull → fight → loot → med → buff → recover                     |
+| **Combat Engine**    | Class-driven rotation engine for all 16 classes, CH chain, CC handling, MezTracker  |
+| **Login Automation** | Credential store, staggered launch, login FSM, post-login sequencing                 |
+| **Navigation**       | Navmesh pathfinding (MQ2Nav format), multi-zone A* graph, waypoint tooling           |
+| **TargetScanner**    | XTarget aggro% reader, configurable priority ordering, safe-targeting predicate      |
+| **Anti-Detection**   | PEB unlink, page encrypt, stack spoof, VEH hooks, memcheck counter hooks             |
+| **TUI Dashboard**    | Seven-screen operator surface with command mode, themes, privacy mode                |
+| **Soul Engine**      | LLM-backed character personalities, persistent memory, per-character model selector  |
+| **Web Dashboard**    | Axum + React SPA for configuration and monitoring (`textquest-web`)                  |
+| **Packet Monitor**   | Live WSASend/WSARecv capture with opcode filtering and decode                        |
 
 ## Quick Start
 
@@ -240,6 +242,8 @@ Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(wi
 | M11 — Soul Engine   | 🔲 Planned | LLM personalities, persistent memory, social dynamics |
 
 README stays focused on building, running, and operating TextQuest. The current roadmap keeps economy work at `M10` and Soul Engine + LLM work at `M11`. Soul Engine + LLM behavior is tracked under `M11` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, and economy work.
+
+As of 2026-04-26, ~227 PRs have been merged in the latest burndown wave, completing large sections of M7 (zone graph, MezTracker, TargetScanner, anti-detection counter hooks) and M8 (orchestration, multi-zone pathing). Approximately 176 issues were deferred into a machine-test epic (GitHub issue #3596) pending live Windows validation.
 
 Full milestone spec + evidence rules: [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md)
 

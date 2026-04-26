@@ -37,7 +37,7 @@ Expected result:
 
 - TextQuest opens the TUI
 - the UI shows simulated characters and activity
-- the five main screens are usable without EQ running
+- the seven main screens are usable without EQ running
 
 #### Live Windows mode
 
@@ -63,13 +63,15 @@ target\release\textquest.exe client-status <pid>
 target\release\textquest.exe client-status-all
 ```
 
-### 2. Learn the five TUI screens
+### 2. Learn the seven TUI screens
 
 - `1`: Characters
 - `2`: Map
 - `3`: Navigation
 - `4`: Debug
 - `5`: Packets
+- `6`: Economy
+- `7`: Orchestrator
 
 High-value keys:
 

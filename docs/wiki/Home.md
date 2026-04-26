@@ -58,8 +58,9 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 - The production target is Windows with live EverQuest clients.
 - Live is the primary product target going forward; Test is historical/reference-only.
 - Demo mode is the normal experience on macOS/Linux and also on Windows when no live EQ client is attached.
-- The TUI currently exposes five main screens: Characters, Map, Navigation, Debug, and Packets.
-- Login automation, DLL injection, navigation, CH chain management, and the Soul Engine are all present in the repository today.
+- The TUI currently exposes seven main screens: Characters, Map, Navigation, Debug, Packets, Economy, and Orchestrator.
+- Login automation, DLL injection, navigation, CH chain management, MezTracker, TargetScanner, and the Soul Engine are all present in the repository today.
+- ~227 PRs merged on 2026-04-26 burndown wave; ~176 issues deferred to machine-test epic [#3596](https://github.com/Maleick/TextQuest/issues/3596) pending live Windows validation.
 - README is intentionally the quick usage surface; deeper operator and developer guidance lives here.
 - Immutable snapshots, manifests, baseline selection, and curated Ghidra evidence live in the sibling `TextQuest-Ghidra` repo.
 
@@ -104,7 +105,7 @@ TextQuest exposes its IPC protocol for external applications via multi-language 
 
 ### Roadmap and validation notes
 
-- The canonical active roadmap now resumes at `M5` Anti-Cheat and keeps economy execution work at `M10` plus Soul/LLM work at `M11`.
+- The canonical active roadmap has completed M1–M6 and is actively working M7 (Zoning) and M8 (Orchestrator). Economy is `M10`; Soul/LLM is `M11`.
 - The current code keeps the queue and provider abstraction for Soul behavior, but routine provider-backed chat is not the claimed default operating mode.
 - Some live-client behavior still needs regular Windows validation after EQ patches, especially login selectors, offsets, and nav/combat edge cases.
 - For recent compile and validation status, see [Roadmap and Known Gaps](Roadmap-and-Known-Gaps).
