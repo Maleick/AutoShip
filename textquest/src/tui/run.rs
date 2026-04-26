@@ -268,6 +268,35 @@ fn run_loop(
 
                 let spawn_events = orchestrator.poll_spawn_events(pid);
                 app.apply_spawn_events(spawn_events);
+
+                // Poll for checksum-mismatch integrity alerts (opcode 0xd799).
+                // This runs on the same cadence as packet polling so the
+                // operator sees the alert within one poll cycle of the packet
+                // hook firing — well before EQ's disconnect is processed.
+                let checksum_alerts = orchestrator.poll_checksum_alerts(pid);
+                for alert in checksum_alerts {
+                    let char_label = if alert.character_name.is_empty() {
+                        app.clients
+                            .iter()
+                            .find(|c| c.pid == alert.client_id)
+                            .map(|c| c.character_name.clone())
+                            .unwrap_or_else(|| format!("PID {}", alert.client_id))
+                    } else {
+                        alert.character_name.clone()
+                    };
+                    let msg = format!(
+                        "ANTI-CHEAT: checksum-mismatch disconnect (0x{:04x}) — {} may be flagged",
+                        alert.opcode, char_label
+                    );
+                    // Surface immediately in the TUI status line.
+                    app.status_message = msg.clone();
+                    // Persist to the alert store so operators can review history.
+                    let _ = app.publish_alert(crate::alerts::NewAlert::new(
+                        crate::alerts::AlertSeverity::Critical,
+                        crate::alerts::AlertKind::ChecksumMismatch,
+                        msg,
+                    ));
+                }
             }
             last_packet_poll = Instant::now();
         }

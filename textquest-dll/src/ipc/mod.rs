@@ -315,6 +315,34 @@ pub fn drain_packet_responses() -> Vec<textquest_common::ipc::PacketEventInfo> {
     packet_events
 }
 
+/// Drain only `ChecksumMismatchAlertBatch` responses from `PENDING_RESPONSES`,
+/// leaving all other response variants intact in the queue.
+///
+/// Called by the IPC listener for `Command::PollChecksumAlerts`. This ensures
+/// that checksum-mismatch alerts are consumed by the integrity-alert poll path
+/// without silently discarding unrelated queued responses (e.g. `PacketEvent`,
+/// `NavSignals`).
+pub fn drain_checksum_alerts() -> Vec<textquest_common::ipc::ChecksumMismatchAlert> {
+    let Some(pending) = PENDING_RESPONSES.get() else {
+        return Vec::new();
+    };
+    let Ok(mut queue) = pending.lock() else {
+        return Vec::new();
+    };
+    let mut alerts = Vec::new();
+    let mut remaining = Vec::new();
+    for response in std::mem::take(&mut *queue) {
+        match response {
+            Response::ChecksumMismatchAlertBatch { alerts: batch } => {
+                alerts.extend(batch);
+            }
+            _ => remaining.push(response),
+        }
+    }
+    *queue = remaining;
+    alerts
+}
+
 /// Drain pending chat messages. Called by the IPC listener for
 /// `Command::PollChat`.
 pub fn drain_chat_messages() -> Vec<textquest_common::ipc::ChatMessageInfo> {
@@ -442,6 +470,9 @@ fn immediate_response_for_command(
         },
         Command::PollChat => Response::ChatBatch {
             messages: drain_chat_messages(),
+        },
+        Command::PollChecksumAlerts => Response::ChecksumMismatchAlertBatch {
+            alerts: drain_checksum_alerts(),
         },
         Command::WatchList => Response::WatchList {
             watchpoints: crate::debug::watchpoints::list(),

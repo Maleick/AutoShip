@@ -160,6 +160,9 @@ pub enum AlertKind {
     DailySummary,
     ConfigChanged,
     GmInteraction,
+    /// Server sent opcode 0xd799 (checksum-mismatch disconnect) — anti-cheat
+    /// integrity detection. The character may be persistently flagged.
+    ChecksumMismatch,
 }
 
 impl AlertKind {
@@ -180,6 +183,7 @@ impl AlertKind {
             Self::DailySummary => "daily_summary",
             Self::ConfigChanged => "config_changed",
             Self::GmInteraction => "gm_interaction",
+            Self::ChecksumMismatch => "checksum_mismatch",
         }
     }
 
@@ -199,6 +203,7 @@ impl AlertKind {
             "daily_summary" => Ok(Self::DailySummary),
             "config_changed" => Ok(Self::ConfigChanged),
             "gm_interaction" => Ok(Self::GmInteraction),
+            "checksum_mismatch" => Ok(Self::ChecksumMismatch),
             other => bail!("Unknown alert kind: {other}"),
         }
     }
@@ -220,6 +225,7 @@ impl AlertKind {
             Self::DailySummary => "Daily Summary",
             Self::ConfigChanged => "Config Changed",
             Self::GmInteraction => "GM Interaction",
+            Self::ChecksumMismatch => "Checksum Mismatch Disconnect",
         }
     }
 }

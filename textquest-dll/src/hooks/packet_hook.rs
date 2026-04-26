@@ -1262,6 +1262,54 @@ mod tests {
         );
     }
 
+    /// Synthetic 0xd799 packet fixture: `should_alert_on_checksum_mismatch`
+    /// returns true for a well-formed inbound packet and false for all other
+    /// combinations, verifying the full alert predicate end-to-end.
+    ///
+    /// This test exercises the complete detection path used by `on_packet()`:
+    /// 1. Build a minimal EQStream packet with opcode 0xd799 at bytes [2..4].
+    /// 2. Verify inbound direction triggers the alert predicate.
+    /// 3. Verify outbound direction does NOT trigger the alert predicate.
+    /// 4. Verify a too-short packet (< 4 bytes) does NOT trigger.
+    /// 5. Verify a different inbound opcode does NOT trigger.
+    #[test]
+    fn checksum_mismatch_synthetic_packet_fixture_alert_fires() {
+        use textquest_common::ipc::PacketDirection;
+
+        // Minimal EQStream packet: [crc_lo, crc_hi, op_lo, op_hi, payload...]
+        let fixture_0xd799 = [
+            0x00u8, 0x00, // CRC/header
+            0x99, 0xd7, // opcode 0xd799 little-endian
+            0xDE, 0xAD, 0xBE, 0xEF, // dummy payload bytes
+        ];
+
+        // (1) Inbound 0xd799 must trigger the alert.
+        assert!(
+            should_alert_on_checksum_mismatch(PacketDirection::Inbound, &fixture_0xd799),
+            "synthetic inbound 0xd799 packet must trigger the checksum-mismatch alert"
+        );
+
+        // (2) Outbound 0xd799 must NOT trigger (server never accepts 0xd799 from client).
+        assert!(
+            !should_alert_on_checksum_mismatch(PacketDirection::Outbound, &fixture_0xd799),
+            "outbound 0xd799 packet must NOT trigger the alert — direction guard is required"
+        );
+
+        // (3) Too-short packet (< 4 bytes) must NOT trigger.
+        let short_packet = [0x00u8, 0x99]; // only 2 bytes, no opcode field
+        assert!(
+            !should_alert_on_checksum_mismatch(PacketDirection::Inbound, &short_packet),
+            "packet shorter than 4 bytes must NOT trigger the alert (no opcode field)"
+        );
+
+        // (4) Different inbound opcode must NOT trigger.
+        let fixture_heartbeat = [0x00u8, 0x00, 0x29, 0xbb, 0x00, 0x00, 0x00, 0x00]; // 0xbb29
+        assert!(
+            !should_alert_on_checksum_mismatch(PacketDirection::Inbound, &fixture_heartbeat),
+            "inbound heartbeat opcode 0xbb29 must NOT trigger the 0xd799 alert"
+        );
+    }
+
     // ── trace-packets feature ────────────────────────────────────────────────
 
     /// Verify that the trace-packets feature gate compiles and the opcode

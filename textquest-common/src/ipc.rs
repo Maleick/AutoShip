@@ -1152,6 +1152,15 @@ pub enum Command {
     /// The DLL drains its pending spawn-event buffer and returns one
     /// `SpawnEventBatch` response.
     PollSpawnEvents,
+    // Anti-cheat integrity alerts
+    /// Poll for accumulated checksum-mismatch integrity alerts.
+    ///
+    /// The DLL drains its pending checksum-mismatch alert buffer and responds
+    /// with `ChecksumMismatchAlertBatch`. This is the poll-based counterpart
+    /// to the `send_response(ChecksumMismatchAlertBatch { .. })` call emitted
+    /// from the packet hook when opcode 0xd799 is detected. Calling this
+    /// command does **not** affect the `PollPackets` packet-event buffer.
+    PollChecksumAlerts,
     // Zone transitions
     /// Request a zone transition to a specific zone with optional destination
     /// coordinates.

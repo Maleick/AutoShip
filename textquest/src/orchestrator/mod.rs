@@ -1619,6 +1619,36 @@ impl Orchestrator {
         }
     }
 
+    /// Poll a client for accumulated checksum-mismatch integrity alerts.
+    ///
+    /// Sends `PollChecksumAlerts` and returns any `ChecksumMismatchAlert`
+    /// entries emitted since the previous poll. An empty vec means no
+    /// 0xd799 packets have been observed since the last call.
+    pub fn poll_checksum_alerts(
+        &mut self,
+        pid: u32,
+    ) -> Vec<textquest_common::ipc::ChecksumMismatchAlert> {
+        let started_at = Instant::now();
+        let Ok(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollChecksumAlerts) {
+            Ok(Response::ChecksumMismatchAlertBatch { alerts }) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                alerts
+            }
+            Ok(_) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                Vec::new()
+            }
+            Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
+                tracing::debug!(pid, error = %e, "Failed to poll checksum alerts");
+                Vec::new()
+            }
+        }
+    }
+
     /// Read raw bytes from the EQ process address space via IPC.
     /// Sends `MemoryRead` and returns `(address, bytes)` on success, or `None`
     /// if the pipe is unavailable or the DLL returns an unexpected response.
