@@ -346,5 +346,53 @@ class CollectModuleSummaryTests(unittest.TestCase):
         self.assertEqual(result["metadata"]["function_count"], 42)
 
 
+class CollectFunctionSignatureTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not SCRIPT_PATH.exists():
+            raise unittest.SkipTest(f"Script not found: {SCRIPT_PATH}")
+        cls.module = load_module()
+
+    def test_collect_function_signature_reads_valid_decompiled_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            decompiled = export_dir / "decompiled"
+            decompiled.mkdir(parents=True)
+            source = decompiled / "foo.c"
+            source.write_text("line1\nline2\n", encoding="utf-8")
+
+            signature = self.module._collect_function_signature(
+                {"name": "Foo", "address": "0x1000", "file": "foo.c"},
+                export_dir,
+            )
+
+        payload = signature["fingerprint"]
+        self.assertEqual(signature["decompiled_file"], str(source.resolve()))
+        self.assertEqual(signature["decompiled_line_count"], 2)
+        self.assertIsInstance(payload, str)
+
+    def test_collect_function_signature_rejects_absolute_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            signature = self.module._collect_function_signature(
+                {"name": "Foo", "address": "0x1000", "file": "/etc/hosts"},
+                export_dir,
+            )
+
+        self.assertEqual(signature["decompiled_file"], "/etc/hosts")
+        self.assertNotIn("decompiled_line_count", signature)
+
+    def test_collect_function_signature_rejects_parent_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            signature = self.module._collect_function_signature(
+                {"name": "Foo", "address": "0x1000", "file": "../outside.c"},
+                export_dir,
+            )
+
+        self.assertEqual(signature["decompiled_file"], "../outside.c")
+        self.assertNotIn("decompiled_line_count", signature)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -163,9 +163,12 @@ def _collect_function_signature(item: dict[str, Any], export_dir: Path) -> dict[
         "decompiled_file": item.get("file"),
     }
     if "file" in item and isinstance(item["file"], str):
-        decomp_path = export_dir / "decompiled" / item["file"]
-        signature["decompiled_file"] = str(decomp_path)
-        if decomp_path.exists():
+        decomp_root = (export_dir / "decompiled").resolve()
+        decomp_path = (decomp_root / item["file"]).resolve()
+        is_within_decomp_root = decomp_path == decomp_root or decomp_root in decomp_path.parents
+        if is_within_decomp_root:
+            signature["decompiled_file"] = str(decomp_path)
+        if is_within_decomp_root and decomp_path.is_file():
             signature_payload["decompiled_sha256"] = sha256_file(decomp_path)
             with decomp_path.open("r", encoding="utf-8", errors="ignore") as handle:
                 signature["decompiled_line_count"] = len(handle.readlines())
