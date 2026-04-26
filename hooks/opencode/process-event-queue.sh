@@ -19,11 +19,23 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+assert_not_symlink() {
+  local path="$1"
+  if [[ -L "$path" ]]; then
+    echo "Error: refusing to operate on symlinked path: $path" >&2
+    exit 1
+  fi
+}
+
 if [[ -z "${AUTOSHIP_QUEUE_LOCKED:-}" ]]; then
   export AUTOSHIP_QUEUE_LOCKED=1
+  assert_not_symlink "$AUTOSHIP_DIR"
   mkdir -p "$AUTOSHIP_DIR"
+  assert_not_symlink "$LOCK_FILE"
   touch "$LOCK_FILE"
-  if command -v flock >/dev/null 2>&1; then
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
+    exec lockf -k "$LOCK_FILE" "$0" "$@"
+  elif command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK_FILE"
     flock -x 9
   elif command -v lockf >/dev/null 2>&1; then
@@ -36,6 +48,7 @@ make_tmp() { mktemp "$AUTOSHIP_DIR/event-queue.tmp.XXXXXX"; }
 ensure_array_file() {
   local file="$1"
   local tmp
+  assert_not_symlink "$file"
   if [[ ! -f "$file" ]] || ! jq -e 'type == "array"' "$file" >/dev/null 2>&1; then
     tmp=$(make_tmp)
     printf '[]\n' > "$tmp"

@@ -47,6 +47,22 @@ AUTOSHIP_MD_LAST_MTIME=$(_autoship_md_mtime)
 
 WATERMARK_FILE="$AUTOSHIP_DIR/.issue-monitor-watermark"
 
+if [[ -L "$AUTOSHIP_DIR" ]]; then
+  echo "Error: $AUTOSHIP_DIR must not be a symlink" >&2
+  exit 1
+fi
+
+if [[ -e "$WATERMARK_FILE" ]]; then
+  if [[ -L "$WATERMARK_FILE" ]]; then
+    echo "Error: $WATERMARK_FILE must not be a symlink" >&2
+    exit 1
+  fi
+  if [[ ! -f "$WATERMARK_FILE" ]]; then
+    echo "Error: $WATERMARK_FILE must be a regular file" >&2
+    exit 1
+  fi
+fi
+
 # Initialize watermark on first run (capture current time, emit nothing on first loop)
 if [[ ! -f "$WATERMARK_FILE" ]]; then
   last_check=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

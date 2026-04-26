@@ -2,13 +2,62 @@
 
 set -euo pipefail
 
+AUTOSHIP_PROTECTED_LABELS="${AUTOSHIP_PROTECTED_LABELS:-do-not-automate,needs-human,wontfix,discussion,security}"
+AUTOSHIP_SKIP_LABEL="${AUTOSHIP_SKIP_LABEL:-agent:skip}"
+
+readonly AUTOSHIP_PROTECTED_LABELS
+readonly AUTOSHIP_SKIP_LABEL
+
+IFS=',' read -ra PROTECTED_LABEL_ARRAY <<< "$AUTOSHIP_PROTECTED_LABELS"
+
 ISSUE_NUM="${1:-}"
 [[ -z "$ISSUE_NUM" ]] && echo "Usage: $0 <issue-number>" >&2 && exit 1
+
+issue_has_protected_label() {
+  local label="$1"
+  local protected
+  for protected in "${PROTECTED_LABEL_ARRAY[@]}"; do
+    if [[ "$label" == "$protected" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+check_protected_labels() {
+  local labels_json="$1"
+  for label in $(echo "$labels_json" | jq -r '.[]' 2>/dev/null || echo ""); do
+    if issue_has_protected_label "$label"; then
+      echo "protected"
+      return 0
+    fi
+  done
+  return 1
+}
+
+check_skip_label() {
+  local labels_json="$1"
+  if echo "$labels_json" | jq -e '.[] | select(. == "'"$AUTOSHIP_SKIP_LABEL"'")' >/dev/null 2>&1; then
+    echo "skipped"
+    return 0
+  fi
+  return 1
+}
 
 ISSUE_BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body' 2>/dev/null || echo "")
 ISSUE_TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title' 2>/dev/null || echo "")
 ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '[.labels[].name]' 2>/dev/null || echo "[]")
 LABEL_TEXT=$(echo "$ISSUE_LABELS" | jq -r 'join(",")' 2>/dev/null || echo "")
+
+if check_skip_label "$ISSUE_LABELS"; then
+  echo "skipped"
+  exit 0
+fi
+
+if check_protected_labels "$ISSUE_LABELS"; then
+  echo "protected"
+  exit 0
+fi
 
 # Check for explicit label overrides
 if echo "$ISSUE_LABELS" | jq -e '.[] | test("mode:(research|docs|complex|simple)"; "i")' >/dev/null 2>&1; then

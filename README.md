@@ -140,6 +140,12 @@ flowchart TD
 | `/autoship-status` | Show runtime state and workspace statuses |
 | `/autoship-setup` | Discover OpenCode models and choose routing |
 | `/autoship-stop` | Stop orchestration |
+| `/autoship-audit` | Detect GitHub/local state drift |
+| `/autoship-dashboard` | Show throughput, cadence, and model metrics |
+| `/autoship-apply` | Apply a proposed workspace by creating its PR |
+| `/autoship-retry` | Requeue a blocked or stuck issue |
+| `/autoship-cancel` | Cancel an issue workspace |
+| `/autoship-clean` | Remove terminal workspaces |
 
 ## Key Hooks
 
@@ -150,6 +156,10 @@ flowchart TD
 | `hooks/opencode/dispatch.sh` | Create worktree, prompt, model assignment, and queued status |
 | `hooks/opencode/runner.sh` | Start queued workspaces up to the concurrency cap |
 | `hooks/opencode/status.sh` | Summarize active, queued, completed, blocked, and stuck work |
+| `hooks/opencode/check.sh` | Run syntax, policy, smoke, shellcheck, and shfmt checks |
+| `hooks/opencode/audit.sh` | Compare GitHub state with local AutoShip state |
+| `hooks/opencode/monitor-ci.sh` | Monitor opened PR CI status |
+| `hooks/opencode/auto-merge.sh` | Merge PRs labeled `autoship:auto-merge` after CI passes |
 | `hooks/opencode/reconcile-state.sh` | Reconcile workspace status files back into state |
 | `hooks/opencode/pr-title.sh` | Generate conventional PR titles |
 

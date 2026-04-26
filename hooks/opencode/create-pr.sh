@@ -73,15 +73,17 @@ ISSUE_NUMBER="${ISSUE_KEY#issue-}"
 TITLE=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUMBER")
 BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT
-{
-  printf '## Summary\n'
-  cat "$RESULT_PATH"
-  printf '\n\n## Verification\n'
-  printf -- '- Reviewer: PASS\n'
-  printf -- '- Tests: completed by AutoShip worker\n\n'
-  printf 'Closes #%s\n\n' "$ISSUE_NUMBER"
-  printf 'Dispatched by AutoShip.\n'
-} > "$BODY_FILE"
+CRITERIA_FILE="$WORKTREE_PATH/acceptance-criteria.json"
+if [[ -x "$SCRIPT_DIR/pr-body.sh" ]]; then
+  bash "$SCRIPT_DIR/pr-body.sh" "$ISSUE_NUMBER" "$RESULT_PATH" "$CRITERIA_FILE" > "$BODY_FILE"
+else
+  {
+    printf '## Summary\n'
+    cat "$RESULT_PATH"
+    printf '\n\nCloses #%s\n\n' "$ISSUE_NUMBER"
+    printf 'Dispatched by AutoShip.\n'
+  } > "$BODY_FILE"
+fi
 
 if [[ "$MODE" != "live" && "${AUTOSHIP_ENABLE_PR_CREATE:-false}" != "true" ]]; then
   bash "$REPO_ROOT/hooks/update-state.sh" set-completed "$ISSUE_KEY" pr_mode=dry-run pr_title="$TITLE" 2>/dev/null || true
@@ -107,6 +109,16 @@ PR_URL=$(gh pr create \
   --body-file "$BODY_FILE" \
   --label autoship \
   --head "autoship/issue-$ISSUE_NUMBER")
+
+issue_meta=$(gh issue view "$ISSUE_NUMBER" --json labels,milestone 2>/dev/null || echo '{}')
+labels=$(jq -r '[.labels[].name? | select(. != "agent:ready")] | join(",")' <<< "$issue_meta" 2>/dev/null || true)
+milestone=$(jq -r '.milestone.title // empty' <<< "$issue_meta" 2>/dev/null || true)
+if [[ -n "$labels" ]]; then
+  gh pr edit "$PR_URL" --add-label "$labels" >/dev/null 2>&1 || true
+fi
+if [[ -n "$milestone" ]]; then
+  gh pr edit "$PR_URL" --milestone "$milestone" >/dev/null 2>&1 || true
+fi
 
 PR_NUMBER=$(printf '%s\n' "$PR_URL" | grep -Eo '[0-9]+$' | tail -1 || true)
 if [[ -n "$PR_NUMBER" ]]; then

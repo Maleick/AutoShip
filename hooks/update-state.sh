@@ -22,7 +22,11 @@ LEDGER_FILE="$REPO_ROOT/$LEDGER_FILE"
 LOCK_FILE="${STATE_FILE%.json}.lock"
 if [[ -z "${AUTOSHIP_STATE_LOCKED:-}" ]]; then
   export AUTOSHIP_STATE_LOCKED=1
-  if command -v flock >/dev/null 2>&1; then
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
+    # macOS (BSD): prefer lockf. Some environments provide a non-BSD flock
+    # whose FD locking semantics can hang under test fixtures.
+    exec lockf -k "$LOCK_FILE" "$0" "$@"
+  elif command -v flock >/dev/null 2>&1; then
     # Linux: hold FD lock for script duration
     if [[ -L "$LOCK_FILE" ]]; then
       echo "Error: refusing symlink lock file: $LOCK_FILE" >&2

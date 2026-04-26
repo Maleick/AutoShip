@@ -185,7 +185,7 @@ if [[ "$REFRESH_MODELS" == "1" ]]; then
   rm -f "$ROUTING_FILE" "$CONFIG_FILE"
 fi
 
-if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]; then
+if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && -z "$PLANNER_MODEL$COORDINATOR_MODEL$ORCHESTRATOR_MODEL$REVIEWER_MODEL$LEAD_MODEL" && "$REFRESH_MODELS" != "1" ]]; then
   if jq -e '(.models // []) | length > 0' "$ROUTING_FILE" >/dev/null 2>&1; then
     if [[ ! -f "$CONFIG_FILE" ]]; then
       jq -n --argjson max "$MAX_AGENTS" --arg labels "$LABELS" \
@@ -199,11 +199,10 @@ if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]
 fi
 
 if ! gh auth status >/dev/null 2>&1; then
-  echo "Error: GitHub authentication required. Run 'gh auth login' or set GH_TOKEN." >&2
-  exit 1
+  echo "Warning: GitHub authentication not detected. Run 'gh auth login' before dispatch." >&2
 fi
 
-if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]; then
+if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && -z "$PLANNER_MODEL$COORDINATOR_MODEL$ORCHESTRATOR_MODEL$REVIEWER_MODEL$LEAD_MODEL" && "$REFRESH_MODELS" != "1" ]]; then
   if jq -e '(.models // []) | length > 0' "$ROUTING_FILE" >/dev/null 2>&1; then
     if [[ ! -f "$CONFIG_FILE" ]]; then
       jq -n --argjson max "$MAX_AGENTS" '{runtime: "opencode", maxConcurrentAgents: $max, max_agents: $max, models: []}' > "$CONFIG_FILE"
@@ -268,7 +267,7 @@ if [[ -z "$SELECTED_MODELS" ]]; then
   SELECTED_MODELS=$(default_worker_models "$available_model_ids")
 fi
 
-reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL"
+reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL,$LEAD_MODEL"
 
 if [[ -z "$SELECTED_MODELS" ]]; then
   echo "Error: no free or OpenCode Go models found. Set AUTOSHIP_MODELS to choose models explicitly." >&2
@@ -402,6 +401,10 @@ with open(config_path, "w", encoding="utf-8") as f:
     }, f, indent=2)
     f.write("\n")
 PY
+
+if [[ -x "$SCRIPT_DIR/validate-project.sh" ]]; then
+  bash "$SCRIPT_DIR/validate-project.sh" > "$AUTOSHIP_DIR/project-commands.json" 2>/dev/null || true
+fi
 
 date -u +%Y-%m-%dT%H:%M:%SZ > "$AUTOSHIP_DIR/.onboarded"
 echo "AutoShip OpenCode setup complete"

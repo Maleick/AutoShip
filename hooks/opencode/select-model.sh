@@ -60,6 +60,7 @@ if [[ "$LOG" == true ]]; then
     [($routing.models // [])[] | select(compatible) |
       . as $m |
       (hist($m.id)) as $h |
+      select((($h.fail // 0) | tonumber) < 3) |
       .score = ((cost_score) + (.strength // 0) + (($h.success // 0) * 12) - (($h.fail // 0) * 20))
       | .reason = reason
     ] | sort_by(-.score, .id) |
@@ -99,6 +100,7 @@ jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "
   [($routing.models // [])[] | select(compatible) |
     . as $m |
     (hist($m.id)) as $h |
+    select((($h.fail // 0) | tonumber) < 3) |
     .score = ((cost_score) + (.strength // 0) + (($h.success // 0) * 12) - (($h.fail // 0) * 20))]
   | sort_by(-.score, .id)
   | . as $candidates

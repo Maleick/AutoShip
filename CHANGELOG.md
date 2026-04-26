@@ -2,6 +2,9 @@
 
 ## v2.0.9
 
+- Add AutoShip audit, dashboard, retry, cancel, clean, and apply workflows for issue-to-PR orchestration operations.
+- Add safety guardrails for GitHub API retries, protected label classification, diff size limits, prompt sanitization, acceptance criteria extraction, worktree checksums, quota pauses, and anti-flake retries.
+- Harden CI and verification behavior for monitor polling, setup without GitHub auth, package diagnostics, and no-check PR merge blocking.
 - Rotate compatible free worker models deterministically by issue number so parallel dispatches do not overload one free provider.
 - Classify bundled free Zen models as free even when model IDs do not include a `free` suffix, and include `opencode-go/*` models as low-cost subscription fallbacks.
 - Prefer capable free or OpenCode Go Kimi/Kimmy/Ling 2.6-family role models from live OpenCode inventory instead of assuming `openai/gpt-5.5`.

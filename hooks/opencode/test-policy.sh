@@ -1012,7 +1012,7 @@ cat > "$SELECT_REPO/.autoship/model-routing.json" <<'JSON'
   ]
 }
 JSON
-assert_eq "free/strong:free" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh simple_code 101)" "selector treats missing model history as empty"
+assert_eq "free/strong:free" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh simple_code 100)" "selector treats missing model history as empty"
 cat > "$SELECT_REPO/.autoship/model-history.json" <<'JSON'
 {
   "free/strong:free": {"success": 0, "fail": 6},
@@ -1032,7 +1032,7 @@ assert_eq "true" "$(echo "$POOL_MODELS" | grep -q "free/strong:free" && echo "tr
 
 ROUTING_LOG=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log simple_code 101)
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "routing_log:" && echo "true" || echo "false")" "selector --log outputs routing log"
-assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "selection: free/strong:free" && echo "true" || echo "false")" "routing log shows free model selection"
+assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "selection: free/reliable:free" && echo "true" || echo "false")" "routing log shows free model selection"
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "score:" && echo "true" || echo "false")" "routing log shows score"
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "reason:" && echo "true" || echo "false")" "routing log shows reason"
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "final_selection: free/reliable:free" && echo "true" || echo "false")" "routing log shows final selection"
