@@ -16,6 +16,8 @@ use crate::improve::{AnomalyEvent, AnomalyKind, Severity};
 
 /// Sessions required before the detector activates.
 pub const MIN_SESSIONS: usize = 30;
+/// Maximum number of observations retained per key to bound memory/CPU.
+const MAX_OBSERVATIONS: usize = 512;
 /// Maximum run length tracked (truncation for numerical stability).
 const MAX_RUN_LENGTH: usize = 120;
 /// Run-length threshold for changepoint detection: P(r ≤ K) > cp_threshold.
@@ -47,11 +49,23 @@ impl KeyState {
         self.observations.len()
     }
 
+    fn push_observation(&mut self, value: f64) {
+        self.observations.push(value);
+        if self.observations.len() > MAX_OBSERVATIONS {
+            self.observations.remove(0);
+        }
+    }
+
     /// Update baseline variance from observations.  Does NOT reset run state.
     fn init_baseline(&mut self) {
         let n = self.observations.len() as f64;
         let mean = self.observations.iter().sum::<f64>() / n;
-        let var = self.observations.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
+        let var = self
+            .observations
+            .iter()
+            .map(|x| (x - mean).powi(2))
+            .sum::<f64>()
+            / n;
         // Poisson floor: for count data, var ≥ mean.  Prevents degenerate
         // zero-variance baselines when all observations are identical.
         self.baseline_var = var.max(mean.max(1.0));
@@ -146,12 +160,7 @@ impl BocpdDetector {
     }
 
     /// Feed one per-session stuck-event count for a (route_id, node_id) pair.
-    pub fn update(
-        &mut self,
-        route_id: u64,
-        node_id: u64,
-        stale: bool,
-    ) -> Option<AnomalyEvent> {
+    pub fn update(&mut self, route_id: u64, node_id: u64, stale: bool) -> Option<AnomalyEvent> {
         self.feed(route_id, node_id, 1.0, stale)
     }
 
@@ -167,7 +176,7 @@ impl BocpdDetector {
         let hazard = self.hazard;
         let state = self.states.entry(key).or_insert_with(KeyState::new);
 
-        state.observations.push(value);
+        state.push_observation(value);
         let n = state.session_count();
 
         // Update baseline variance once when min_sessions is reached.
@@ -308,5 +317,17 @@ mod tests {
         let vals = vec![0.5_f64.ln(), 0.5_f64.ln()];
         let result = log_sum_exp(&vals);
         assert!((result.exp() - 1.0).abs() < 1e-6, "got {}", result.exp());
+    }
+
+    #[test]
+    fn observations_are_bounded_per_key() {
+        let mut d = BocpdDetector::new(250.0, MIN_SESSIONS);
+        for _ in 0..(MAX_OBSERVATIONS + 25) {
+            d.update_with_value(7, 11, 2.0, false);
+        }
+
+        let key = (7, 11);
+        let state = d.states.get(&key).expect("state should exist");
+        assert_eq!(state.observations.len(), MAX_OBSERVATIONS);
     }
 }

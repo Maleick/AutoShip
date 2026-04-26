@@ -19,6 +19,8 @@ use crate::improve::{AnomalyEvent, AnomalyKind, Severity};
 
 /// Sessions required before the detector activates.
 pub const MIN_SESSIONS: usize = 30;
+/// Maximum number of observations retained per camp to bound memory/CPU.
+const MAX_OBSERVATIONS: usize = 512;
 
 struct CampState {
     observations: Vec<f64>,
@@ -38,6 +40,13 @@ impl CampState {
 
     fn session_count(&self) -> usize {
         self.observations.len()
+    }
+
+    fn push_observation(&mut self, value: f64) {
+        self.observations.push(value);
+        if self.observations.len() > MAX_OBSERVATIONS {
+            self.observations.remove(0);
+        }
     }
 
     /// Compute trend via centered moving average.
@@ -162,7 +171,7 @@ impl StlMadDetector {
             .entry(camp.to_owned())
             .or_insert_with(|| CampState::new(period, mad_threshold));
 
-        state.observations.push(value);
+        state.push_observation(value);
 
         if state.session_count() < min_sessions {
             return None;
@@ -246,7 +255,12 @@ mod tests {
         let r = d.update("ntov_camp", 5.0, false);
         assert!(r.is_some(), "should detect loot-rate crash");
         let ev = r.unwrap();
-        assert_eq!(ev.kind, AnomalyKind::LootRateStlMad { camp: "ntov_camp".into() });
+        assert_eq!(
+            ev.kind,
+            AnomalyKind::LootRateStlMad {
+                camp: "ntov_camp".into()
+            }
+        );
     }
 
     #[test]
@@ -268,5 +282,16 @@ mod tests {
         // camp_b is in warmup
         let r = d.update("camp_b", 5.0, false);
         assert!(r.is_none());
+    }
+
+    #[test]
+    fn observations_are_bounded_per_camp() {
+        let mut d = StlMadDetector::new(7, MIN_SESSIONS, 3.5);
+        for i in 0..(MAX_OBSERVATIONS + 25) {
+            d.update("bounded_camp", 100.0 + (i % 7) as f64, false);
+        }
+
+        let state = d.states.get("bounded_camp").expect("state should exist");
+        assert_eq!(state.observations.len(), MAX_OBSERVATIONS);
     }
 }
