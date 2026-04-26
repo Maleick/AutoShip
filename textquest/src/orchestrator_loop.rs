@@ -14,7 +14,7 @@ use crate::{
     credentials::store::CredentialStore,
     discord::webhook::WebhookSender,
     launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
-    metrics::{ProgressReport, ProgressTracker, SessionErrorKind, sample_process_memory_bytes},
+    metrics::{ProgressReport, ProgressTracker, SessionErrorKind, sample_process_memory_bytes, collector::MetricsCollector},
     orchestrator::Orchestrator,
 };
 use std::{
@@ -73,6 +73,8 @@ pub struct OrchestratorLoop {
     window_title_runtime: crate::window_title_runtime::WindowTitleRuntime,
     /// In-process per-client session counters for real-time progress reporting.
     progress_tracker: ProgressTracker,
+    /// Metrics collector for aggregating fleet intelligence.
+    metrics_collector: MetricsCollector,
 }
 
 impl OrchestratorLoop {
@@ -116,6 +118,7 @@ impl OrchestratorLoop {
             timestamp_runtime: crate::timestamp_runtime::TimestampRuntime::new(),
             window_title_runtime: crate::window_title_runtime::WindowTitleRuntime::new(),
             progress_tracker: ProgressTracker::new(),
+            metrics_collector: MetricsCollector::new(),
         }
     }
 
