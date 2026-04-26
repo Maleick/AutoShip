@@ -777,6 +777,8 @@ pub enum ConditionExpr {
     TargetLevelBelow(u8),
     /// Player has a piercing weapon equipped in their primary slot.
     PiercerEquipped,
+    /// Player is currently stealthed (hidden / sneak / invis).
+    PlayerIsStealthed,
 }
 
 /// Positional data for the player relative to their current target.
@@ -794,6 +796,8 @@ pub struct PositionalContext {
     pub piercer_equipped: bool,
     /// Level of the current target (0 = unknown/no target).
     pub target_level: u8,
+    /// Whether the player is currently stealthed (hide/sneak/invis).
+    pub is_stealthed: bool,
 }
 
 /// An emergency reaction rule that fires when conditions are met.

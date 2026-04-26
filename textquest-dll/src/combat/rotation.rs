@@ -308,6 +308,7 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::TargetLevelBelow(max_level) => ctx
             .positional
             .is_some_and(|p| p.target_level > 0 && p.target_level < *max_level),
+        ConditionExpr::PlayerIsStealthed => ctx.positional.is_some_and(|p| p.is_stealthed),
     }
 }
 
