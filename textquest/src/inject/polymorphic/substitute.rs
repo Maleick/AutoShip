@@ -13,11 +13,24 @@
 
 use super::PolymorphicError;
 use rand::RngCore;
+use std::ops::Range;
 
 /// Apply substitution transforms to `stub` in place.
 pub fn transform(stub: &[u8]) -> Result<Vec<u8>, PolymorphicError> {
+    transform_with_protected_ranges(stub, &[])
+}
+
+/// Apply substitution transforms while leaving protected byte ranges untouched.
+pub fn transform_with_protected_ranges(
+    stub: &[u8],
+    protected_ranges: &[Range<usize>],
+) -> Result<Vec<u8>, PolymorphicError> {
     let mut out = Vec::with_capacity(stub.len());
-    for &b in stub {
+    for (idx, &b) in stub.iter().enumerate() {
+        if protected_ranges.iter().any(|range| range.contains(&idx)) {
+            out.push(b);
+            continue;
+        }
         out.push(match b {
             // Coin-flip swap NOP (0x90) for an operand-size prefix (0x66)
             // and vice versa. Both are filler-equivalent at this stage.
@@ -53,5 +66,13 @@ mod tests {
         let out = transform(&stub).unwrap();
         let diffs = stub.iter().zip(&out).filter(|(a, b)| a != b).count();
         assert!(diffs > 100, "expected meaningful divergence, got {diffs}");
+    }
+
+    #[test]
+    fn protected_ranges_are_never_mutated() {
+        let stub = vec![0x90, 0x66, 0x90, 0x66, 0x90, 0x66];
+        let protected = 1..5;
+        let out = transform_with_protected_ranges(&stub, &[protected.clone()]).unwrap();
+        assert_eq!(&out[protected], &[0x66, 0x90, 0x66, 0x90]);
     }
 }

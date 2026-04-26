@@ -17,6 +17,16 @@
 
 use super::PolymorphicError;
 use rand::RngCore;
+use std::ops::Range;
+
+/// Metadata returned by [`emit_base_stub`].
+#[derive(Debug, Clone)]
+pub struct BaseStub {
+    /// Stub bytes.
+    pub bytes: Vec<u8>,
+    /// Range that contains key + nonce immediate bytes.
+    pub key_nonce_range: Range<usize>,
+}
 
 /// Emit a fresh base loader stub. Bytes will differ between calls.
 ///
@@ -24,7 +34,7 @@ use rand::RngCore;
 /// placeholder body bytes that encode the key + nonce. Sub-issue #735 will
 /// replace the body with a real reflective mapper assembled from a pool of
 /// equivalent instruction templates.
-pub fn emit_base_stub(key: &[u8; 32], nonce: &[u8; 12]) -> Result<Vec<u8>, PolymorphicError> {
+pub fn emit_base_stub(key: &[u8; 32], nonce: &[u8; 12]) -> Result<BaseStub, PolymorphicError> {
     let mut stub = Vec::with_capacity(256);
 
     // Random NOP-equivalent prologue. Length itself is randomized so that
@@ -36,8 +46,10 @@ pub fn emit_base_stub(key: &[u8; 32], nonce: &[u8; 12]) -> Result<Vec<u8>, Polym
 
     // Placeholder body — a real mapper goes here. We embed the key + nonce
     // so downstream stages see realistic-looking immediates.
+    let key_nonce_start = stub.len();
     stub.extend_from_slice(key);
     stub.extend_from_slice(nonce);
+    let key_nonce_end = stub.len();
 
     // Random epilogue padding.
     let pad = rand_byte() as usize % 16;
@@ -45,7 +57,10 @@ pub fn emit_base_stub(key: &[u8; 32], nonce: &[u8; 12]) -> Result<Vec<u8>, Polym
         stub.push(pick_nop_variant());
     }
 
-    Ok(stub)
+    Ok(BaseStub {
+        bytes: stub,
+        key_nonce_range: key_nonce_start..key_nonce_end,
+    })
 }
 
 fn rand_byte() -> u8 {
@@ -73,8 +88,8 @@ mod tests {
     fn emit_produces_distinct_stubs() {
         let key = [0xAAu8; 32];
         let nonce = [0xBBu8; 12];
-        let a = emit_base_stub(&key, &nonce).unwrap();
-        let b = emit_base_stub(&key, &nonce).unwrap();
+        let a = emit_base_stub(&key, &nonce).unwrap().bytes;
+        let b = emit_base_stub(&key, &nonce).unwrap().bytes;
         // With randomized prologue length, byte-equality across calls
         // would mean the RNG broke.
         assert_ne!(a, b, "stub bytes must differ between calls");
@@ -86,7 +101,11 @@ mod tests {
         let nonce = [0x22u8; 12];
         let stub = emit_base_stub(&key, &nonce).unwrap();
         // Key + nonce must appear in the stub for the decryptor to use.
-        assert!(stub.windows(32).any(|w| w == key));
-        assert!(stub.windows(12).any(|w| w == nonce));
+        assert!(stub.bytes.windows(32).any(|w| w == key));
+        assert!(stub.bytes.windows(12).any(|w| w == nonce));
+        assert_eq!(
+            &stub.bytes[stub.key_nonce_range.clone()],
+            [key.as_slice(), nonce.as_slice()].concat().as_slice()
+        );
     }
 }
