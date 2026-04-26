@@ -1390,6 +1390,10 @@ fn enqueue_command(cmd: textquest_common::ipc::Command, current_tick: u64) {
 
 /// Drain and execute any commands whose scheduled tick has arrived.
 fn process_pending_commands(current_tick: u64) {
+    if crate::boxr::is_paused() {
+        return;
+    }
+
     let Ok(mut queue) = PENDING_COMMANDS.lock() else {
         return;
     };
@@ -4550,6 +4554,34 @@ mod tests {
             }] if command.as_str() == "/quit"
         ));
         queue.clear();
+    }
+
+    #[test]
+    fn process_pending_commands_skips_dispatch_while_paused() {
+        crate::boxr::set_paused(true);
+        {
+            let mut queue = PENDING_COMMANDS.lock().unwrap();
+            queue.clear();
+            queue.push(PendingCommand {
+                command: textquest_common::ipc::Command::JoinGroup { group_id: 7 },
+                execute_at_tick: 0,
+            });
+        }
+
+        process_pending_commands(100);
+
+        let queue = PENDING_COMMANDS.lock().unwrap();
+        assert!(matches!(
+            queue.as_slice(),
+            [PendingCommand {
+                command: textquest_common::ipc::Command::JoinGroup { group_id: 7 },
+                execute_at_tick: 0,
+            }]
+        ));
+
+        drop(queue);
+        crate::boxr::set_paused(false);
+        PENDING_COMMANDS.lock().unwrap().clear();
     }
 
     #[test]
