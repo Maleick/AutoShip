@@ -447,6 +447,76 @@ When a live session is completed:
 7. Update the table above and the evidence state in the main Current Evidence State
    table for the `Nodding Blue Lily forage baseline` row.
 
+## Access-Route Validation — Issue #3388 (Attended, Frostreaver Live Server)
+
+Issue `#3388` owns the attended access-route validation slice delegated from parent `#1837`.
+The acceptance criteria require live observation on Frostreaver of: staging point, zone sequence,
+required keying, travel time, and corpse-recovery behavior.
+Results recorded here will unblock the route claim in the Evidence State table above.
+
+### Scope
+
+- **What this issue covers:** Zone sequence from Scars-of-Velious launch staging point to Old
+  Sebilis zone-in; keying requirements confirmed via live observation; travel time measured
+  wall-clock; corpse-recovery behavior observed on at least one death during transit or zone entry.
+- **What this issue does NOT cover:** Spawn sampling, forage baselines, or drop confirmation.
+  Those are owned by `#1838`, `#1839`, and `#1840` respectively.
+
+### Pre-run checklist (operator, Frostreaver)
+
+- [ ] Frostreaver SSH session active and EQ client launched
+- [ ] At least one character at intended Scars launch staging point confirmed
+- [ ] Key item (if required) confirmed present in inventory before travel begins
+- [ ] TextQuest operator controls confirmed: HOME/END pause, TUI log visible
+- [ ] Log capture enabled: `/log on` in EQ client, TextQuest structured log running
+- [ ] Timer tool ready (stopwatch or `/time` alias)
+
+### Observation template — Raw notes
+
+Record one row per zone transition. Fill in during or immediately after the attended session.
+Do not interpolate or guess — leave fields blank if not directly observed.
+
+| Step | Zone from | Zone to | Method (run/port/gate) | Key required? | Key item name | Wall-clock time (mm:ss) | Notes / anomalies |
+|------|-----------|---------|------------------------|---------------|---------------|-------------------------|-------------------|
+| 1    |           |         |                        |               |               |                         |                   |
+| 2    |           |         |                        |               |               |                         |                   |
+| 3    |           |         |                        |               |               |                         |                   |
+| 4    |           |         |                        |               |               |                         |                   |
+| 5    |           |         |                        |               |               |                         |                   |
+
+**Launch staging point observed:** _(fill in)_
+**Total travel time observed (minutes):** _(fill in)_
+**Key item required confirmed on live server:** Yes / No / Conditional _(circle and annotate)_
+**Route repeated without incident (2nd pass):** Yes / No _(fill in)_
+
+### Corpse-recovery observation template
+
+Record one entry per death or simulated zone-failure event during the validation run.
+
+| Event | Zone where death/failure occurred | TextQuest recovery behavior | Outcome (safe-coord / stuck / manual required) | Time to recover (seconds) |
+|-------|-----------------------------------|-----------------------------|------------------------------------------------|---------------------------|
+| 1     |                                   |                             |                                                |                           |
+| 2     |                                   |                             |                                                |                           |
+
+**Corpse-in-zone code `-22` triggered during run:** Yes / No _(fill in)_
+**Recovery path matched expected safe-coordinate:** Yes / No / Not tested _(fill in)_
+**Operator intervention required during recovery:** Yes / No _(fill in)_
+
+### Evidence promotion criteria
+
+When the observation templates above are filled in with live data, update the Evidence State
+table row for the route claim from `Research-backed blocker` to `Live-observed` and record
+the session date, Frostreaver session ID or log path, and operator initials here:
+
+- **Session date:** _(fill in)_
+- **Frostreaver log path or session ID:** _(fill in)_
+- **Operator:** _(fill in)_
+- **Route claim promoted:** Yes / No / Partial _(fill in after review)_
+
+Until this block is filled in from a live session, the route evidence state remains
+`Research-backed blocker` and downstream issues (`#1768` and the Sebilis disco camp work)
+remain blocked on this issue.
+
 ## Exit criteria
 
 Do not call Sebilis a validated farming hub until the template has at least:
