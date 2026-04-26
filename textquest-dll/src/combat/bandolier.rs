@@ -158,14 +158,19 @@ impl BandolierManager {
     // Command generators
     // ------------------------------------------------------------------
 
+    /// Quote and escape an argument for EQ slash commands.
+    fn quote_for_eq(value: &str) -> String {
+        format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+    }
+
     /// EQ command to save the current loadout as `set_name`.
     pub fn save_command(set_name: &str) -> String {
-        format!(r#"/bandolier save "{set_name}""#)
+        format!("/bandolier save {}", Self::quote_for_eq(set_name))
     }
 
     /// EQ command to delete `set_name`.
     pub fn delete_command(set_name: &str) -> String {
-        format!(r#"/bandolier delete "{set_name}""#)
+        format!("/bandolier delete {}", Self::quote_for_eq(set_name))
     }
 
     /// EQ command to activate `set_name`, subject to the cooldown gate.
@@ -181,7 +186,10 @@ impl BandolierManager {
             return None;
         }
         self.last_swap_tick = current_tick;
-        Some(format!(r#"/bandolier activate "{set_name}""#))
+        Some(format!(
+            "/bandolier activate {}",
+            Self::quote_for_eq(set_name)
+        ))
     }
 
     // ------------------------------------------------------------------
@@ -323,6 +331,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn command_generators_escape_quotes_and_backslashes() {
+        let set_name = r#"bad\"name" test"#;
+        assert_eq!(
+            BandolierManager::save_command(set_name),
+            r#"/bandolier save "bad\\\"name\" test""#
+        );
+        assert_eq!(
+            BandolierManager::delete_command(set_name),
+            r#"/bandolier delete "bad\\\"name\" test""#
+        );
+    }
+
     // -----------------------------------------------------------------------
     // activate_command — cooldown gate + same-set skip
     // -----------------------------------------------------------------------
@@ -362,6 +383,16 @@ mod tests {
         let mut mgr = BandolierManager::new();
         let cmd = mgr.activate_command("Heal Set", 0);
         assert_eq!(cmd, Some(r#"/bandolier activate "Heal Set""#.to_string()));
+    }
+
+    #[test]
+    fn activate_command_escapes_quotes_and_backslashes() {
+        let mut mgr = BandolierManager::new();
+        let cmd = mgr.activate_command(r#"bad\"name" test"#, 0);
+        assert_eq!(
+            cmd,
+            Some(r#"/bandolier activate "bad\\\"name\" test""#.to_string())
+        );
     }
 
     // -----------------------------------------------------------------------
