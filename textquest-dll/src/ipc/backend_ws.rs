@@ -112,10 +112,11 @@ fn sender_loop(client_id: ClientId, session_id: u64) {
             return;
         }
     };
+    let backend_url_for_logs = redact_backend_url_for_logs(&backend_url);
 
     tracing::info!(
         client_id,
-        backend_url = %backend_url,
+        backend_url = %backend_url_for_logs,
         "Backend WebSocket sender started"
     );
 
@@ -125,7 +126,7 @@ fn sender_loop(client_id: ClientId, session_id: u64) {
             Ok((mut socket, _response)) => {
                 tracing::info!(
                     client_id,
-                    backend_url = %backend_url,
+                    backend_url = %backend_url_for_logs,
                     "Connected to backend WebSocket"
                 );
                 reconnect_backoff = INITIAL_RECONNECT_BACKOFF;
@@ -137,7 +138,7 @@ fn sender_loop(client_id: ClientId, session_id: u64) {
                         {
                             tracing::warn!(
                                 client_id,
-                                backend_url = %backend_url,
+                                backend_url = %backend_url_for_logs,
                                 error = %error,
                                 "Backend WebSocket ping failed; reconnecting"
                             );
@@ -168,7 +169,7 @@ fn sender_loop(client_id: ClientId, session_id: u64) {
                         requeue_front(response);
                         tracing::warn!(
                             client_id,
-                            backend_url = %backend_url,
+                            backend_url = %backend_url_for_logs,
                             error = %error,
                             "Backend WebSocket send failed; reconnecting"
                         );
@@ -179,7 +180,7 @@ fn sender_loop(client_id: ClientId, session_id: u64) {
             Err(error) => {
                 tracing::warn!(
                     client_id,
-                    backend_url = %backend_url,
+                    backend_url = %backend_url_for_logs,
                     error = %error,
                     backoff_ms = reconnect_backoff.as_millis(),
                     "Backend WebSocket connect failed"
@@ -327,6 +328,16 @@ fn normalize_backend_url(raw_url: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+fn redact_backend_url_for_logs(raw_url: &str) -> String {
+    let Ok(mut url) = Url::parse(raw_url) else {
+        return "<invalid backend_url>".to_owned();
+    };
+    if url.query().is_some() {
+        url.set_query(Some("redacted"));
+    }
+    url.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,6 +355,14 @@ mod tests {
         assert_eq!(
             backend_url_from_toml(r#"backend_url = "wss://backend.example.com/ws""#).as_deref(),
             Some("wss://backend.example.com/ws")
+        );
+    }
+
+    #[test]
+    fn redacts_backend_url_query_for_logs() {
+        assert_eq!(
+            redact_backend_url_for_logs("wss://backend.example.com/ws?token=secret"),
+            "wss://backend.example.com/ws?redacted"
         );
     }
 }
