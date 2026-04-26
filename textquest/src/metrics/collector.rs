@@ -428,12 +428,15 @@ pub struct MetricsCollector {
     last_positions: HashMap<String, PositionSample>,
     event_tx: SyncSender<MetricsEvent>,
     event_rx: Receiver<MetricsEvent>,
+    fleet_event_tx: SyncSender<super::events::FleetEvent>,
+    fleet_event_rx: Receiver<super::events::FleetEvent>,
     session_recorder: Option<crate::metrics::session_recorder::SessionRecorder>,
 }
 
 impl MetricsCollector {
     pub fn new() -> Self {
         let (event_tx, event_rx) = sync_channel(EVENT_QUEUE_CAPACITY);
+        let (fleet_event_tx, fleet_event_rx) = sync_channel(EVENT_QUEUE_CAPACITY);
         Self {
             per_character: HashMap::new(),
             fleet_aggregates: FleetMetrics::new(),
@@ -441,6 +444,8 @@ impl MetricsCollector {
             last_positions: HashMap::new(),
             event_tx,
             event_rx,
+            fleet_event_tx,
+            fleet_event_rx,
             session_recorder: None,
         }
     }
@@ -454,6 +459,11 @@ impl MetricsCollector {
 
     pub fn event_sender(&self) -> SyncSender<MetricsEvent> {
         self.event_tx.clone()
+    }
+
+    /// Get the event hook context for emitting combat, movement, and loot events.
+    pub fn event_hook_context(&self) -> crate::metrics::EventHookContext {
+        crate::metrics::EventHookContext::new(Some(self.fleet_event_tx.clone()))
     }
 
     pub fn enqueue_event(&self, event: MetricsEvent) -> bool {
@@ -472,6 +482,82 @@ impl MetricsCollector {
                     count += 1;
                 }
                 Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => return count,
+            }
+        }
+    }
+
+    /// Drain and process fleet-level events (combat, movement, loot).
+    /// Returns the number of events processed.
+    pub fn drain_fleet_events(&mut self) -> usize {
+        let mut count = 0;
+        loop {
+            match self.fleet_event_rx.try_recv() {
+                Ok(event) => {
+                    self.apply_fleet_event(event);
+                    count += 1;
+                }
+                Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => return count,
+            }
+        }
+    }
+
+    fn apply_fleet_event(&mut self, event: super::events::FleetEvent) {
+        // Process fleet events for fleet-level metrics aggregation.
+        // This integrates with the FleetEventLog and other fleet analytics.
+        match event {
+            super::events::FleetEvent::CombatRound {
+                pid,
+                damage_dealt,
+                damage_taken,
+                duration_ms: _,
+                timestamp: _,
+            } => {
+                if damage_dealt > 0 || damage_taken > 0 {
+                    self.fleet_aggregates.total_damage_dealt += damage_dealt;
+                    self.fleet_aggregates.total_damage_taken += damage_taken;
+                }
+            }
+            super::events::FleetEvent::Kill {
+                source_pid: _,
+                target_name: _,
+                target_level: _,
+                zone: _,
+                timestamp: _,
+            } => {
+                self.fleet_aggregates.total_kills += 1;
+            }
+            super::events::FleetEvent::LootDrop {
+                pid: _,
+                item_name: _,
+                item_id: _,
+                zone: _,
+                timestamp: _,
+            } => {
+                self.fleet_aggregates.total_items_looted += 1;
+            }
+            super::events::FleetEvent::Death {
+                pid: _,
+                character_name: _,
+                zone: _,
+                timestamp: _,
+            } => {
+                self.fleet_aggregates.total_deaths += 1;
+            }
+            super::events::FleetEvent::ZoneChange {
+                pid: _,
+                from_zone: _,
+                to_zone: _,
+                timestamp: _,
+            } => {
+                // Zone changes are tracked separately if needed
+            }
+            super::events::FleetEvent::LevelUp {
+                pid: _,
+                character_name: _,
+                new_level: _,
+                timestamp: _,
+            } => {
+                // Level ups recorded for progression tracking
             }
         }
     }
@@ -664,6 +750,7 @@ impl MetricsCollector {
 
     pub fn tick(&mut self) {
         self.drain_events();
+        self.drain_fleet_events();
     }
 
     pub fn characters(&self) -> Vec<&String> {
