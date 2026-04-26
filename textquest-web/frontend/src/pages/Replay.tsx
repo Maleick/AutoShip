@@ -154,10 +154,17 @@ export function Replay() {
   );
   const activeTs = hoverTs ?? cursorTs;
   const activeEvent = snapshot.event;
+  const activeTsRef = useRef(activeTs);
+  const snapshotRef = useRef(snapshot);
   const visibleHighlights = useMemo(
     () => detectHighlights(session.events, bookmarks),
     [bookmarks, session.events],
   );
+
+  useEffect(() => {
+    activeTsRef.current = activeTs;
+    snapshotRef.current = snapshot;
+  }, [activeTs, snapshot]);
 
   useEffect(() => {
     try {
@@ -268,24 +275,25 @@ export function Replay() {
   }
 
   function skipSeconds(delta: number) {
-    seekTo(activeTs + delta);
+    seekTo(activeTsRef.current + delta);
     setPlaying(false);
   }
 
   function frameStep(delta: number) {
-    const currentFrameIndex = snapshot.frameIndex;
+    const currentFrameIndex = snapshotRef.current.frameIndex;
     const nextIndex = Math.max(
       0,
       Math.min(session.frameTimes.length - 1, currentFrameIndex + delta),
     );
-    seekTo(session.frameTimes[nextIndex] ?? activeTs);
+    seekTo(session.frameTimes[nextIndex] ?? activeTsRef.current);
     setPlaying(false);
   }
 
   function toggleBookmark() {
-    const bookmark = buildBookmark(activeTs, session.id);
+    const currentTs = activeTsRef.current;
+    const bookmark = buildBookmark(currentTs, session.id);
     setBookmarks((current) => {
-      const existingIndex = current.findIndex((item) => Math.abs(item.ts - activeTs) <= 0.5);
+      const existingIndex = current.findIndex((item) => Math.abs(item.ts - currentTs) <= 0.5);
       if (existingIndex >= 0) {
         const next = current.filter((_, index) => index !== existingIndex);
         return next;
