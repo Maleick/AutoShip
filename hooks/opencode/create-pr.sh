@@ -17,10 +17,7 @@ canonical_dir() {
 }
 
 canonical_file() {
-  local dir base
-  dir=$(dirname "$1")
-  base=$(basename "$1")
-  printf '%s/%s\n' "$(canonical_dir "$dir")" "$base"
+  readlink -f -- "$1"
 }
 
 is_runtime_artifact() {
@@ -52,9 +49,16 @@ if [[ ! -s "$RESULT_PATH" ]]; then
   echo "VERDICT: FAIL - AUTOSHIP_RESULT.md missing"
   exit 1
 fi
+if [[ -L "$RESULT_PATH" ]]; then
+  echo "VERDICT: FAIL - AUTOSHIP_RESULT.md must not be a symlink"
+  exit 1
+fi
 
 REAL_WORKTREE=$(canonical_dir "$WORKTREE_PATH")
-REAL_RESULT=$(canonical_file "$RESULT_PATH")
+REAL_RESULT=$(canonical_file "$RESULT_PATH") || {
+  echo "VERDICT: FAIL - cannot resolve AUTOSHIP_RESULT.md"
+  exit 1
+}
 case "$REAL_RESULT" in
   "$REAL_WORKTREE"/*) ;;
   *)

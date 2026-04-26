@@ -1244,6 +1244,14 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
   if PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-190 "$artifact_workspace" >/dev/null 2>&1; then
     fail "PR dry-run must reject artifact-only worktrees"
   fi
+  symlink_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-symlink-result"
+  mkdir -p "$symlink_workspace"
+  git -C "$FIXTURE_REPO" worktree add -q "$symlink_workspace" HEAD
+  printf 'implementation\n' > "$symlink_workspace/implementation.txt"
+  ln -s /etc/hosts "$symlink_workspace/AUTOSHIP_RESULT.md"
+  if PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-190 "$symlink_workspace" >/dev/null 2>&1; then
+    fail "PR dry-run must reject symlinked AUTOSHIP_RESULT.md"
+  fi
   live_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-191"
   git -C "$FIXTURE_REPO" worktree add -q -b autoship/issue-191 "$live_workspace" HEAD
   printf 'implementation\n' > "$live_workspace/implementation.txt"
