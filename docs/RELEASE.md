@@ -101,10 +101,17 @@ git tag -a "$VERSION" -m "$VERSION"
 Publish the npm package from the same commit used for the tag. This is the canonical package for the long-term global install path documented as `npm install -g opencode-autoship`.
 
 ```bash
+npm install --package-lock=false
 npm publish --access public
 ```
 
-If npm publish fails, do not move the tag. Fix the release commit, retag only if the failed tag has not been pushed, and rerun verification.
+If npm prompts with a browser authentication URL, complete the npm CLI auth flow and rerun `npm publish --access public`. If npm publish fails for any other reason, do not move the tag. Fix the release commit, retag only if the failed tag has not been pushed, and rerun verification.
+
+Remove local publish artifacts after publishing if they were created only for the release:
+
+```bash
+rm -rf node_modules dist package-lock.json
+```
 
 `bunx opencode-autoship install` is the one-time/no-global path. It resolves the same npm package but does not leave the CLI installed on PATH.
 
@@ -158,6 +165,7 @@ Confirm the tag, GitHub release, and npm package agree.
 git rev-parse "$VERSION"
 gh release view "$VERSION"
 npm view "opencode-autoship@$PACKAGE_VERSION" version
+npm view opencode-autoship dist-tags --json
 ```
 
 The release is complete when all final checks report `$VERSION` or `$PACKAGE_VERSION` as appropriate.
