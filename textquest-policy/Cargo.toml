@@ -11,6 +11,8 @@ serde_json.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 arc-swap.workspace = true
+blake3.workspace = true
+sha2 = "0.10"
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 [dev-dependencies]

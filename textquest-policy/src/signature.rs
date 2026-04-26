@@ -1,20 +1,19 @@
 use std::path::Path;
 
+use sha2::{Digest, Sha256};
+
 use crate::error::PolicyError;
+
+const POLICY_SIG_KEY_ENV: &str = "TEXTQUEST_POLICY_SIG_KEY";
 
 /// Verify the artifact at `artifact_dir` has a valid L-7 signature.
 ///
 /// Layout expected:
 ///   artifact_dir/policy.bin   — raw policy data
 ///   artifact_dir/manifest.json — includes sha256 field
-///   artifact_dir/signature     — hex SHA-256 of (scope|version|sha256) as HMAC stand-in
+///   artifact_dir/signature     — hex keyed-BLAKE3(scope|version|sha256)
 ///
-/// In production the `signature` file would contain an ed25519 signature from
-/// the L-7 canary promotion key. This implementation validates the SHA-256
-/// content hash in manifest.json against the actual policy.bin bytes.
-///
-/// When compiled with `cfg(test)` or when `TEST_BYPASS_POLICY_SIG=1`, the
-/// signature file check is bypassed and only the content hash is verified.
+/// The signature key is loaded from `TEXTQUEST_POLICY_SIG_KEY`.
 pub fn verify_artifact(artifact_dir: &Path, scope: &str, version: &str) -> Result<(), PolicyError> {
     let policy_path = artifact_dir.join("policy.bin");
     let manifest_path = artifact_dir.join("manifest.json");
@@ -40,20 +39,21 @@ pub fn verify_artifact(artifact_dir: &Path, scope: &str, version: &str) -> Resul
         });
     }
 
-    // Skip signature file check in test mode.
-    if bypass_sig_check() {
-        return Ok(());
-    }
-
-    // Verify L-7 signature file exists and is non-empty.
+    // Verify signature file exists and matches expected keyed digest.
     if !sig_path.exists() {
         return Err(PolicyError::InvalidSignature {
             scope: scope.to_string(),
             version: version.to_string(),
         });
     }
+
     let sig_bytes = std::fs::read(&sig_path)?;
-    if sig_bytes.is_empty() {
+    let provided_sig = std::str::from_utf8(&sig_bytes)
+        .ok()
+        .map(str::trim)
+        .filter(|sig| !sig.is_empty());
+    let expected_sig = expected_signature(scope, version, &manifest.sha256);
+    if provided_sig != expected_sig.as_deref() {
         return Err(PolicyError::InvalidSignature {
             scope: scope.to_string(),
             version: version.to_string(),
@@ -63,25 +63,32 @@ pub fn verify_artifact(artifact_dir: &Path, scope: &str, version: &str) -> Resul
     Ok(())
 }
 
-fn bypass_sig_check() -> bool {
-    // Allow test environments to skip the signature file check while still
-    // verifying the content hash.
-    cfg!(test) || std::env::var("TEST_BYPASS_POLICY_SIG").is_ok()
+fn expected_signature(scope: &str, version: &str, sha256: &str) -> Option<String> {
+    let key = std::env::var(POLICY_SIG_KEY_ENV).ok()?;
+    if key.is_empty() {
+        return None;
+    }
+    Some(signature_hex(scope, version, sha256, &key))
 }
 
-/// Simple SHA-256 implementation using the standard library's digest primitives.
-/// Uses a portable pure-Rust implementation via sha2 crate (added in Cargo.toml).
+/// Compute SHA-256(data) as lowercase hex.
 pub fn sha256_hex(data: &[u8]) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    let digest = Sha256::digest(data);
+    hex_encode(&digest)
+}
 
-    // NOTE: DefaultHasher is NOT cryptographic. This is a placeholder for CI
-    // testing. Replace with sha2::Sha256 when sha2 is added to the workspace
-    // or when L-7 integration is wired up.
-    //
-    // For the smoke test, we write both the data and the same "hash" into
-    // manifest.json so they match, which is sufficient to test the store logic.
-    let mut h = DefaultHasher::new();
-    data.hash(&mut h);
-    format!("{:016x}{:016x}{:016x}{:016x}", h.finish(), h.finish(), h.finish(), h.finish())
+/// Build an artifact signature string using a keyed BLAKE3 MAC.
+pub fn signature_hex(scope: &str, version: &str, sha256: &str, key: &str) -> String {
+    let message = format!("{scope}|{version}|{sha256}");
+    let key_material = blake3::hash(key.as_bytes());
+    let mac = blake3::keyed_hash(key_material.as_bytes(), message.as_bytes());
+    hex_encode(mac.as_bytes())
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
 }

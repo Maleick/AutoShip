@@ -5,7 +5,9 @@ use std::path::Path;
 
 use textquest_policy::{PolicyStore, rollback::RollbackEvent};
 
-fn make_artifact(dir: &Path, scope: &str, version: &str, source: &str) {
+const TEST_SIG_KEY: &str = "textquest-test-signing-key";
+
+fn make_artifact(dir: &Path, scope: &str, version: &str, source: &str, sig_key: &str) {
     std::fs::create_dir_all(dir).unwrap();
 
     let data = format!("policy data for {}/{}", scope, version).into_bytes();
@@ -23,15 +25,17 @@ fn make_artifact(dir: &Path, scope: &str, version: &str, source: &str) {
     });
     std::fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
 
-    // In test mode (TEST_BYPASS_POLICY_SIG env), signature file is not
-    // validated — but we write it so production code paths don't 404.
-    std::fs::write(dir.join("signature"), b"test-sig").unwrap();
+    let sig = textquest_policy::signature::signature_hex(scope, version, &hash, sig_key);
+    std::fs::write(dir.join("signature"), sig.as_bytes()).unwrap();
     std::fs::write(dir.join("canary_report.html"), b"<html>test canary</html>").unwrap();
 }
 
 #[test]
 fn promote_activate_rollback_cycle() {
-    // TEST_BYPASS_POLICY_SIG skips L-7 signature file validation in tests.
+    // SAFETY: single-threaded test setup; no concurrent env access.
+    unsafe { std::env::set_var("TEXTQUEST_POLICY_SIG_KEY", TEST_SIG_KEY) };
+
+    // Ensure legacy bypass has no effect.
     // SAFETY: single-threaded test setup; no concurrent env access.
     unsafe { std::env::set_var("TEST_BYPASS_POLICY_SIG", "1") };
 
@@ -43,15 +47,26 @@ fn promote_activate_rollback_cycle() {
 
     // ── Step 1: promote v1 ──────────────────────────────────────────────────
     let src_v1 = artifacts_src.join("cleric.heal_picker.bandits.v1");
-    make_artifact(&src_v1, "cleric.heal_picker", "bandits.v1", "canary#2026-04-20");
+    make_artifact(
+        &src_v1,
+        "cleric.heal_picker",
+        "bandits.v1",
+        "canary#2026-04-20",
+        TEST_SIG_KEY,
+    );
     store.promote(&src_v1).expect("promote v1");
 
     // Not yet active — bundle should be rule-based default.
     let bundle = store.bundle("cleric.heal_picker");
-    assert!(bundle.is_rule_based(), "before activation, bundle should be rule-based");
+    assert!(
+        bundle.is_rule_based(),
+        "before activation, bundle should be rule-based"
+    );
 
     // ── Step 2: activate v1 ─────────────────────────────────────────────────
-    store.activate("cleric.heal_picker", "bandits.v1").expect("activate v1");
+    store
+        .activate("cleric.heal_picker", "bandits.v1")
+        .expect("activate v1");
 
     let bundle = store.bundle("cleric.heal_picker");
     assert_eq!(bundle.version, "bandits.v1");
@@ -59,7 +74,10 @@ fn promote_activate_rollback_cycle() {
 
     // Check rollback_history has one Activated event.
     let history_path = store_root.join("rollback_history.jsonl");
-    assert!(history_path.exists(), "rollback_history.jsonl must exist after activate");
+    assert!(
+        history_path.exists(),
+        "rollback_history.jsonl must exist after activate"
+    );
     let history = textquest_policy::rollback::RollbackHistory::new(&history_path);
     let events = history.load().expect("load history");
     assert_eq!(events.len(), 1, "one event after first activate");
@@ -71,9 +89,17 @@ fn promote_activate_rollback_cycle() {
 
     // ── Step 3: promote v2 ──────────────────────────────────────────────────
     let src_v2 = artifacts_src.join("cleric.heal_picker.bandits.v2");
-    make_artifact(&src_v2, "cleric.heal_picker", "bandits.v2", "canary#2026-04-22");
+    make_artifact(
+        &src_v2,
+        "cleric.heal_picker",
+        "bandits.v2",
+        "canary#2026-04-22",
+        TEST_SIG_KEY,
+    );
     store.promote(&src_v2).expect("promote v2");
-    store.activate("cleric.heal_picker", "bandits.v2").expect("activate v2");
+    store
+        .activate("cleric.heal_picker", "bandits.v2")
+        .expect("activate v2");
 
     let bundle = store.bundle("cleric.heal_picker");
     assert_eq!(bundle.version, "bandits.v2");
@@ -82,7 +108,10 @@ fn promote_activate_rollback_cycle() {
     store.rollback("cleric.heal_picker").expect("rollback");
 
     let bundle = store.bundle("cleric.heal_picker");
-    assert_eq!(bundle.version, "bandits.v1", "after rollback, bundle should be v1");
+    assert_eq!(
+        bundle.version, "bandits.v1",
+        "after rollback, bundle should be v1"
+    );
 
     let events = history.load().expect("load history after rollback");
     assert!(
@@ -99,10 +128,15 @@ fn promote_activate_rollback_cycle() {
     );
 
     // ── Step 5: activate v2 again ───────────────────────────────────────────
-    store.activate("cleric.heal_picker", "bandits.v2").expect("re-activate v2");
+    store
+        .activate("cleric.heal_picker", "bandits.v2")
+        .expect("re-activate v2");
 
     let bundle = store.bundle("cleric.heal_picker");
-    assert_eq!(bundle.version, "bandits.v2", "after re-activate, bundle should be v2");
+    assert_eq!(
+        bundle.version, "bandits.v2",
+        "after re-activate, bundle should be v2"
+    );
 
     let events = history.load().expect("load history after re-activate");
     let last = events.last().unwrap();
@@ -114,23 +148,31 @@ fn promote_activate_rollback_cycle() {
 
     // Verify rollback_history.jsonl is append-only (non-empty).
     let content = std::fs::read_to_string(&history_path).unwrap();
-    assert!(content.lines().count() >= 4, "JSONL should have at least 4 lines");
+    assert!(
+        content.lines().count() >= 4,
+        "JSONL should have at least 4 lines"
+    );
 
     // ── Step 6: store survives reopen ───────────────────────────────────────
     drop(store);
     let store2 = PolicyStore::open(&store_root).expect("reopen store");
     let bundle = store2.bundle("cleric.heal_picker");
-    assert_eq!(bundle.version, "bandits.v2", "bundle restored from registry on reopen");
+    assert_eq!(
+        bundle.version, "bandits.v2",
+        "bundle restored from registry on reopen"
+    );
 }
 
 #[test]
 fn store_rejects_invalid_signature() {
+    // SAFETY: single-threaded test setup; no concurrent env access.
+    unsafe { std::env::set_var("TEXTQUEST_POLICY_SIG_KEY", TEST_SIG_KEY) };
+
     let tmp = tempfile::tempdir().unwrap();
     let store_root = tmp.path().join("policies");
     let artifacts_src = tmp.path().join("artifacts_src");
 
-    // Do NOT set TEST_BYPASS_POLICY_SIG — we want rejection.
-    // But we also set wrong sha256 in manifest to trigger content hash failure.
+    // Set wrong sha256 in manifest to trigger content hash failure.
     let src = artifacts_src.join("warrior.rotation.rl.v1");
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("policy.bin"), b"real data").unwrap();
@@ -160,5 +202,8 @@ fn default_bundle_is_rule_based() {
     let store = PolicyStore::open(&store_root).expect("store open");
 
     let bundle = store.bundle("any.new.scope");
-    assert!(bundle.is_rule_based(), "default bundle should be rule-based marker");
+    assert!(
+        bundle.is_rule_based(),
+        "default bundle should be rule-based marker"
+    );
 }
