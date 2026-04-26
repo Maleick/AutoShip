@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CommandPalette, type PaletteAction } from "./components/CommandPalette.tsx";
+import { ThemeToggle } from "./components/ThemeToggle.tsx";
+import { useTheme } from "./hooks/useTheme.ts";
 import { useBackendStatus } from "./hooks/useBackendStatus.ts";
 import {
   Activity,
@@ -9,6 +11,7 @@ import {
   EyeOff,
   KeyRound,
   Package,
+  Palette,
   Play,
   Server,
   Sparkles,
@@ -25,6 +28,7 @@ import { Characters } from "./pages/Characters.tsx";
 import { Loot } from "./pages/Loot.tsx";
 import { Economy } from "./pages/Economy.tsx";
 import { Improvement } from "./pages/Improvement.tsx";
+import { Settings } from "./pages/Settings.tsx";
 
 type Tab =
   | "dashboard"
@@ -34,7 +38,8 @@ type Tab =
   | "economy"
   | "characters"
   | "credentials"
-  | "improvement";
+  | "improvement"
+  | "settings";
 
 interface NavItem {
   id: Tab;
@@ -52,6 +57,7 @@ const NAV: NavItem[] = [
   { id: "economy", label: "Economy", icon: Coins },
   { id: "characters", label: "Characters", icon: Users },
   { id: "credentials", label: "Credentials", icon: KeyRound },
+  { id: "settings", label: "Settings", icon: Palette },
 ];
 
 const KBD_HINTS: { key: string; label: string }[] = [
@@ -71,6 +77,7 @@ export default function App() {
   const [privacy, setPrivacy] = useState(false);
   const [huntMode, setHuntMode] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const { mode, contrast } = useTheme();
   const backend = useBackendStatus();
   const connected = backend === "online";
   const serverName = "Bertoxxulous";
