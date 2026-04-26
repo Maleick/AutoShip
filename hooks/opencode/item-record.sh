@@ -3,9 +3,39 @@ set -euo pipefail
 
 AUTOSHIP_ITEMS_DIR="${AUTOSHIP_ITEMS_DIR:-.autoship/items}"
 
+die() {
+  echo "$*" >&2
+  exit 1
+}
+
+sanitize_issue_num() {
+  local issue_num="$1"
+  if [[ ! "$issue_num" =~ ^[0-9]+$ ]]; then
+    echo "Invalid issue number: $issue_num" >&2
+    return 1
+  fi
+  printf '%s' "$issue_num"
+}
+
+resolve_items_dir() {
+  local base_dir="${1:-$AUTOSHIP_ITEMS_DIR}"
+  if [[ -L "$base_dir" ]]; then
+    echo "Refusing to operate on symlinked items directory: $base_dir" >&2
+    return 1
+  fi
+  mkdir -p "$base_dir"
+  if [[ -L "$base_dir" ]]; then
+    echo "Refusing to operate on symlinked items directory: $base_dir" >&2
+    return 1
+  fi
+  (cd "$base_dir" && pwd -P)
+}
+
 get_item_path() {
   local issue_num="$1"
   local base_dir="${2:-$AUTOSHIP_ITEMS_DIR}"
+  issue_num=$(sanitize_issue_num "$issue_num") || return 1
+  base_dir=$(resolve_items_dir "$base_dir") || return 1
   printf '%s/%s.md' "$base_dir" "$issue_num"
 }
 
@@ -16,7 +46,9 @@ init_item_record() {
   local item_path
   item_path=$(get_item_path "$issue_num" "$base_dir")
 
-  mkdir -p "$(dirname "$item_path")"
+  if [[ -L "$item_path" ]]; then
+    die "Refusing to write to symlinked item record: $item_path"
+  fi
 
   cat > "$item_path" <<EOF
 # AutoShip Issue Record: #$issue_num
@@ -45,6 +77,10 @@ append_item_event() {
   local base_dir="${6:-$AUTOSHIP_ITEMS_DIR}"
   local item_path
   item_path=$(get_item_path "$issue_num" "$base_dir")
+
+  if [[ -L "$item_path" ]]; then
+    die "Refusing to write to symlinked item record: $item_path"
+  fi
 
   if [[ ! -f "$item_path" ]]; then
     init_item_record "$issue_num" "" "$base_dir"
@@ -89,6 +125,10 @@ update_item_title() {
   local base_dir="${3:-$AUTOSHIP_ITEMS_DIR}"
   local item_path
   item_path=$(get_item_path "$issue_num" "$base_dir")
+
+  if [[ -L "$item_path" ]]; then
+    die "Refusing to write to symlinked item record: $item_path"
+  fi
 
   if [[ ! -f "$item_path" ]]; then
     init_item_record "$issue_num" "$new_title" "$base_dir"
