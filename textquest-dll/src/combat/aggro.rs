@@ -161,6 +161,7 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: id,
                     name: format!("mob_{id}"),
+                    aggro_pct: 0,
                 })
                 .collect(),
             auto_add_haters: true,

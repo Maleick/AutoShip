@@ -1201,6 +1201,7 @@ mod tests {
                 status: XTargetSlotStatus::CurrentZone,
                 spawn_id: target.spawn_id,
                 name: "TestMob".into(),
+                aggro_pct: 0,
             }],
             auto_add_haters: true,
         };
@@ -1235,6 +1236,7 @@ mod tests {
                 status: XTargetSlotStatus::CurrentZone,
                 spawn_id: 999,
                 name: "OtherMob".into(),
+                aggro_pct: 0,
             }],
             auto_add_haters: true,
         };

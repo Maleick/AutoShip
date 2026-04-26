@@ -232,9 +232,17 @@ pub const ARRAY_CLASS_LENGTH: u64 = 0x00;
 /// Offset of m_array (T*) within ArrayClass.
 pub const ARRAY_CLASS_ARRAY_PTR: u64 = 0x08;
 
-// ─── ExtendedTargetSlot layout (size 0x4c) ───
+// ─── ExtendedTargetSlot layout (size 0x50) ───
+// Source: eqlib/game/PcClient.h (ExtendedTargetSlot struct, client 20260310)
+// Layout verified against MQ2/eqlib:
+//   0x00: DWORD xTargetType
+//   0x04: DWORD XTargetSlotStatus
+//   0x08: uint32_t SpawnID
+//   0x0c: char Name[64]       (64 bytes, ends at 0x4c)
+//   0x4c: int nAggroPct       (aggro percentage 0–100)
+//   sizeof = 0x50
 /// Size of a single ExtendedTargetSlot.
-pub const XTARGET_SLOT_SIZE: u64 = 0x4c;
+pub const XTARGET_SLOT_SIZE: u64 = 0x50;
 /// Offset of xTargetType (DWORD) within ExtendedTargetSlot.
 pub const XTARGET_SLOT_TYPE: u64 = 0x00;
 /// Offset of XTargetSlotStatus (DWORD enum) within ExtendedTargetSlot.
@@ -243,6 +251,10 @@ pub const XTARGET_SLOT_STATUS: u64 = 0x04;
 pub const XTARGET_SLOT_SPAWN_ID: u64 = 0x08;
 /// Offset of Name (char[64]) within ExtendedTargetSlot.
 pub const XTARGET_SLOT_NAME: u64 = 0x0c;
+/// Offset of nAggroPct (int) within ExtendedTargetSlot.
+/// Aggro percentage toward this character (0–100).
+/// Source: eqlib/game/PcClient.h `/*0x4c*/ int nAggroPct`
+pub const XTARGET_SLOT_AGGRO_PCT: u64 = 0x4c;
 
 /// Offsets within `PcClient` / `PcBase`.
 ///
@@ -293,6 +305,8 @@ pub mod extended_target_slot {
     pub const NAME: usize = super::XTARGET_SLOT_NAME as usize;
     /// Byte length of `Name`.
     pub const NAME_SIZE: usize = 64;
+    /// `int nAggroPct` — aggro percentage toward this character (0–100).
+    pub const AGGRO_PCT: usize = super::XTARGET_SLOT_AGGRO_PCT as usize;
 }
 
 /// pinstCXWndManager — eqgame.exe's UI window manager (not eqmain.dll's)

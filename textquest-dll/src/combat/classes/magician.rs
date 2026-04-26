@@ -793,6 +793,7 @@ mod tests {
                 status: textquest_common::combat::XTargetSlotStatus::CurrentZone,
                 spawn_id: 77,
                 name: "Water pet".into(),
+                aggro_pct: 0,
             }],
             auto_add_haters: false,
         };

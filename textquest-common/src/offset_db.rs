@@ -410,6 +410,7 @@ impl OffsetDatabase {
             ("status", extended_target_slot::STATUS),
             ("spawnId", extended_target_slot::SPAWN_ID),
             ("name", extended_target_slot::NAME),
+            ("aggroPct", extended_target_slot::AGGRO_PCT),
         ]);
 
         let group = offset_map(&[

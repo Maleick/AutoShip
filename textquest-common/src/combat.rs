@@ -107,6 +107,11 @@ pub struct ExtendedTargetSlot {
     pub status: XTargetSlotStatus,
     pub spawn_id: u32,
     pub name: String,
+    /// Aggro percentage toward this character (0–100).
+    /// Read from `nAggroPct` in `ExtendedTargetSlot` at offset 0x4c.
+    /// Source: eqlib/game/PcClient.h `/*0x4c*/ int nAggroPct`
+    #[serde(default)]
+    pub aggro_pct: u8,
 }
 
 impl ExtendedTargetSlot {
@@ -1700,24 +1705,28 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 100,
                     name: "add".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::GroupAssistTarget,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 200,
                     name: "main".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::RaidAssist2Target,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 300,
                     name: "raid_main".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::SpecificNpc,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 400,
                     name: "manual".into(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: true,
@@ -1735,30 +1744,35 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 100,
                     name: "main_dup".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::GroupAssistTarget,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 100,
                     name: "main_dup".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::AutoHater,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 200,
                     name: "add_1".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::AutoHater,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 300,
                     name: "add_2".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::AutoHater,
                     status: XTargetSlotStatus::DifferentZone,
                     spawn_id: 400,
                     name: "remote".into(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: true,
@@ -1861,12 +1875,14 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 1001,
                     name: "Fluffy".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::MyPetTarget,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 2002,
                     name: "A fire beetle".into(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: false,
@@ -1893,12 +1909,14 @@ mod tests {
                     status: XTargetSlotStatus::DifferentZone,
                     spawn_id: 1001,
                     name: "Fluffy".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::MyPetTarget,
                     status: XTargetSlotStatus::Empty,
                     spawn_id: 2002,
                     name: "A fire beetle".into(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: false,

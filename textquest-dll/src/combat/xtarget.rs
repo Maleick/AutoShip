@@ -70,11 +70,16 @@ pub unsafe fn read_extended_targets(eq_base: u64) -> Option<ExtendedTargetList> 
         let name_ptr = (slot_base + offsets::XTARGET_SLOT_NAME as usize) as *const u8;
         let name = unsafe { read_c_string(name_ptr, EQ_MAX_NAME) };
 
+        let aggro_raw =
+            unsafe { read_i32(slot_base + offsets::XTARGET_SLOT_AGGRO_PCT as usize)? };
+        let aggro_pct = aggro_raw.clamp(0, 100) as u8;
+
         slots.push(ExtendedTargetSlot {
             slot_type: XTargetType::from_raw(raw_type).unwrap_or(XTargetType::Empty),
             status: XTargetSlotStatus::from_raw(raw_status),
             spawn_id,
             name,
+            aggro_pct,
         });
     }
 
@@ -142,18 +147,21 @@ pub unsafe fn read_extended_targets(_eq_base: u64) -> Option<ExtendedTargetList>
                 status: XTargetSlotStatus::CurrentZone,
                 spawn_id: 1001,
                 name: "a_fire_beetle".into(),
+                aggro_pct: 75,
             },
             ExtendedTargetSlot {
                 slot_type: XTargetType::AutoHater,
                 status: XTargetSlotStatus::CurrentZone,
                 spawn_id: 1002,
                 name: "a_fire_beetle".into(),
+                aggro_pct: 25,
             },
             ExtendedTargetSlot {
                 slot_type: XTargetType::GroupAssistTarget,
                 status: XTargetSlotStatus::CurrentZone,
                 spawn_id: 1001,
                 name: "a_fire_beetle".into(),
+                aggro_pct: 0,
             },
         ],
         auto_add_haters: true,
@@ -190,24 +198,28 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 100,
                     name: "mob_a".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::GroupTank,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 200,
                     name: "tank".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::AutoHater,
                     status: XTargetSlotStatus::DifferentZone,
                     spawn_id: 300,
                     name: "mob_b".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::AutoHater,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 400,
                     name: "mob_c".into(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: true,
@@ -229,12 +241,14 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 500,
                     name: "assist_target".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::GroupTank,
                     status: XTargetSlotStatus::Empty,
                     spawn_id: 0,
                     name: String::new(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: false,
@@ -255,12 +269,14 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 10,
                     name: "mob".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::Empty,
                     status: XTargetSlotStatus::Empty,
                     spawn_id: 0,
                     name: String::new(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: true,
@@ -274,5 +290,72 @@ mod tests {
         assert_eq!(list.hater_count(), 0);
         assert!(list.hater_spawn_ids().is_empty());
         assert!(!list.is_hater(1));
+    }
+
+    /// Verify aggro_pct is stored and readable per slot.
+    ///
+    /// This tests the fixture-level representation of `ExtendedTargetSlot.aggro_pct`.
+    /// The field is populated in the Windows reader from `XTARGET_SLOT_AGGRO_PCT`
+    /// (offset 0x4c, `int nAggroPct`) and clamped to [0, 100] as `u8`.
+    #[test]
+    fn aggro_pct_stored_and_readable_per_slot() {
+        // Fixture XTarget bytes: two slots with known aggro% values.
+        let list = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 111,
+                    name: "a_goblin".into(),
+                    aggro_pct: 100,
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::AutoHater,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 222,
+                    name: "a_skeleton".into(),
+                    aggro_pct: 42,
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::GroupTank,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 333,
+                    name: "tank_pc".into(),
+                    aggro_pct: 0,
+                },
+            ],
+            auto_add_haters: true,
+        };
+
+        assert_eq!(list.slots[0].aggro_pct, 100);
+        assert_eq!(list.slots[1].aggro_pct, 42);
+        assert_eq!(list.slots[2].aggro_pct, 0);
+
+        // Verify aggro_pct is 0-100 range (u8 bounds enforce max 255,
+        // reader clamps EQ's int to [0,100]).
+        for slot in &list.slots {
+            assert!(slot.aggro_pct <= 100);
+        }
+    }
+
+    /// Verify aggro_pct clamp behaviour mirrors the reader logic.
+    #[test]
+    fn aggro_pct_clamp_to_valid_range() {
+        // Simulate what the Windows reader does: raw_int.clamp(0, 100) as u8
+        let raw_values: &[(i32, u8)] = &[
+            (-1, 0),   // negative raw → clamped to 0
+            (0, 0),
+            (50, 50),
+            (100, 100),
+            (101, 100), // over 100 → clamped to 100
+            (255, 100),
+        ];
+        for &(raw, expected) in raw_values {
+            let clamped = raw.clamp(0, 100) as u8;
+            assert_eq!(
+                clamped, expected,
+                "clamp({raw}) should be {expected}, got {clamped}"
+            );
+        }
     }
 }

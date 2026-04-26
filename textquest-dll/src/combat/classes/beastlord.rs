@@ -635,6 +635,7 @@ mod tests {
                 status: XTargetSlotStatus::CurrentZone,
                 spawn_id: 77,
                 name: "Warder".into(),
+                aggro_pct: 0,
             }],
             auto_add_haters: false,
         };
@@ -657,12 +658,14 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 77,
                     name: "Warder".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::MyPetTarget,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 99,
                     name: "a rigid skeleton".into(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: false,
