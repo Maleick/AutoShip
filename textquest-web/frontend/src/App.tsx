@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Dashboard } from "./pages/Dashboard.tsx";
 import { Sessions } from "./pages/Sessions.tsx";
+import { Replay } from "./pages/Replay.tsx";
 import { Groups } from "./pages/Groups.tsx";
 import { Credentials } from "./pages/Credentials.tsx";
 import { Characters } from "./pages/Characters.tsx";
@@ -114,9 +115,21 @@ export default function App() {
         section: "mode",
         run: () => setPrivacy((p) => !p),
       },
+      {
+        id: "toggle-theme-mode",
+        label: mode === "dark" ? "Switch to Light mode" : "Switch to Dark mode",
+        section: "appearance",
+        run: () => toggleMode(),
+      },
+      {
+        id: "toggle-high-contrast",
+        label: contrast === "high-contrast" ? "Disable High-Contrast" : "Enable High-Contrast",
+        section: "appearance",
+        run: () => toggleContrast(),
+      },
     ];
     return [...navActions, ...toggleActions];
-  }, [huntMode, privacy]);
+  }, [huntMode, privacy, mode, contrast, toggleMode, toggleContrast]);
 
   const activeLabel = NAV.find((n) => n.id === tab)?.label ?? "";
 
