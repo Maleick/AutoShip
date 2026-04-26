@@ -32,6 +32,10 @@ pub mod character_config;
 pub mod db_config;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
+/// Item-link database for loot/vendor/quest item resolution.
+pub mod linkdb;
+/// Chat event listener that captures item links and feeds LinkDb.
+pub mod linkdb_chat_listener;
 /// User-defined chat pattern rule engine (MQ2Events/MQ2React parity).
 pub mod chat_pattern_rules;
 /// Event engine with regex capture group substitution (MQ2Events parity).
