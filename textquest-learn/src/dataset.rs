@@ -1,6 +1,6 @@
+use crate::Result;
 use crate::bookmarks::BookmarkStore;
 use crate::ledger::ExperienceLedger;
-use crate::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,12 +26,24 @@ impl FlaggedSegmentDataset {
         let mut pairs = Vec::new();
 
         for bookmark in bookmarks.filter_by_label("good") {
-            let segment = ledger.get_segment(&bookmark.session_id, bookmark.start_flag_idx, bookmark.end_flag_idx);
+            let start_idx = usize::try_from(bookmark.start_flag_idx).map_err(|_| {
+                crate::BehaviorCloningError::Dataset(format!(
+                    "Bookmark start index {} does not fit usize",
+                    bookmark.start_flag_idx
+                ))
+            })?;
+            let end_idx = usize::try_from(bookmark.end_flag_idx).map_err(|_| {
+                crate::BehaviorCloningError::Dataset(format!(
+                    "Bookmark end index {} does not fit usize",
+                    bookmark.end_flag_idx
+                ))
+            })?;
+            let segment = ledger.get_segment(&bookmark.session_id, start_idx, end_idx);
 
             for entry in segment {
                 if entry.class == class {
-                    // Flatten context JSON to vector
-                    let context_vec = Self::flatten_context(&entry.context)?;
+                    // Convert compact state blob to model context vector.
+                    let context_vec = Self::state_blob_to_context(&entry.state_blob)?;
                     pairs.push(ContextActionPair {
                         context: context_vec,
                         action: entry.action,
@@ -55,43 +67,20 @@ impl FlaggedSegmentDataset {
         })
     }
 
-    fn flatten_context(context: &serde_json::Value) -> Result<Vec<f32>> {
-        match context {
-            serde_json::Value::Array(arr) => {
-                arr.iter()
-                    .map(|v| {
-                        v.as_f64()
-                            .ok_or_else(|| {
-                                anyhow::anyhow!(crate::BehaviorCloningError::Dataset(
-                                    "Context element is not a number".to_string(),
-                                ))
-                            })
-                            .map(|f| f as f32)
-                    })
-                    .collect()
-            }
-            serde_json::Value::Object(obj) => {
-                let mut vec = Vec::new();
-                for (_key, val) in obj.iter() {
-                    if let Some(f) = val.as_f64() {
-                        vec.push(f as f32);
-                    }
-                }
-                if vec.is_empty() {
-                    Err(anyhow::anyhow!(crate::BehaviorCloningError::Dataset(
-                        "Failed to extract numeric values from context".to_string(),
-                    )))
-                } else {
-                    Ok(vec)
-                }
-            }
-            _ => Err(anyhow::anyhow!(crate::BehaviorCloningError::Dataset(
-                "Context must be array or object".to_string(),
-            ))),
+    fn state_blob_to_context(state_blob: &[u8]) -> Result<Vec<f32>> {
+        if state_blob.is_empty() {
+            return Err(anyhow::anyhow!(crate::BehaviorCloningError::Dataset(
+                "State blob is empty".to_string(),
+            )));
         }
+
+        Ok(state_blob.iter().map(|&byte| byte as f32).collect())
     }
 
-    pub fn split_train_heldout(&self, heldout_ratio: f32) -> (Vec<&ContextActionPair>, Vec<&ContextActionPair>) {
+    pub fn split_train_heldout(
+        &self,
+        heldout_ratio: f32,
+    ) -> (Vec<&ContextActionPair>, Vec<&ContextActionPair>) {
         let heldout_count = (self.pairs.len() as f32 * heldout_ratio) as usize;
         let train_count = self.pairs.len() - heldout_count;
 
