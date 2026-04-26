@@ -1,0 +1,179 @@
+#==============================================================================
+# Estate of Unrest — Quest/Farming Hybrid Camp Configuration
+#==============================================================================
+# Issue: #3377 — Define Estate of Unrest safe spots, pull points, and 6-waypoint route
+# Parent: #1778
+#
+# Zone Context:
+# - Estate of Unrest (unrest): Classic undead dungeon, levels 20–35 bracket.
+# - Multiple floors: outdoor courtyard (yard), main manor interior, and basement.
+# - This config targets the hybrid quest/farming layout covering the main floor
+#   and yard, bridging unrest_yard (levels 15-22) and unrest_basement (levels 20-28).
+# - Primary quest mob: Garanel Rucksif (roaming named; see burn_mob_names).
+# - Undead-heavy zone: cleric undead-turn is viable; pet classes benefit from
+#   controllable undead charm.
+# - Zone entry is through the outdoor courtyard; safe evacuation is at the
+#   zone-out near the gate.
+#
+# Layout Notes:
+# - Safe spot 1 (zone gate alcove): Just inside the main gate, off the roam
+#   path of yard trash. Use for initial group assembly and emergency evac.
+#   Coordinates: [230.0, -30.0, 4.0]
+# - Safe spot 2 (manor foyer): Inside the manor entrance hall, against the
+#   west wall. Keeps the 6-box stack out of the main staircase aggro cone.
+#   Coordinates: [20.0, -280.0, 8.0]
+# - Pull point (courtyard center-south): Wide-angle yard pull handoff. Keeps
+#   yard trash in line-of-sight without widening into the manor entrance or
+#   spawning manor-interior pulls prematurely.
+#   Coordinates: [160.0, -120.0, 3.0]
+#
+# Route (6 waypoints): Counterclockwise yard sweep into manor foyer.
+# Waypoints are traversed in order by the puller; the med stack holds at
+# camp_center (manor foyer safe spot) during the sweep.
+# See route_waypoints below.
+#
+# References:
+# - Project 1999 Unrest map; coordinate system: X=east/west, Y=north/south, Z=elevation
+# - Approx trash respawn: 6-minute EQ server tick cycle
+# - Named cycle: Garanel Rucksif spawns in the basement (respawn ~15min);
+#   treat as burn target on sight, not a dedicated pull.
+
+name = "estate_of_unrest_hybrid"
+zone = "unrest"
+
+#==============================================================================
+# Camp Anchor: Manor Foyer Safe Spot
+#==============================================================================
+# Med stack position in the manor entrance hall, west-wall alcove.
+# Line-of-sight to pull handoff; away from staircase roamers and basement
+# access. Keeps 6-box off the main traffic corridor.
+camp_center = [20.0, -280.0, 8.0]
+
+#==============================================================================
+# Pull Point: Courtyard Center-South Handoff
+#==============================================================================
+# Puller delivers mob here from the yard sweep. Wide enough for clear LoS
+# to all six yard waypoints; close enough to camp that leash radius prevents
+# bad pulls from widening into the north yard or gate-alcove.
+pull_point = [160.0, -120.0, 3.0]
+
+# Pull radius covers full courtyard and manor ground floor without reaching
+# the basement stairwell or the second-floor staircase roamers.
+# Tune down first if Garanel or second-floor adds pull unexpectedly.
+pull_radius = 220
+
+# Tight camp radius to keep med stack in the foyer alcove and off the main
+# staircase. Garanel's basement roam path skirts the edge of this circle.
+camp_radius = 30
+
+# Leash radius resets bad pulls before they reach the gate alcove or the
+# basement stairwell. Long enough to recover from a yard overpull without
+# dragging adds through the med stack.
+leash_radius = 130
+
+#==============================================================================
+# Mana Thresholds
+#==============================================================================
+# Estate undead hit moderately hard; cleric undead-turn reduces spike damage
+# but costs mana. 65% rest / 35% pull is conservative for a cleric-anchored
+# group with a CH-capable support healer.
+rest_mana_pct = 65
+pull_mana_pct = 35
+
+#==============================================================================
+# Level Range
+#==============================================================================
+# Hybrid bracket between yard (15-22) and basement (20-28).
+# Most yard and main-floor mobs are level 19-25; good XP at 22-28.
+level_range = [22, 28]
+
+#==============================================================================
+# Pull Targets: Yard and Main Floor Undead
+#==============================================================================
+pull_mob_names = [
+  "a festering hag",
+  "a dry bone skeleton",
+  "a decaying skeleton",
+  "a greater dark bone",
+  "a haunted corpse",
+  "a werebat",
+  "a rotting skeleton",
+  "a ghoulish servant",
+  "a poltergeist",
+  "an undead knight",
+]
+
+#==============================================================================
+# Ignore List: Named / High-Risk Mobs
+#==============================================================================
+ignore_mob_names = [
+  "Garanel Rucksif",      # Basement roamer; burn-on-sight only, do not pull through manor
+  "a spectral knight",    # Summons; hard-stop unless group is 26+ and cleric is full
+]
+
+#==============================================================================
+# Burn List: Named Rare Spawns (Harvest on Sight)
+#==============================================================================
+burn_mob_names = [
+  "Garanel Rucksif",      # Primary quest/farm named; burns when encountered on patrol
+  "a skeletal monk",      # Rare basement named; engage if in pull radius, do not chase
+]
+
+#==============================================================================
+# Return Behavior
+#==============================================================================
+# Return to camp is allowed mid-combat because the foyer alcove is a clean
+# path with no additional aggro risk on re-entry from the courtyard side.
+return_no_aggro = false
+
+#==============================================================================
+# 6-Waypoint Patrol Route: Courtyard + Manor Foyer Sweep
+#==============================================================================
+# Counterclockwise yard sweep. The puller walks each waypoint in order,
+# engaging trash on contact, and delivers at pull_point.
+# Waypoint labels (for wiki reference only — runtime uses coordinate index):
+#   wp1: gate_alcove_inside   — safe re-entry/evac anchor
+#   wp2: yard_east_hedge      — east side trash sweep
+#   wp3: yard_northeast_corner — corner mob cluster
+#   wp4: yard_north_center    — north roamers and fountain area
+#   wp5: yard_west_hedge      — west side sweep before manor door
+#   wp6: manor_foyer_threshold — pull handoff transition into camp
+#
+# Schema note: route_waypoints is an extension field pending issue #1900 schema
+# expansion. The runtime camp loader ignores unknown fields; this data is
+# consumed by the route planner module when available.
+route_waypoints = [
+  [230.0,  -30.0,  4.0],   # wp1: gate_alcove_inside — safe assembly / evac anchor
+  [270.0, -120.0,  3.0],   # wp2: yard_east_hedge — east trash sweep
+  [250.0, -200.0,  3.0],   # wp3: yard_northeast_corner — corner cluster
+  [100.0, -200.0,  3.0],   # wp4: yard_north_center — north roamers / fountain
+  [ 30.0, -160.0,  3.0],   # wp5: yard_west_hedge — west sweep before manor door
+  [160.0, -120.0,  3.0],   # wp6: manor_foyer_threshold — pull handoff at pull_point
+]
+
+#==============================================================================
+# Pull Sequencing Notes
+#==============================================================================
+# Validated pull order for the 6-waypoint route:
+# 1. Puller starts at wp1 (gate alcove) — safe anchor for session start.
+# 2. Move to wp2 (east hedge): engage east-side skeletons and hags one at a time.
+# 3. Move to wp3 (NE corner): clear corner cluster (2-3 mobs); confirm camp is clear.
+# 4. Move to wp4 (north center): engage north roamers; avoid fountain center to
+#    prevent social aggro from spawns on both sides simultaneously.
+# 5. Move to wp5 (west hedge): clear west-side haunted corpses and werebats.
+# 6. Return to wp6 (foyer threshold / pull_point): deliver mob to med stack.
+# 7. Med stack engages at pull_point; puller returns to wp1 for next sweep.
+#
+# Cascade risk: North-center (wp4) has the highest mob density. If more than
+# two mobs engage simultaneously, return to pull_point immediately — do not
+# extend into wp5 while carrying live adds.
+#
+# Respawn cadence: ~6 minutes. Full 6-waypoint sweep takes ~90 seconds;
+# expect 4-5 sweeps before first respawn. Adjust rest_mana_pct up if the
+# group consistently finishes before mobs respawn.
+
+#==============================================================================
+# Progression Chain
+#==============================================================================
+next_camp = "unrest_basement"
+prev_camp = "unrest_yard"
