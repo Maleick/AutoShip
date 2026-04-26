@@ -10,6 +10,7 @@ pub mod admin_monitoring;
 pub mod baseline_scorecard;
 pub mod bayesian_baseline;
 pub mod collector;
+pub mod event_hooks;
 pub mod events;
 pub mod exporter;
 pub mod kill_reporter;
@@ -28,6 +29,7 @@ pub use admin_monitoring::{
     AdminMonitoringRetention, AdminMonitoringStore, MonitoredSessionState, SessionErrorKind,
     SessionMonitoringSnapshot, sample_process_memory_bytes,
 };
+pub use event_hooks::EventHookContext;
 pub use baseline_scorecard::{
     BaselineScorecard, CombatDelta, CombatMetrics, CoordinationDelta, EconomyDelta, EconomyMetrics,
     GroupCoordinationMetrics, MovementDelta, MovementMetrics, ScorecardDelta,

@@ -714,6 +714,10 @@ fn build_api_router() -> Router<Arc<AppState>> {
             get(api::chat_log::get_chat_log_settings).put(api::chat_log::put_chat_log_settings),
         )
         .route(
+            "/theme/settings",
+            get(api::theme_config::get_theme_config).put(api::theme_config::put_theme_config),
+        )
+        .route(
             "/economy/settings",
             get(api::get_economy_settings).put(api::put_economy_settings),
         )

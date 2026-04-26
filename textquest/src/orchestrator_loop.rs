@@ -269,6 +269,8 @@ impl OrchestratorLoop {
                     }
                     self.orchestrator.tick();
                     self.tick_death_camp();
+                    // Tick metrics collector to accumulate sampled data.
+                    self.metrics_collector.tick();
                     self.sync_auto_group_runtime();
                     self.sync_box_chat_runtime();
                     self.sync_timestamp_runtime();

@@ -3,6 +3,8 @@ import { CommandPalette, type PaletteAction } from "./components/CommandPalette.
 import { ThemeToggle } from "./components/ThemeToggle.tsx";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useBackendStatus } from "./hooks/useBackendStatus.ts";
+import { useKeybindingMode } from "./hooks/useKeybindingMode.ts";
+import { getViActionForKeyEvent, handleViAction } from "./utils/viKeybindings.ts";
 import {
   Activity,
   Coins,
