@@ -41,10 +41,10 @@ struct BuffSlot {
     slot_index: usize,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct ParsedBuffCheck {
-    stack_spells: &'static [i32],
-    trigger_spells: &'static [i32],
+    stack_spells: Vec<i32>,
+    trigger_spells: Vec<i32>,
 }
 
 /// Parse a buffcheck condition expression such as:
@@ -60,9 +60,7 @@ fn parse_buffcheck(condition: &str) -> Option<ParsedBuffCheck> {
         return None;
     }
 
-    let Some(inner) = trimmed
-        .get(prefix.len()..trimmed.len().saturating_sub(1))
-    else {
+    let Some(inner) = trimmed.get(prefix.len()..trimmed.len().saturating_sub(1)) else {
         return None;
     };
 
@@ -97,8 +95,8 @@ fn parse_buffcheck(condition: &str) -> Option<ParsedBuffCheck> {
     }
 
     Some(ParsedBuffCheck {
-        stack_spells: Box::leak(stack_spells.into_boxed_slice()),
-        trigger_spells: Box::leak(trigger_spells.into_boxed_slice()),
+        stack_spells,
+        trigger_spells,
     })
 }
 
@@ -113,7 +111,11 @@ fn buff_slots(active_buffs: &[BuffInfo]) -> HashMap<i32, BuffSlot> {
     slots
 }
 
-fn buff_slots_conflict(active_buffs: &[BuffInfo], slot_map: &HashMap<i32, BuffSlot>, checks: &[i32]) -> bool {
+fn buff_slots_conflict(
+    active_buffs: &[BuffInfo],
+    slot_map: &HashMap<i32, BuffSlot>,
+    checks: &[i32],
+) -> bool {
     for active in active_buffs {
         for check_spell in checks {
             let Some(check_slot) = slot_map.get(check_spell) else {
@@ -124,7 +126,8 @@ fn buff_slots_conflict(active_buffs: &[BuffInfo], slot_map: &HashMap<i32, BuffSl
                 continue;
             }
 
-            if active.category == check_slot.category && active.slot_index == check_slot.slot_index {
+            if active.category == check_slot.category && active.slot_index == check_slot.slot_index
+            {
                 return true;
             }
         }
@@ -154,7 +157,10 @@ fn check_buffs_with_slots(
         return BuffCheckResult::Blocked;
     }
 
-    if candidates.iter().any(|id| active_buffs.iter().any(|buff| buff.spell_id == *id)) {
+    if candidates
+        .iter()
+        .any(|id| active_buffs.iter().any(|buff| buff.spell_id == *id))
+    {
         return BuffCheckResult::AlreadyActive;
     }
 
@@ -179,7 +185,13 @@ pub fn local_buff_check(
     stack_spells: &[i32],
     trigger_spells: &[i32],
 ) -> BuffCheckResult {
-    check_buffs_with_slots(spell_id, stack_spells, trigger_spells, active_buffs, blocked_buffs)
+    check_buffs_with_slots(
+        spell_id,
+        stack_spells,
+        trigger_spells,
+        active_buffs,
+        blocked_buffs,
+    )
 }
 
 /// Evaluate a pet-target buffcheck against live pet buff data.
@@ -191,7 +203,13 @@ pub fn local_pet_buff_check(
     stack_spells: &[i32],
     trigger_spells: &[i32],
 ) -> BuffCheckResult {
-    check_buffs_with_slots(spell_id, stack_spells, trigger_spells, active_buffs, blocked_buffs)
+    check_buffs_with_slots(
+        spell_id,
+        stack_spells,
+        trigger_spells,
+        active_buffs,
+        blocked_buffs,
+    )
 }
 
 /// Backwards-compatible alias for self-buff checks.
@@ -203,7 +221,13 @@ pub fn self_buff_check(
     stack_spells: &[i32],
     trigger_spells: &[i32],
 ) -> BuffCheckResult {
-    local_buff_check(spell_id, active_buffs, blocked_buffs, stack_spells, trigger_spells)
+    local_buff_check(
+        spell_id,
+        active_buffs,
+        blocked_buffs,
+        stack_spells,
+        trigger_spells,
+    )
 }
 
 /// Backwards-compatible alias for group-member checks.
@@ -215,7 +239,13 @@ pub fn group_buff_check(
     stack_spells: &[i32],
     trigger_spells: &[i32],
 ) -> BuffCheckResult {
-    local_buff_check(spell_id, active_buffs, blocked_buffs, stack_spells, trigger_spells)
+    local_buff_check(
+        spell_id,
+        active_buffs,
+        blocked_buffs,
+        stack_spells,
+        trigger_spells,
+    )
 }
 
 impl BuffTracker {
@@ -352,46 +382,53 @@ pub fn check_buffs_with_context(
             for ability in &profile.buff_abilities {
                 // Each buff caster buffs all members
                 // Use explicit buff duration if set, else fall back to cooldown
-            let duration_ticks = ability.effective_duration_secs() as u64;
-            let condition = ability.condition.as_deref();
-            let buff_check = condition
-                .and_then(parse_buffcheck)
-                .filter(|_| live_buffs_by_member.contains_key(&target.pid));
+                let duration_ticks = ability.effective_duration_secs() as u64;
+                let condition = ability.condition.as_deref();
+                let buff_check = condition
+                    .and_then(parse_buffcheck)
+                    .filter(|_| live_buffs_by_member.contains_key(&target.pid));
 
-            for target in members {
-                let can_cast = match &buff_check {
-                    Some(parsed) => {
-                        let active_buffs = live_buffs_by_member.get(&target.pid).map_or(&[][..], |v| v.as_slice());
-                        let blocked_buffs = blocked_buffs_by_member
-                            .get(&target.name)
-                            .map_or(&[][..], |v| v.as_slice());
+                for target in members {
+                    let can_cast = match &buff_check {
+                        Some(parsed) => {
+                            let active_buffs = live_buffs_by_member
+                                .get(&target.pid)
+                                .map_or(&[][..], |v| v.as_slice());
+                            let blocked_buffs = blocked_buffs_by_member
+                                .get(&target.name)
+                                .map_or(&[][..], |v| v.as_slice());
 
-                        matches!(
-                            group_buff_check(
-                                ability.name.len() as i32,
-                                active_buffs,
-                                blocked_buffs,
-                                parsed.stack_spells,
-                                parsed.trigger_spells
-                            ),
-                            BuffCheckResult::ShouldCast
-                        )
+                            matches!(
+                                group_buff_check(
+                                    ability.name.len() as i32,
+                                    active_buffs,
+                                    blocked_buffs,
+                                    parsed.stack_spells.as_slice(),
+                                    parsed.trigger_spells.as_slice()
+                                ),
+                                BuffCheckResult::ShouldCast
+                            )
+                        }
+                        None => tracker.is_expired(
+                            target.pid,
+                            &ability.name,
+                            duration_ticks,
+                            current_tick,
+                        ),
+                    };
+
+                    if can_cast {
+                        pending.push(PendingBuff {
+                            caster_pid: member.pid,
+                            target_pid: target.pid,
+                            buff_name: ability.name.clone(),
+                            command: ability.command.clone(),
+                            priority: buff_priority(&ability.name),
+                        });
                     }
-                    None => tracker.is_expired(target.pid, &ability.name, duration_ticks, current_tick),
-                };
-
-                if can_cast {
-                    pending.push(PendingBuff {
-                        caster_pid: member.pid,
-                        target_pid: target.pid,
-                        buff_name: ability.name.clone(),
-                        command: ability.command.clone(),
-                        priority: buff_priority(&ability.name),
-                    });
                 }
             }
         }
-    }
     }
 
     // Sort by priority (lower = higher priority)
