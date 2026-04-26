@@ -1,0 +1,181 @@
+# TextQuest help — Tips, tricks, and best practices
+
+# ─── UI Navigation Tips ────────────────────────────────────────────────────
+
+[[tips]]
+id = "tip-dashboard-panels"
+text = "Press Tab to cycle through dashboard panels (Overview, Roster, Metrics, Economy, Encounters). Each panel shows different information — press P to pin a panel and keep it visible."
+context = "dashboard"
+tags = ["tips", "ui", "navigation"]
+
+[[tips]]
+id = "tip-quick-search"
+text = "Press / from anywhere in the TUI to open quick search. Type a command or FAQ keyword to jump instantly."
+context = "overview"
+tags = ["tips", "navigation", "search"]
+
+[[tips]]
+id = "tip-client-selection"
+text = "In the Roster panel, use arrow keys (↑/↓) to select a client, then press Enter to focus on that client's window. Press E while a client is selected to view its equipped items."
+context = "roster"
+tags = ["tips", "ui", "roster"]
+
+[[tips]]
+id = "tip-hotkey-binding"
+text = "Press H in the dashboard to open the Hotkey Bindings menu. Bind frequently-used commands like 'camp on' and 'pause' to function keys (F1-F12) for one-handed control."
+context = "control"
+tags = ["tips", "hotkey", "control"]
+
+[[tips]]
+id = "tip-settings-reload"
+text = "Changes to config files (classes, spells, travel) don't take effect until a reload. Use 'config reload' or restart the session to pick up changes."
+context = "config"
+tags = ["tips", "config", "setup"]
+
+# ─── Combat & Group Tips ───────────────────────────────────────────────────
+
+[[tips]]
+id = "tip-assist-order"
+text = "Set main assist to a character with the best line-of-sight (LoS) to pull locations. This prevents assist-target delays and improves group engagement speed."
+context = "combat"
+tags = ["tips", "combat", "assist"]
+
+[[tips]]
+id = "tip-mana-monitoring"
+text = "Watch the Mana bar in the Roster panel — if a caster is below 30% mana, run 'meditate' to recover. Mages and Clerics need mana to function; don't let them run dry mid-combat."
+context = "combat"
+tags = ["tips", "mana", "recovery"]
+
+[[tips]]
+id = "tip-interrupt-priority"
+text = "For interrupts (silences, stuns), set them first in the spell priority list. TextQuest casts in order, so interrupt spells fire before damage spells."
+context = "class"
+tags = ["tips", "spells", "class"]
+
+[[tips]]
+id = "tip-tank-first"
+text = "Always pull with the tank first. The tank generates initial aggro and lets casters ramp up safely. Never let a caster pull ahead of the tank."
+context = "combat"
+tags = ["tips", "tank", "positioning"]
+
+[[tips]]
+id = "tip-group-buffs-camp"
+text = "Before pulling, run 'buff all' to refresh group buffs. Haste and clarity are critical; don't engage without them. Check the Buff panel to see uptimes."
+context = "combat"
+tags = ["tips", "buff", "prep"]
+
+# ─── Economy & Loot Tips ────────────────────────────────────────────────────
+
+[[tips]]
+id = "tip-loot-wishlist"
+text = "Set up a loot.wishlist in textquest.toml with high-value items only. Use 'loot wishlist' mode to reduce inventory pressure while farming."
+context = "economy"
+tags = ["tips", "loot", "economy"]
+
+[[tips]]
+id = "tip-vendor-arbitrage"
+text = "Watch for server-wide price swings in the Economy tab. Buy when prices dip (after major raids) and sell when prices spike (before content patches)."
+context = "economy"
+tags = ["tips", "economy", "trading"]
+
+[[tips]]
+id = "tip-krono-farming-window"
+text = "Krono farming is most profitable during new content windows (weeks 1-3 after expansion launch) when demand is highest. Plan farming rotations around content cycles."
+context = "economy"
+tags = ["tips", "krono", "timing"]
+
+[[tips]]
+id = "tip-bag-management"
+text = "Keep at least 2-3 empty bag slots at all times. When looting, prioritize high-value items and vendor trash separately."
+context = "inventory"
+tags = ["tips", "inventory", "loot"]
+
+# ─── Troubleshooting & Recovery Tips ───────────────────────────────────────
+
+[[tips]]
+id = "tip-pause-first"
+text = "If anything looks wrong (client frozen, NPC stuck in wall, group scattered), press P immediately. A 100ms pause is faster than recovering from a wipe."
+context = "safety"
+tags = ["tips", "safety", "recovery"]
+
+[[tips]]
+id = "tip-zone-recovery-manual"
+text = "If zone recovery fails 3 times, manually move the stuck client to the correct zone using the game's UI. Then run 'resume' to resume automation on the rest of the group."
+context = "zone"
+tags = ["tips", "zone", "recovery"]
+
+[[tips]]
+id = "tip-spell-availability-check"
+text = "Before using a new spell in a class config, test it with /cast <spell name> on a live character. TextQuest can't cast spells you don't have scribed."
+context = "class"
+tags = ["tips", "spells", "testing"]
+
+[[tips]]
+id = "tip-debug-mode-performance"
+text = "Debug mode (debug level 2+) produces detailed logs but impacts performance. Use it only when troubleshooting; disable it for routine farming."
+context = "debug"
+tags = ["tips", "debug", "performance"]
+
+[[tips]]
+id = "tip-session-snapshot"
+text = "Take a screenshot of the dashboard at the start and end of each raid to have a visual record of performance. Use these for after-action reviews."
+context = "documentation"
+tags = ["tips", "documentation", "analysis"]
+
+# ─── Advanced Operator Tips ────────────────────────────────────────────────
+
+[[tips]]
+id = "tip-navmesh-generation"
+text = "If a zone has no navmesh file, TextQuest falls back to linear movement. Generate navmesh files using the zone editor to enable pathfinding around obstacles."
+context = "advanced"
+tags = ["tips", "navmesh", "advanced"]
+
+[[tips]]
+id = "tip-encounter-scripting"
+text = "For complex raids, create encounter scripts in config/encounters/ that define pull order, positioning, and spell rotations. Use templates from existing encounters."
+context = "advanced"
+tags = ["tips", "encounters", "advanced"]
+
+[[tips]]
+id = "tip-mq2-macro-sync"
+text = "Synchronize MQ2 macros across all clients by editing config/hotkeys.toml and using /broadcast commands. Ensures all characters perform the same action in sync."
+context = "advanced"
+tags = ["tips", "mq2", "advanced"]
+
+[[tips]]
+id = "tip-ssh-latency"
+text = "For remote play over SSH, expect 50-200ms additional latency. Set spell cast times conservatively and add buffer delays in class configs to account for network jitter."
+context = "advanced"
+tags = ["tips", "ssh", "performance"]
+
+[[tips]]
+id = "tip-multi-session-logging"
+text = "Archive session logs after major raids or patches. Use 'log save' and store in a logs/ directory. Compare logs to identify performance trends and regressions."
+context = "advanced"
+tags = ["tips", "logging", "analysis"]
+
+# ─── Configuration Best Practices ──────────────────────────────────────────
+
+[[tips]]
+id = "tip-version-control"
+text = "Keep config files in git (or similar VCS) to track changes. Use descriptive commit messages like 'adjust ranger spell priority for anguish' to document config tuning."
+context = "workflow"
+tags = ["tips", "workflow", "config"]
+
+[[tips]]
+id = "tip-backup-configs"
+text = "Before making major config changes, save a backup of the working version. Use 'cp config/classes/ranger.toml config/classes/ranger.toml.backup' to preserve known-good settings."
+context = "workflow"
+tags = ["tips", "workflow", "backup"]
+
+[[tips]]
+id = "tip-incremental-testing"
+text = "Don't change multiple class configs at once. Test one change (e.g., new spell priority) in isolation on a small pull before rolling out fleet-wide."
+context = "workflow"
+tags = ["tips", "workflow", "testing"]
+
+[[tips]]
+id = "tip-log-retention"
+text = "Session logs grow quickly in large multibox setups (100+ MB per 8-hour session). Delete logs older than 1 month and archive important runs to external storage."
+context = "workflow"
+tags = ["tips", "workflow", "maintenance"]

@@ -64,3 +64,123 @@ usage = "loot [<on|off|mode>]"
 description = "Control looting behavior. Modes: on (auto-loot all), off (disable), currency (plat/coin only), wishlist (wishlist items only)."
 examples = ["loot on", "loot off", "loot wishlist"]
 tags = ["loot", "economy", "control"]
+
+[[commands]]
+name = "status"
+aliases = ["s"]
+usage = "status [<filter>]"
+description = "Display current automation status for all clients. Optional filter to show only specific class or zone."
+examples = ["status", "status ranger", "status commonlands"]
+tags = ["status", "monitoring", "info"]
+
+[[commands]]
+name = "classes"
+aliases = []
+usage = "classes list|reload"
+description = "List available class configurations or reload class config files from disk. Useful after editing class .toml files."
+examples = ["classes list", "classes reload"]
+tags = ["class", "config", "setup"]
+
+[[commands]]
+name = "spell"
+aliases = []
+usage = "spell <character_name> <spell_name>"
+description = "Manually cast a specific spell on a character. Useful for emergency healing, buffs, or testing spell slots."
+examples = ["spell Cleric Cure Poison", "spell Enchanter Clarity II"]
+tags = ["spells", "casting", "combat"]
+
+[[commands]]
+name = "buff"
+aliases = ["b"]
+usage = "buff [<all|class>]"
+description = "Trigger a full buff cycle. 'all' buffs every character, or specify a class (ranger, mage, etc.) to buff only that group."
+examples = ["buff all", "buff ranger", "buff"]
+tags = ["buff", "combat", "control"]
+
+[[commands]]
+name = "meditate"
+aliases = ["med"]
+usage = "meditate [<duration_seconds>]"
+description = "Pause pulling and sit all characters down to meditate and recover mana. Optional duration; defaults to 30 seconds."
+examples = ["meditate", "meditate 60"]
+tags = ["mana", "recovery", "control"]
+
+[[commands]]
+name = "report"
+aliases = ["r"]
+usage = "report <status|inventory|buffs|spells>"
+description = "Generate detailed reports on client state. Useful for diagnostics and logging raid status."
+examples = ["report status", "report inventory", "report buffs"]
+tags = ["reporting", "diagnostics", "info"]
+
+[[commands]]
+name = "zone"
+aliases = ["z"]
+usage = "zone <zone_shortname>"
+description = "Zone all clients to the specified zone using configured travel routes. Similar to 'nav' but guarantees full zone-in."
+examples = ["zone anguish", "zone mmcc"]
+tags = ["navigation", "zone", "travel"]
+
+[[commands]]
+name = "target"
+aliases = ["t"]
+usage = "target <npc_name|target_id>"
+description = "Manually target a specific NPC or entity ID across all clients for synchronized combat."
+examples = ["target lord_nagafen", "target 12345"]
+tags = ["targeting", "combat"]
+
+[[commands]]
+name = "bank"
+aliases = []
+usage = "bank <open|close|deposit|withdraw>"
+description = "Manage banking and inventory. Open bank, store items, or retrieve equipment."
+examples = ["bank open", "bank deposit", "bank withdraw"]
+tags = ["inventory", "bank", "economy"]
+
+[[commands]]
+name = "log"
+aliases = []
+usage = "log <view|save|clear>"
+description = "View, save, or clear the activity log. 'save' exports the current session log to timestamped file."
+examples = ["log view", "log save", "log clear"]
+tags = ["logging", "diagnostics", "info"]
+
+[[commands]]
+name = "config"
+aliases = ["cfg"]
+usage = "config <reload|validate|show> [<section>]"
+description = "Reload config files, validate syntax, or display current configuration. Optional section to show specific settings."
+examples = ["config reload", "config validate", "config show combat"]
+tags = ["config", "setup", "control"]
+
+[[commands]]
+name = "hotkey"
+aliases = []
+usage = "hotkey <list|bind|unbind> [<key>]"
+description = "List configured hotkeys or bind/unbind a new hotkey sequence to a command."
+examples = ["hotkey list", "hotkey bind F1 camp on"]
+tags = ["hotkey", "control", "setup"]
+
+[[commands]]
+name = "debug"
+aliases = ["dbg"]
+usage = "debug <on|off|level <0-3>>"
+description = "Enable debug logging or set verbosity level. Higher levels produce more detail but impact performance."
+examples = ["debug on", "debug off", "debug level 2"]
+tags = ["debug", "logging", "diagnostics"]
+
+[[commands]]
+name = "economy"
+aliases = ["eco"]
+usage = "economy <start|stop|status>"
+description = "Control the background economy loop (Krono farming, vendor arbitrage). Monitor profit margins and trade activity."
+examples = ["economy start", "economy status"]
+tags = ["economy", "krono", "control"]
+
+[[commands]]
+name = "mq2"
+aliases = []
+usage = "mq2 <connect|disconnect|reload>"
+description = "Manage MQ2 client connections. 'reload' refreshes MQ2 plugin state without dropping."
+examples = ["mq2 connect", "mq2 disconnect"]
+tags = ["mq2", "integration", "control"]

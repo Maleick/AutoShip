@@ -127,3 +127,187 @@ id = "tip-economy-volatility"
 text = "TLP item prices spike on patch days (typically Wednesdays). Set wider buy/sell margins in your watchlist around those windows to avoid trading into thin spreads."
 context = "economy"
 tags = ["tips", "economy", "timing"]
+
+# ─── Additional FAQs ───────────────────────────────────────────────────────
+
+[[faqs]]
+id = "setup-multibox"
+question = "How do I set up multibox (multiple characters)?"
+answer = """
+1. Add character rows to config/accounts.toml with unique server, account, and character names.
+2. Run 'classes list' to see available class configs.
+3. For each character, copy config/classes/classname.toml.example to config/classes/classname.toml.
+4. Set spell priorities, melee modes, and buff sequences for each class.
+5. Launch with the desired client count: textquest launch --clients 12
+"""
+tags = ["setup", "multibox", "accounts", "characters"]
+
+[[faqs]]
+id = "setup-frostreaver-ssh"
+question = "How do I connect to Frostreaver for remote testing?"
+answer = """
+1. Ensure Frostreaver is running and accessible via SSH at the configured host.
+2. Add your SSH key to ~/.ssh/authorized_keys on Frostreaver if needed.
+3. Edit config/frostreaver.toml with the hostname and credentials.
+4. Run: textquest launch --remote frostreaver --clients 6
+5. The TUI connects over SSH and streams game window frames.
+6. Commands execute remotely on Frostreaver's game instances.
+"""
+tags = ["setup", "frostreaver", "remote", "ssh", "testing"]
+
+[[faqs]]
+id = "auth-login-stuck"
+question = "Login is stuck on the character select screen — what's wrong?"
+answer = """
+Check:
+1. Is the account name and password correct in config/accounts.toml?
+2. Are you connecting to the correct EQ server (Live, TLP, Test)?
+3. Is two-factor authentication (2FA) enabled? TextQuest may need a token from your authenticator app.
+4. Try 'pause' to stop automation, then manually verify login works on one client.
+Run 'config validate' to check for syntax errors in accounts.toml.
+"""
+tags = ["auth", "login", "troubleshooting"]
+
+[[faqs]]
+id = "class-spells-not-casting"
+question = "Spells are not being cast — why?"
+answer = """
+1. Check that the class config file exists and is loaded (run 'classes list').
+2. Verify spell names match exactly — use /cast <spell name> in-game to test.
+3. Confirm the character has the spell scribed and sufficient mana.
+4. Check spell prerequisites (level, item, buff state) are met.
+5. Use 'debug level 2' to see spell cast attempts in the log.
+6. Try 'config reload' to refresh spell data after any config changes.
+"""
+tags = ["class", "spells", "troubleshooting"]
+
+[[faqs]]
+id = "performance-lag"
+question = "The TUI or game is running slow — how do I optimize?"
+answer = """
+1. Reduce the client count or disable graphical rendering if running headless.
+2. Lower the refresh rate: set refresh_ms = 200 in textquest.toml (from default 100).
+3. Disable economy loop if not needed: economy.enabled = false
+4. Set debug level to 0 to reduce logging overhead.
+5. Check system resources: RAM, CPU, and disk space on Frostreaver or local machine.
+6. For SSH connections, increase network buffer size in frostreaver.toml.
+"""
+tags = ["performance", "optimization", "troubleshooting"]
+
+[[faqs]]
+id = "group-composition-balance"
+question = "What is the recommended group composition?"
+answer = """
+Standard raid group: 1 tank, 1 main assist, 2-3 DPS (caster + melee), 1 healer, 1 support (debuff/haste).
+For 6-person groups: Tank, Ranger (assist), 2x Mages, Cleric (heal), Bard (buff/haste).
+For 12-person raids: 2 tanks, 2 rangers, 4 DPS, 2 clerics, 2 support.
+Use 'group build' and the Group Builder UI to validate composition before engaging.
+"""
+tags = ["group", "composition", "setup", "combat"]
+
+[[faqs]]
+id = "buff-sequence-order"
+question = "How do I configure buff order and priorities?"
+answer = """
+Edit config/classes/classname.toml and set buff_order = [spell1, spell2, spell3].
+Buffs are cast in order and only if character is sitting and mana allows.
+Long-duration buffs (haste, clarity) should be early in the sequence.
+Short-duration buffs (shields) last in the sequence.
+Use 'buff all' to manually trigger a full buff cycle before pulling.
+Check the Buff panel in the TUI to monitor buff uptimes.
+"""
+tags = ["buff", "spells", "class", "setup"]
+
+[[faqs]]
+id = "economy-watchlist-config"
+question = "How do I set up the economy watchlist for Krono farming?"
+answer = """
+Edit config/economy/watchlist.toml and add item entries with:
+- item_name: The exact vendor item name
+- buy_price: The price at which to buy from vendor
+- sell_price: The target resale price
+- quantity: How many to keep in stock
+- margin_percent: Minimum profit margin required to trade
+Set broader margins during patch days when volatility is high.
+Run 'economy start' to activate the loop; monitor prices with 'economy status'.
+"""
+tags = ["economy", "krono", "watchlist", "setup"]
+
+[[faqs]]
+id = "zone-recovery-lag"
+question = "Zone recovery is slow or timing out — how do I fix it?"
+answer = """
+1. Check that navmesh files are loaded: look for .navmesh files in config/navmesh/.
+2. Verify zone names are correct in config/travel.toml or soul_zones.toml.
+3. Increase zone_timeout_ms in textquest.toml (default 10000ms) if zones are large.
+4. Use 'zone <zonename>' to force a full zone-in (different from 'nav').
+5. For stuck clients, use 'pause', manually navigate, then 'resume'.
+"""
+tags = ["zone", "navigation", "troubleshooting", "lag"]
+
+[[faqs]]
+id = "mq2-integration-eqlib"
+question = "How do I set up MQ2 integration and eqlib?"
+answer = """
+1. MQ2 must be running on the same machine as the EQ client.
+2. TextQuest communicates with MQ2 via the MacroQuest2 plugin.
+3. Edit config/hotkeys.toml to bind MQ2 macros if needed.
+4. Ensure eqlib is available in MQ2/includes/ for navigation and buff checking.
+5. Run 'mq2 connect' to establish connection; 'mq2 disconnect' to release.
+Use 'debug level 3' to log MQ2 API calls for troubleshooting.
+"""
+tags = ["mq2", "integration", "setup", "advanced"]
+
+[[faqs]]
+id = "raid-encounter-setup"
+question = "How do I prepare for a specific raid encounter?"
+answer = """
+1. Review the encounter in config/encounters/ or look for a pre-built config.
+2. Set up group composition matching the recommended roles (tank, DPS, healer).
+3. Configure class spell priorities for the encounter (stuns, debuffs, heals).
+4. Set up waypoints in config/travel.toml for encounter camp locations.
+5. Test the composition with 'group build' before the raid window.
+6. Use the Encounter panel (press E in the TUI) to review tactics.
+7. Run a short practice pull to validate spell timing and group cohesion.
+"""
+tags = ["raid", "encounter", "setup", "advanced"]
+
+[[faqs]]
+id = "inventory-full-stuck"
+question = "My characters' inventory is full and looting is blocked — what do I do?"
+answer = """
+1. Use 'pause' to stop automation.
+2. Manually open bags and move items to storage.
+3. Alternatively, edit loot.wishlist in textquest.toml to only loot desired items.
+4. Use 'bank deposit' to move tradeable items to bank storage.
+5. Use 'loot currency' mode to loot only platinum and reduce inventory pressure.
+6. Once inventory is cleared, run 'resume' to continue automation.
+"""
+tags = ["inventory", "loot", "troubleshooting"]
+
+[[faqs]]
+id = "log-review-analysis"
+question = "How do I review session logs and analyze performance?"
+answer = """
+1. Use 'log view' to display the current session log on screen.
+2. Use 'log save' to export the full session log to a timestamped .log file.
+3. Search the log for errors: grep 'ERROR\|FAILED\|stuck' session.log
+4. Review DPS and loot metrics in the Metrics tab (press Tab from dashboard).
+5. Check combat timing with 'report status' after each encounter.
+6. For detailed analysis, save multiple session logs and compare patterns.
+"""
+tags = ["logging", "diagnostics", "analysis", "advanced"]
+
+[[faqs]]
+id = "config-validation-errors"
+question = "I'm getting config validation errors — how do I fix them?"
+answer = """
+1. Run 'config validate' to get detailed error messages.
+2. Check for TOML syntax errors: missing brackets, quotes, or commas.
+3. Verify file paths exist: class files, navmesh files, travel routes.
+4. Ensure character names match exactly in accounts.toml and class configs.
+5. Look for duplicate entries (multiple [[sections]] with same name).
+6. Check spell names against the spell database to ensure they exist.
+Use a TOML validator online if syntax is unclear.
+"""
+tags = ["config", "troubleshooting", "validation"]
