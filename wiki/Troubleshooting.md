@@ -50,7 +50,7 @@ Equivalent flags are `--refresh-models` and `--worker-models`.
 
 ## Role model is not what I expected
 
-Planner, coordinator, orchestrator, reviewer, and lead are frontier roles selected from the live `opencode models` inventory. AutoShip prefers capable free role models when available; `openai/gpt-5.5-fast` is not allowed.
+Planner, coordinator, orchestrator, reviewer, and lead are frontier roles selected from the live `opencode models` inventory. AutoShip prefers capable free models first, then OpenCode Go models when available; `openai/gpt-5.5-fast` is not allowed.
 
 Use `AUTOSHIP_PLANNER_MODEL` or `--planner-model` to set all frontier roles together. Use `AUTOSHIP_ORCHESTRATOR_MODEL` / `--orchestrator-model` or `AUTOSHIP_REVIEWER_MODEL` / `--reviewer-model` for first-run role choices, and `AUTOSHIP_LEAD_MODEL` or `--lead-model` to override only the lead role.
 
