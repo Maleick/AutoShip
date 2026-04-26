@@ -1,45 +1,9 @@
 [package]
 name = "textquest-learn"
 version = "0.6.0"
-edition = "2024"
-description = "Offline RL training harness for TextQuest policies (CQL/IQL)"
+edition = "2021"
+description = "Offline RL training harness for TextQuest policies (L-0 scaffold)"
 
 [dependencies]
-textquest-common = { path = "../textquest-common" }
-serde.workspace = true
-serde_json.workspace = true
 anyhow.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-bincode.workspace = true
-rand = { version = "0.8", features = ["small_rng"], optional = true }
-siphasher = { version = "1", optional = true }
-
-# Heavy deps — only needed for full training pipeline (not runtime-only)
-clap = { version = "4.5", features = ["derive"], optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
-tracing-subscriber = { workspace = true, optional = true }
-ndarray = { version = "0.16", optional = true }
-rusqlite = { version = "0.32", features = ["bundled"], optional = true }
-toml = { workspace = true, optional = true }
-
-[features]
-default = ["full"]
-full = ["clap", "tokio", "tracing-subscriber", "ndarray", "rusqlite", "rand", "siphasher", "toml"]
-runtime-only = ["rand", "siphasher"]
-
-[[bin]]
-name = "textquest-learn"
-path = "src/bin/textquest-learn.rs"
-required-features = ["full"]
-
-[[bin]]
-name = "textquest-learn-bc"
-path = "src/main.rs"
-required-features = ["full"]
-
-[[bin]]
-name = "textquest-learn-bc-main"
-path = "src/bin/main.rs"
-required-features = ["full"]
 
