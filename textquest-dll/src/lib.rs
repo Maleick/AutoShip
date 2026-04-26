@@ -61,6 +61,8 @@ mod syscall;
 pub mod timestamp;
 #[allow(dead_code)]
 mod tradeskill_trophy;
+#[allow(dead_code)]
+pub mod net;
 
 use std::{
     path::{Path, PathBuf},

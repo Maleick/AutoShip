@@ -346,6 +346,22 @@ pub fn cached_block_count() -> usize {
     cache().lock().map(|g| g.coverage()).unwrap_or(0)
 }
 
+/// Query the global clean-hash cache for all blocks covered by `specs`.
+///
+/// For each `BLOCK_SIZE`-aligned block covered by any spec, returns:
+/// - `(block_base, Some(hash))` — block has a cached pre-modification hash
+///   (spoofed response); the caller must **not** hash live bytes for this block.
+/// - `(block_base, None)` — block is unmodified; passthrough to live hash.
+///
+/// This is the primary entry point for [`crate::net::handlers`].
+#[must_use]
+pub fn query_regions_from_cache(specs: &[MemRegionSpec]) -> Vec<(usize, Option<BlockHash>)> {
+    cache()
+        .lock()
+        .map(|g| g.query_regions(specs.iter()))
+        .unwrap_or_default()
+}
+
 // ─── HWBP hook ────────────────────────────────────────────────────────────────
 
 /// HWBP callback that fires at `SERVER_MEMCHECK_HANDLER` entry.
