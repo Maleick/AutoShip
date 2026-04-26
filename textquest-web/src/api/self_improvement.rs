@@ -1,18 +1,25 @@
 //! Self-improvement suggestion API — record events, analyze patterns, suggest tuning.
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
-    Json,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use textquest_common::self_improvement::{
-    analyze_session_for_suggestions, ImprovementSuggestion, SessionEvent, SessionMetrics,
-    SuggestionStatus,
+    ImprovementSuggestion, SessionEvent, SessionMetrics, SuggestionStatus,
+    analyze_session_for_suggestions,
 };
+
+/// Maximum number of sessions retained in memory for events and metrics.
+const MAX_TRACKED_SESSIONS: usize = 128;
+/// Maximum number of events retained per session.
+const MAX_EVENTS_PER_SESSION: usize = 1_000;
+/// Maximum number of suggestions retained in memory.
+const MAX_SUGGESTIONS: usize = 1_000;
 
 /// In-memory state for self-improvement tracking.
 #[derive(Clone, Default)]
@@ -81,7 +88,17 @@ impl SelfImprovementState {
     /// Record a raw session event.
     pub async fn record_event(&self, session_id: u32, event: SessionEvent) -> Result<(), String> {
         let mut events = self.events.write().await;
-        events.entry(session_id).or_insert_with(Vec::new).push(event);
+        if !events.contains_key(&session_id) && events.len() >= MAX_TRACKED_SESSIONS {
+            if let Some(oldest_session_id) = events.keys().copied().min() {
+                events.remove(&oldest_session_id);
+            }
+        }
+
+        let session_events = events.entry(session_id).or_insert_with(Vec::new);
+        if session_events.len() >= MAX_EVENTS_PER_SESSION {
+            session_events.remove(0);
+        }
+        session_events.push(event);
         Ok(())
     }
 
@@ -94,6 +111,15 @@ impl SelfImprovementState {
     /// Record suggestion.
     pub async fn add_suggestion(&self, suggestion: ImprovementSuggestion) {
         let mut suggestions = self.suggestions.write().await;
+        if suggestions.len() >= MAX_SUGGESTIONS && !suggestions.contains_key(&suggestion.id) {
+            if let Some(oldest_suggestion_id) = suggestions
+                .iter()
+                .min_by_key(|(_id, suggestion)| suggestion.created_at)
+                .map(|(id, _suggestion)| id.clone())
+            {
+                suggestions.remove(&oldest_suggestion_id);
+            }
+        }
         suggestions.insert(suggestion.id.clone(), suggestion);
     }
 
@@ -115,6 +141,11 @@ impl SelfImprovementState {
     /// Update session metrics.
     pub async fn set_session_metrics(&self, session_id: u32, metrics: SessionMetrics) {
         let mut all_metrics = self.metrics.write().await;
+        if !all_metrics.contains_key(&session_id) && all_metrics.len() >= MAX_TRACKED_SESSIONS {
+            if let Some(oldest_session_id) = all_metrics.keys().copied().min() {
+                all_metrics.remove(&oldest_session_id);
+            }
+        }
         all_metrics.insert(session_id, metrics);
     }
 }
@@ -124,11 +155,7 @@ pub async fn record_event(
     State(state): State<Arc<crate::AppState>>,
     Json(req): Json<RecordEventRequest>,
 ) -> Result<(StatusCode, Json<ActionResponse>), StatusCode> {
-    let mut event_id = state
-        .self_improvement_state
-        .next_event_id
-        .lock()
-        .await;
+    let mut event_id = state.self_improvement_state.next_event_id.lock().await;
     *event_id += 1;
 
     let session_event = SessionEvent {
@@ -162,10 +189,7 @@ pub async fn get_suggestions(
 ) -> Json<SuggestionsResponse> {
     let suggestions = state.self_improvement_state.get_suggestions(None).await;
     let count = suggestions.len();
-    Json(SuggestionsResponse {
-        suggestions,
-        count,
-    })
+    Json(SuggestionsResponse { suggestions, count })
 }
 
 /// POST /api/improvement/analyze — analyze session and generate suggestions.
@@ -175,17 +199,11 @@ pub async fn analyze_session(
 ) -> Json<SuggestionsResponse> {
     // Retrieve session metrics
     let metrics_map = state.self_improvement_state.metrics.read().await;
-    let metrics = metrics_map
-        .get(&session_id)
-        .cloned()
-        .unwrap_or_default();
+    let metrics = metrics_map.get(&session_id).cloned().unwrap_or_default();
 
     // Retrieve session events
     let events_map = state.self_improvement_state.events.read().await;
-    let events = events_map
-        .get(&session_id)
-        .cloned()
-        .unwrap_or_default();
+    let events = events_map.get(&session_id).cloned().unwrap_or_default();
 
     // Generate suggestions
     let suggestions = analyze_session_for_suggestions(&metrics, &events);
@@ -202,10 +220,7 @@ pub async fn analyze_session(
     }
 
     let count = suggestions.len();
-    Json(SuggestionsResponse {
-        suggestions,
-        count,
-    })
+    Json(SuggestionsResponse { suggestions, count })
 }
 
 /// POST /api/improvement/accept/:id — accept a suggestion.
@@ -353,12 +368,61 @@ mod tests {
         };
 
         state.add_suggestion(suggestion).await;
-        assert!(state
-            .update_suggestion_status("test_update", SuggestionStatus::Accepted)
-            .await
-            .is_ok());
+        assert!(
+            state
+                .update_suggestion_status("test_update", SuggestionStatus::Accepted)
+                .await
+                .is_ok()
+        );
 
         let suggestions = state.get_suggestions(None).await;
         assert_eq!(suggestions[0].status, SuggestionStatus::Accepted);
+    }
+
+    #[tokio::test]
+    async fn test_record_event_caps_per_session_growth() {
+        let state = SelfImprovementState::new();
+
+        for id in 0..(MAX_EVENTS_PER_SESSION as u64 + 1) {
+            let event = SessionEvent {
+                id,
+                timestamp: Utc::now(),
+                event_type: textquest_common::self_improvement::EventType::SessionStart,
+                description: format!("event-{id}"),
+                metadata: serde_json::json!({}),
+            };
+            assert!(state.record_event(42, event).await.is_ok());
+        }
+
+        let events = state.events.read().await;
+        let session_events = events.get(&42).expect("session events should exist");
+        assert_eq!(session_events.len(), MAX_EVENTS_PER_SESSION);
+        assert_eq!(session_events[0].id, 1);
+    }
+
+    #[tokio::test]
+    async fn test_add_suggestion_caps_total_growth() {
+        let state = SelfImprovementState::new();
+
+        for id in 0..=MAX_SUGGESTIONS {
+            state
+                .add_suggestion(ImprovementSuggestion {
+                    id: format!("suggestion-{id}"),
+                    title: "Test".to_string(),
+                    description: "Test suggestion".to_string(),
+                    suggestion_type:
+                        textquest_common::self_improvement::SuggestionType::Performance,
+                    priority: 1,
+                    recommendation: "Do this".to_string(),
+                    created_at: Utc::now(),
+                    status: SuggestionStatus::Pending,
+                    config_path: None,
+                    suggested_value: None,
+                })
+                .await;
+        }
+
+        let suggestions = state.get_suggestions(None).await;
+        assert_eq!(suggestions.len(), MAX_SUGGESTIONS);
     }
 }
