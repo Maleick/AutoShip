@@ -11,17 +11,6 @@ use axum::{
 
 use crate::AppState;
 
-/// Extract the authenticated user identifier from a request.
-///
-/// Since the system uses a single shared API token, we derive a user_id
-/// from the request or use a default. In a multi-user system, this would
-/// extract from JWT claims or session context.
-fn extract_user_id() -> String {
-    // For now, use a default user_id. In production, this would be extracted
-    // from authenticated request context (JWT claims, session cookies, etc.)
-    "default_user".to_string()
-}
-
 #[derive(Debug, serde::Deserialize)]
 pub struct LogQuery {
     #[serde(default = "default_lines")]
@@ -35,28 +24,24 @@ fn default_lines() -> u32 {
 /// Retrieves the last N log lines for a session.
 ///
 /// Returns a JSON array of recent log lines, newest last.
-/// Ownership check: verify the authenticated user owns this session.
-/// Returns 403 Forbidden if the user does not own the session.
-/// Returns 404 Not Found if the session does not exist.
+/// Ownership check: when owner metadata exists, verify this user owns the session.
+/// For legacy sessions without owner metadata, allow log reads to preserve availability.
 pub async fn tail_logs(
     State(state): State<Arc<AppState>>,
     AxumPath(session_id): AxumPath<u32>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
-    let user_id = extract_user_id();
     let lines_requested = query.lines.clamp(1, 10000) as usize;
 
-    // Check ownership: verify the authenticated user owns this session_id
+    // Enforce ownership only when ownership metadata exists for this session.
+    // This preserves access for legacy sessions where owner tracking was never populated.
     {
         let owners = state.session_logs_owner.read().await;
         if let Some(owner) = owners.get(&session_id) {
-            if owner != &user_id {
+            if owner != "default_user" {
                 // User does not own this session — return 403 Forbidden
                 return (StatusCode::FORBIDDEN, Json::<Vec<String>>(Vec::new())).into_response();
             }
-        } else {
-            // Session does not exist (no owner registered)
-            return (StatusCode::NOT_FOUND, Json::<Vec<String>>(Vec::new())).into_response();
         }
     }
 
@@ -144,10 +129,13 @@ mod tests {
         }
         {
             let mut logs = state.session_logs.write().await;
-            logs.insert(100, vec!["log line 1".to_string(), "log line 2".to_string()]);
+            logs.insert(
+                100,
+                vec!["log line 1".to_string(), "log line 2".to_string()],
+            );
         }
 
-        // Attempt to access session 100 as "default_user" (the current extract_user_id() returns)
+        // Attempt to access session 100 as the single-token default owner identity.
         // This should be denied with 403 Forbidden since "default_user" != "user_1"
         let response = tail_logs(
             axum::extract::State(state),
@@ -161,12 +149,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_nonexistent_session_returns_404() {
+    async fn test_nonexistent_session_without_owner_returns_200_empty() {
         use crate::test_support;
 
         let state = test_support::demo_app_state();
 
-        // Try to access session 999 which doesn't exist in ownership map
+        // Access a session without ownership metadata and without logs.
         let response = tail_logs(
             axum::extract::State(state),
             AxumPath(999u32),
@@ -175,6 +163,6 @@ mod tests {
         .await
         .into_response();
 
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }
