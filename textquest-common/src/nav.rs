@@ -795,6 +795,10 @@ impl ZoneGraph {
     }
 }
 
+/// Default leash radius: maximum distance a character may drift from their
+/// camp spot before being returned. Replaces any hardcoded drift constant.
+pub const DEFAULT_LEASH_RADIUS: f32 = 100.0;
+
 /// A named camp position for a specific role.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CampSpot {
@@ -804,6 +808,62 @@ pub struct CampSpot {
     pub heading: f32,
     /// Role label (e.g., "tank", "healer1", "dps_ranged").
     pub role: String,
+    /// Maximum distance this character may drift from `position` before a
+    /// return is triggered.  Defaults to [`DEFAULT_LEASH_RADIUS`].
+    #[serde(default = "CampSpot::default_leash_radius")]
+    pub leash_radius: f32,
+    /// Distance at which a return-to-camp movement is considered complete.
+    /// Must be ≤ `leash_radius`.  Defaults to [`DEFAULT_LEASH_RADIUS`].
+    #[serde(default = "CampSpot::default_leash_radius")]
+    pub return_radius: f32,
+}
+
+impl CampSpot {
+    fn default_leash_radius() -> f32 {
+        DEFAULT_LEASH_RADIUS
+    }
+
+    /// Create a `CampSpot` with explicit leash and return radii.
+    #[must_use]
+    pub fn new(position: Waypoint, heading: f32, role: String) -> Self {
+        Self {
+            position,
+            heading,
+            role,
+            leash_radius: DEFAULT_LEASH_RADIUS,
+            return_radius: DEFAULT_LEASH_RADIUS,
+        }
+    }
+
+    /// Create a `CampSpot` with custom per-camp leash and return radii.
+    #[must_use]
+    pub fn with_radii(
+        position: Waypoint,
+        heading: f32,
+        role: String,
+        leash_radius: f32,
+        return_radius: f32,
+    ) -> Self {
+        Self {
+            position,
+            heading,
+            role,
+            leash_radius,
+            return_radius,
+        }
+    }
+
+    /// Returns `true` when `pos` is beyond the leash boundary.
+    #[must_use]
+    pub fn is_beyond_leash(&self, pos: &Waypoint) -> bool {
+        self.position.distance_2d(pos) > self.leash_radius
+    }
+
+    /// Returns `true` when a return movement has reached the return radius.
+    #[must_use]
+    pub fn is_within_return_radius(&self, pos: &Waypoint) -> bool {
+        self.position.distance_2d(pos) <= self.return_radius
+    }
 }
 
 /// A complete camp definition with spots for each role.
@@ -942,6 +1002,8 @@ impl NavCampConfig {
             position: self.return_position(),
             heading: self.heading,
             role: self.role.clone(),
+            leash_radius: self.radius * self.leash_factor,
+            return_radius: self.radius,
         }
     }
 }
@@ -3204,5 +3266,113 @@ mod tests {
             let restored: PauseReason = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(reason, restored);
         }
+    }
+
+    // ─── CampSpot leash_radius / return_radius tests ───
+
+    #[test]
+    fn camp_spot_new_defaults_to_100() {
+        let pos = Waypoint::new(0.0, 0.0, 0.0);
+        let spot = CampSpot::new(pos, 0.0, "tank".to_string());
+        assert!(
+            (spot.leash_radius - DEFAULT_LEASH_RADIUS).abs() < f32::EPSILON,
+            "leash_radius should default to {DEFAULT_LEASH_RADIUS}"
+        );
+        assert!(
+            (spot.return_radius - DEFAULT_LEASH_RADIUS).abs() < f32::EPSILON,
+            "return_radius should default to {DEFAULT_LEASH_RADIUS}"
+        );
+    }
+
+    #[test]
+    fn camp_spot_with_radii_stores_custom_values() {
+        let pos = Waypoint::new(10.0, 20.0, 0.0);
+        let spot = CampSpot::with_radii(pos, 128.0, "healer".to_string(), 50.0, 30.0);
+        assert!((spot.leash_radius - 50.0).abs() < f32::EPSILON);
+        assert!((spot.return_radius - 30.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn camp_spot_is_beyond_leash_triggers_correctly() {
+        let pos = Waypoint::new(0.0, 0.0, 0.0);
+        let spot = CampSpot::with_radii(pos, 0.0, "dps1".to_string(), 50.0, 50.0);
+
+        // 30 units away — within leash
+        let near = Waypoint::new(30.0, 0.0, 0.0);
+        assert!(!spot.is_beyond_leash(&near), "30 < 50 should not trigger leash");
+
+        // 60 units away — beyond leash
+        let far = Waypoint::new(60.0, 0.0, 0.0);
+        assert!(spot.is_beyond_leash(&far), "60 > 50 should trigger leash");
+    }
+
+    #[test]
+    fn camp_spot_is_within_return_radius() {
+        let pos = Waypoint::new(0.0, 0.0, 0.0);
+        let spot = CampSpot::with_radii(pos, 0.0, "healer".to_string(), 80.0, 20.0);
+
+        // 10 units from camp — within return radius
+        let near = Waypoint::new(10.0, 0.0, 0.0);
+        assert!(spot.is_within_return_radius(&near));
+
+        // 30 units from camp — outside return radius
+        let medium = Waypoint::new(30.0, 0.0, 0.0);
+        assert!(!spot.is_within_return_radius(&medium));
+    }
+
+    #[test]
+    fn camp_spot_serde_round_trip_includes_new_fields() {
+        let pos = Waypoint::new(5.0, 10.0, 0.0);
+        let spot = CampSpot::with_radii(pos, 64.0, "cc".to_string(), 75.0, 25.0);
+        let json = serde_json::to_string(&spot).expect("serialize");
+        let restored: CampSpot = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(spot, restored);
+        assert!((restored.leash_radius - 75.0).abs() < f32::EPSILON);
+        assert!((restored.return_radius - 25.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn camp_spot_serde_defaults_when_fields_absent() {
+        // Old-format JSON without leash_radius / return_radius
+        let json = r#"{"position":{"x":0.0,"y":0.0,"z":0.0},"heading":0.0,"role":"tank"}"#;
+        let spot: CampSpot = serde_json::from_str(json).expect("deserialize legacy format");
+        assert!(
+            (spot.leash_radius - DEFAULT_LEASH_RADIUS).abs() < f32::EPSILON,
+            "leash_radius should default to {DEFAULT_LEASH_RADIUS} for legacy data"
+        );
+        assert!(
+            (spot.return_radius - DEFAULT_LEASH_RADIUS).abs() < f32::EPSILON,
+            "return_radius should default to {DEFAULT_LEASH_RADIUS} for legacy data"
+        );
+    }
+
+    #[test]
+    fn nav_camp_config_to_camp_spot_propagates_radii() {
+        let config = NavCampConfig {
+            center: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            radius: 40.0,
+            scatter: None,
+            role: "tank".to_string(),
+            leash_factor: 2.0,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
+        };
+        let spot = config.to_camp_spot();
+        // leash_radius should be radius * leash_factor = 40 * 2 = 80
+        assert!(
+            (spot.leash_radius - 80.0).abs() < f32::EPSILON,
+            "leash_radius should be radius * leash_factor (80), got {}",
+            spot.leash_radius
+        );
+        // return_radius should be radius = 40
+        assert!(
+            (spot.return_radius - 40.0).abs() < f32::EPSILON,
+            "return_radius should be radius (40), got {}",
+            spot.return_radius
+        );
     }
 }

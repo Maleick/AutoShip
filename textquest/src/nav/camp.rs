@@ -247,43 +247,43 @@ pub fn create_standard_camp(center: Waypoint, pull_heading: f32, num_dps: usize)
 
     // Tank: 20 units in the pull direction.
     let pull_rad = pull_heading * std::f32::consts::PI * 2.0 / 512.0;
-    spots.push(CampSpot {
-        position: Waypoint::new(
+    spots.push(CampSpot::new(
+        Waypoint::new(
             center.x + 20.0 * pull_rad.sin(),
             center.y + 20.0 * pull_rad.cos(),
             center.z,
         ),
-        heading: pull_heading,
-        role: "tank".to_string(),
-    });
+        pull_heading,
+        "tank".to_string(),
+    ));
 
     // Healer: 15 units behind center (opposite pull direction).
     let back_heading = (pull_heading + 256.0) % 512.0;
     let back_rad = back_heading * std::f32::consts::PI * 2.0 / 512.0;
-    spots.push(CampSpot {
-        position: Waypoint::new(
+    spots.push(CampSpot::new(
+        Waypoint::new(
             center.x + 15.0 * back_rad.sin(),
             center.y + 15.0 * back_rad.cos(),
             center.z,
         ),
-        heading: pull_heading,
-        role: "healer".to_string(),
-    });
+        pull_heading,
+        "healer".to_string(),
+    ));
 
     // DPS: spread in a semicircle behind center.
     for i in 0..num_dps {
         let angle_offset = (i as f32 / num_dps as f32 - 0.5) * 128.0; // +/- 45 degrees
         let dps_heading = (back_heading + angle_offset + 512.0) % 512.0;
         let dps_rad = dps_heading * std::f32::consts::PI * 2.0 / 512.0;
-        spots.push(CampSpot {
-            position: Waypoint::new(
+        spots.push(CampSpot::new(
+            Waypoint::new(
                 center.x + 18.0 * dps_rad.sin(),
                 center.y + 18.0 * dps_rad.cos(),
                 center.z,
             ),
-            heading: pull_heading,
-            role: format!("dps{}", i + 1),
-        });
+            pull_heading,
+            format!("dps{}", i + 1),
+        ));
     }
 
     CampDefinition {
