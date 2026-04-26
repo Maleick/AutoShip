@@ -944,6 +944,101 @@ impl ClickyWindowState {
     }
 }
 
+/// Per-character runtime personality override applied via the TUI selector.
+#[derive(Debug, Clone, Default)]
+pub struct CharacterPersonalityOverride {
+    /// User-facing personality label (e.g. "Aggressive", "Friendly").
+    pub personality_label: String,
+    /// Model override; empty string = use coordinator default.
+    pub model_override: String,
+}
+
+/// TUI state for the per-character personality/model selector.
+///
+/// Tracks which character is selected in the roster, the current override in
+/// effect for each character, and whether the selector popup is open.
+#[derive(Debug, Clone, Default)]
+pub struct PersonalitySelectorState {
+    /// Index of the currently selected personality preset in the popup list.
+    pub preset_cursor: usize,
+    /// Whether the selector popup is currently open.
+    pub open: bool,
+    /// Per-character personality overrides keyed by character name.
+    pub overrides: std::collections::HashMap<String, CharacterPersonalityOverride>,
+}
+
+impl PersonalitySelectorState {
+    /// All built-in personality preset labels.
+    pub const PRESETS: &'static [&'static str] = &[
+        "Default",
+        "Aggressive",
+        "Friendly",
+        "Terse",
+        "Verbose",
+        "Roleplay",
+    ];
+
+    /// All supported model names (ollama-compatible).
+    pub const MODELS: &'static [&'static str] = &[
+        "gemma3:4b",
+        "gemma3:12b",
+        "llama3:8b",
+        "mistral:7b",
+        "none",
+    ];
+
+    /// Get the active personality label for a character.
+    #[must_use]
+    pub fn active_personality<'a>(&'a self, character_name: &str) -> &'a str {
+        self.overrides
+            .get(character_name)
+            .map(|o| o.personality_label.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Default")
+    }
+
+    /// Get the active model override for a character (empty = coordinator default).
+    #[must_use]
+    pub fn active_model<'a>(&'a self, character_name: &str) -> &'a str {
+        self.overrides
+            .get(character_name)
+            .map(|o| o.model_override.as_str())
+            .unwrap_or("")
+    }
+
+    /// Apply a personality preset to a character.
+    pub fn set_personality(&mut self, character_name: &str, label: &str) {
+        let entry = self
+            .overrides
+            .entry(character_name.to_owned())
+            .or_default();
+        label.clone_into(&mut entry.personality_label);
+    }
+
+    /// Apply a model override to a character.
+    pub fn set_model_override(&mut self, character_name: &str, model: &str) {
+        let entry = self
+            .overrides
+            .entry(character_name.to_owned())
+            .or_default();
+        model.clone_into(&mut entry.model_override);
+    }
+
+    /// Advance the preset cursor (wraps around).
+    pub fn cursor_next(&mut self) {
+        self.preset_cursor = (self.preset_cursor + 1) % Self::PRESETS.len();
+    }
+
+    /// Move the preset cursor backwards (wraps around).
+    pub fn cursor_prev(&mut self) {
+        if self.preset_cursor == 0 {
+            self.preset_cursor = Self::PRESETS.len().saturating_sub(1);
+        } else {
+            self.preset_cursor -= 1;
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MetricsDashboardTab {
     Combat,
@@ -1235,6 +1330,8 @@ pub struct App {
     pub soul_coordinator: Option<SoulCoordinator>,
     /// Tick counter for soul engine update throttling.
     pub soul_tick_counter: u64,
+    /// Per-character personality/model selector state for the TUI.
+    pub personality_selector: PersonalitySelectorState,
 
     /// Map panel state (zoom, pan, overlays).
     pub map_state: MapScreenState,
@@ -1661,6 +1758,7 @@ impl App {
 
             soul_coordinator: None,
             soul_tick_counter: 0,
+            personality_selector: PersonalitySelectorState::default(),
 
             map_state: MapScreenState::new(),
             tactical_state: TacticalScreenState::new(),

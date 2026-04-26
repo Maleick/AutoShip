@@ -28,6 +28,7 @@ pub mod packets;
 pub mod patch_reconciliation;
 pub mod spawns;
 pub mod widgets;
+pub mod personality_selector;
 pub mod policy_panel;
 pub mod zone_blocker_panel;
 pub mod zone_status_panel;
@@ -162,6 +163,12 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     if app.alert_panel_visible {
         draw_alert_overlay(frame, area, app);
+    }
+
+    // Personality/model selector popup overlay
+    if app.personality_selector.open {
+        let theme = app.theme.clone();
+        personality_selector::draw_personality_popup(frame, app, &theme);
     }
 
     if app.diagnostics_visible {
