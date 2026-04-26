@@ -11,12 +11,13 @@ Detailed early-planar raid research now lives in [Research: Plane of Hate and Pl
 ## Table of Contents
 
 1. [Finalized 36-Box Roster Reference](#finalized-36-box-roster-reference)
-2. [Leveling Zones by Level Range](#leveling-zones-by-level-range)
-3. [Plat Farming Locations by Era](#plat-farming-locations-by-era)
-4. [Raid Targets Available at Velious Launch](#raid-targets-available-at-velious-launch)
-5. [Encounter Locking Strategy](#encounter-locking-strategy)
-6. [Randomized Loot Meta & Lessons from Mischief/Teek](#randomized-loot-meta)
-7. [Group Composition Notes](#group-composition-notes)
+2. [Monk vs Berserker DPS Comparison](#monk-vs-berserker-dps-comparison)
+3. [Leveling Zones by Level Range](#leveling-zones-by-level-range)
+4. [Plat Farming Locations by Era](#plat-farming-locations-by-era)
+5. [Raid Targets Available at Velious Launch](#raid-targets-available-at-velious-launch)
+6. [Encounter Locking Strategy](#encounter-locking-strategy)
+7. [Randomized Loot Meta & Lessons from Mischief/Teek](#randomized-loot-meta)
+8. [Group Composition Notes](#group-composition-notes)
 
 ---
 
@@ -108,6 +109,26 @@ Applied to the locked roster:
 
 - The documented baseline remains the default because `TextQuest#1593` and `TextQuest#1594` both reinforce survivability-first automation over speculative DPS optimization.
 - If a partner roster is later confirmed in tracked evidence, update the linked planning issue first and only then revise the canonical roster docs.
+
+### Monk vs Berserker DPS Comparison
+
+> Tracked under `TextQuest#1751`. Benchmark analysis completed 2026-04-26.
+> Full evidence: [Research: Velious-Era Class Synergy Validation](Research-Velious-Class-Synergy.md)
+
+**Result: 8 Monks confirmed. No roster change.**
+
+The proposed swap to `6 Monks + 2 Berserkers` was evaluated as a DPS-first alternative to the current melee stack. The comparison was ruled out before reaching a live DPS measurement because Berserker is a **Gates of Discord** class and is not available at Velious launch. Running `8 MNK` is not a conservative preference — it is the only era-legal option.
+
+| Metric | 8 Monks | 6 Monks + 2 Berserkers |
+| ------ | ------- | ---------------------- |
+| Era legality (Velious launch) | Valid | **Invalid — GoD class** |
+| Weapon dependency | Low (fist-based) | High (2H axe reliant) |
+| Backup pulling utility | Yes (FD) | No |
+| Automation safety | High | N/A (not available) |
+
+**Roster recommendation:** Keep the locked `8 MNK` melee stack unchanged through Velious launch. Re-evaluate the Berserker swap only after Gates of Discord unlocks, at which point weapon supply, AA accumulation, and live parse data should drive any changes.
+
+The full class synergy validation — including external source citations, common TLP boxer composition comparisons, and the automation-safety trade-off analysis — is documented in [Research: Velious-Era Class Synergy Validation](Research-Velious-Class-Synergy.md).
 
 ---
 
