@@ -132,7 +132,7 @@ impl BanditRuntime {
             model,
             arms,
             policy_mode: PolicyMode::Shadow,
-            rng: SmallRng::from_entropy(),
+            rng: SmallRng::from_os_rng(),
             context_dim: d,
         })
     }

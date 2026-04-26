@@ -30,8 +30,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
-use std::time::SystemTime;
 
 /// Parsed item-link metadata extracted from EQ chat link syntax.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -156,7 +154,7 @@ impl LinkDb {
 ///
 /// This is a simplified parser for testing. Real implementation would
 /// extract from full link syntax with attributes.
-pub fn parse_item_link(text: &str, item_id: u32, name: &str) -> ItemLink {
+pub fn parse_item_link(_text: &str, item_id: u32, name: &str) -> ItemLink {
     // Generate a simple hash from item ID and name.
     let hash = format!("{}_{}", item_id, name.replace(' ', "_"));
 

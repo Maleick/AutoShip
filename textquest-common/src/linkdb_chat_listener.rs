@@ -4,8 +4,8 @@
 //! codes from chat messages on any channel the DLL sees, and inserts them
 //! into the LinkDb for persistent indexing.
 
-use crate::chat::{ChatChannel, ChatEvent};
-use crate::linkdb::{ItemLink, LinkDb};
+use crate::chat::ChatEvent;
+use crate::linkdb::LinkDb;
 
 /// Chat listener for item-link extraction.
 ///
