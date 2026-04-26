@@ -20,7 +20,7 @@ export function Input({ label, error, id, className = "", ...props }: InputProps
       <input
         id={id}
         className={`w-full px-3 py-2 bg-void border border-neriak-dim rounded text-neriak-text
-          placeholder-neriak-muted focus:outline-none focus:ring-2 focus:ring-neriak-cyan focus:border-transparent
+          placeholder-neriak-muted
           ${error ? "border-state-danger" : ""} ${className}`}
         {...props}
       />

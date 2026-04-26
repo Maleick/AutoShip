@@ -1,0 +1,136 @@
+/* Focus Indicators - WCAG AA Compliant
+ *
+ * This stylesheet provides consistent, high-contrast focus indicators
+ * across all interactive elements to support keyboard navigation.
+ *
+ * Colors chosen for:
+ * - WCAG AA compliance (4.5:1 contrast minimum)
+ * - Visibility in both light and dark contexts
+ * - Non-obscuring placement
+ */
+
+/* Global focus visible styles for all interactive elements */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="link"]:focus-visible {
+  outline: 3px solid var(--color-neriak-cyan);
+  outline-offset: 2px;
+}
+
+/* Remove default outline since we're providing our own */
+button:focus,
+input:focus,
+textarea:focus,
+select:focus,
+a:focus,
+[role="button"]:focus,
+[role="tab"]:focus,
+[role="menuitem"]:focus,
+[role="link"]:focus {
+  outline: none;
+}
+
+/* Focused input elements - add box-shadow for additional visibility */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--color-neriak-cyan),
+              0 0 0 3px rgba(0, 229, 255, 0.25);
+}
+
+/* Button focus states with ring indicator */
+button:focus-visible {
+  box-shadow: 0 0 0 4px rgba(0, 229, 255, 0.3);
+}
+
+/* Links focus state */
+a:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-void),
+              0 0 0 4px var(--color-neriak-cyan);
+  border-radius: 2px;
+}
+
+/* Disabled elements should not have focus indicators */
+button:disabled:focus-visible,
+input:disabled:focus-visible,
+[aria-disabled="true"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Skip link - visible when focused */
+.skip-link:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 8px 12px;
+  background-color: var(--color-neriak-cyan);
+  color: var(--color-void);
+  text-decoration: none;
+  z-index: 9999;
+}
+
+/* Focus indicator for form fields with visible error state */
+input[aria-invalid="true"]:focus-visible {
+  outline-color: var(--color-state-danger);
+  box-shadow: inset 0 0 0 1px var(--color-state-danger),
+              0 0 0 3px rgba(239, 68, 68, 0.25);
+}
+
+/* Tab navigation - prominent focus indicator */
+[role="tab"]:focus-visible {
+  outline: 3px solid var(--color-neriak-cyan);
+  outline-offset: -3px;
+  box-shadow: inset 0 -3px 0 0 var(--color-neriak-cyan);
+}
+
+/* Card elements that can receive focus */
+.card:focus-visible,
+[role="region"]:focus-visible {
+  outline: 2px solid var(--color-neriak-cyan);
+  outline-offset: 2px;
+}
+
+/* Modal dialog focus */
+[role="dialog"]:focus-visible {
+  outline: 3px solid var(--color-neriak-cyan);
+  outline-offset: 0;
+}
+
+/* Sortable/draggable elements */
+[aria-grabbed="true"],
+[data-sortable]:focus-visible {
+  outline: 3px dashed var(--color-neriak-cyan);
+  outline-offset: 2px;
+}
+
+/* Focus indicator for accessibility - High contrast mode support */
+@media (prefers-contrast: more) {
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible {
+    outline-width: 4px;
+    outline-offset: 3px;
+  }
+}
+
+/* Reduced motion - respect user preference */
+@media (prefers-reduced-motion: reduce) {
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible {
+    transition: none;
+  }
+}

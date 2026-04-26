@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "focus-indicators.css";
 
 @theme {
   --color-void: #0d0618;
