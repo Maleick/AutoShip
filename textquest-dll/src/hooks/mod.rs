@@ -17,6 +17,7 @@ pub mod file_integrity_dispatcher;
 pub mod fingerprint;
 pub mod game_loop;
 pub mod hwbp;
+pub mod inbound_counter;
 pub mod integrity;
 pub mod memcheck;
 pub mod movement;
@@ -82,6 +83,7 @@ pub fn remove_all() {
     timing::remove();
     wmi::remove();
     zone_entry_integrity::remove();
+    inbound_counter::remove();
     tracing::info!("All hooks removed");
 }
 
