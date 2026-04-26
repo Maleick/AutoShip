@@ -39,8 +39,6 @@ pub mod forage;
 pub mod hunt;
 /// Loot rules — need/greed/pass, item filters, distribution.
 pub mod loot;
-/// Camp priors derived from PEQ knowledge-layer data and overlays.
-pub mod prior;
 /// Camp personality — per-character behavioral preferences.
 pub mod personality;
 /// Combat positioning — melee range, backstab, facing.
@@ -75,7 +73,3 @@ pub mod tell_relay;
 /// Vendor automation — sell junk, buy supplies, inventory management.
 #[cfg(windows)]
 pub mod vendor;
-
-pub use prior::{
-    CampPriorOverlay, CampPriorOverlayStack, CampPriorPipeline, CampPriorRow, CampPriorStore,
-};
