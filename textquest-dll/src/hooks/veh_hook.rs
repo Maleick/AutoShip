@@ -115,6 +115,12 @@ mod platform {
 
     const EXCEPTION_CONTINUE_EXECUTION: i32 = -1;
     const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
+    const PAGE_MASK: usize = !(0x1000 - 1);
+
+    #[inline]
+    fn page_base(addr: usize) -> usize {
+        addr & PAGE_MASK
+    }
 
     /// Install the VEH handler (idempotent).
     pub fn install_veh() -> Result<(), String> {
@@ -313,25 +319,40 @@ mod platform {
                         }
                     }
                 }
+                let fault_page = page_base(fault_addr);
+                let same_guard_page = table.iter().any(|(addr, e)| {
+                    e.active && e.kind == VehHookKind::PageGuard && page_base(*addr) == fault_page
+                });
+                drop(table);
+                if same_guard_page {
+                    // Consume unrelated faults on guarded pages to avoid
+                    // Windows clearing PAGE_GUARD and disabling the hook.
+                    unsafe { set_single_step(info.ContextRecord) };
+                    return EXCEPTION_CONTINUE_EXECUTION;
+                }
                 EXCEPTION_CONTINUE_SEARCH
             }
 
-            // ── Single-step (re-arm PAGE_GUARD after it fired) ─────────────
+            // ── Single-step (re-arm page traps after they fired) ────────────
             EXCEPTION_SINGLE_STEP => {
-                // Only re-arm if the faulting address is guarded.
-                let rip = ctx.Rip as usize;
                 let table = dispatch_table().lock().unwrap_or_else(|p| p.into_inner());
-                // Re-apply PAGE_GUARD to any active PageGuard hooks.
-                let targets: Vec<usize> = table
+                let guard_targets: Vec<usize> = table
                     .iter()
                     .filter(|(_, e)| e.active && e.kind == VehHookKind::PageGuard)
                     .map(|(addr, _)| *addr)
                     .collect();
+                let noaccess_targets: Vec<usize> = table
+                    .iter()
+                    .filter(|(_, e)| e.active && e.kind == VehHookKind::PageNoAccess)
+                    .map(|(addr, _)| *addr)
+                    .collect();
                 drop(table);
-                for addr in targets {
+                for addr in guard_targets {
                     let _ = apply_page_guard(addr);
                 }
-                let _ = rip; // used only to confirm execution resumed
+                for addr in noaccess_targets {
+                    let _ = apply_page_noaccess(addr);
+                }
                 EXCEPTION_CONTINUE_EXECUTION
             }
 
@@ -353,12 +374,26 @@ mod platform {
                             // Temporarily restore RX so the original
                             // instruction can execute, then re-guard on the
                             // following single-step.
-                            let _ =
-                                restore_page_protect(fault_addr, 0x20 /* PAGE_EXECUTE_READ */);
+                            let _ = restore_page_protect(fault_addr, PAGE_EXECUTE_READ.0);
                             unsafe { set_single_step(info.ContextRecord) };
                             return EXCEPTION_CONTINUE_EXECUTION;
                         }
                     }
+                }
+                let fault_page = page_base(fault_addr);
+                let same_noaccess_page = table.iter().any(|(addr, e)| {
+                    e.active
+                        && e.kind == VehHookKind::PageNoAccess
+                        && page_base(*addr) == fault_page
+                });
+                drop(table);
+                if same_noaccess_page {
+                    // This access hit a PAGE_NOACCESS-trapped page but not the
+                    // exact target address. Temporarily restore execute/read
+                    // and single-step so the trap can be re-armed.
+                    let _ = restore_page_protect(fault_addr, PAGE_EXECUTE_READ.0);
+                    unsafe { set_single_step(info.ContextRecord) };
+                    return EXCEPTION_CONTINUE_EXECUTION;
                 }
                 EXCEPTION_CONTINUE_SEARCH
             }
