@@ -205,6 +205,25 @@ Current live-evidence ownership under issue `#1526`:
 - Convert the session totals to a per-hour baseline before calling Sebilis an
   alchemy hub.
 
+**Per-hour baseline derivation formula (issue #3393):**
+
+```
+forage_hits_per_hour = (nodding_blue_lily_hits / session_duration_minutes) * 60
+```
+
+Record `attempts`, `successes` (any forage hit), `observed_item_count`
+(Nodding Blue Lily hits only), and `measurement_window_minutes` in
+`sebilis-validation-template.csv`. The `result_per_hour` column must
+reflect the formula above, not a rounded estimate.
+
+**Alchemy-hub theory status (issue #3393):** UNCONFIRMED — no live forage
+sample exists in the repo. The alchemy-hub hypothesis that Sebilis Shaman
+foraging yields enough Nodding Blue Lily to sustain a tradeskill supply chain
+cannot be confirmed or rejected until at least one attended forage session
+populates `sebilis-validation-template.csv` with real hit counts and duration.
+Do not promote Sebilis as an alchemy hub in planning docs until this baseline
+row is recorded.
+
 ### 4. Automation-risk review
 
 - Re-read `docs/wiki/Security-and-Anti-Detection-Notes.md` before any
@@ -246,7 +265,7 @@ Current theory items worth capturing explicitly in the template include
 | Target | Current evidence state | Repo basis | Notes |
 | --- | --- | --- | --- |
 | `Runebranded Girdle` | Research-backed loot theory | `docs/wiki/Frostreaver-Farming-Guide.md`, `docs/wiki/P99-Zone-Guide.md` | Current Sebilis planning guides already list this as notable Sebilis loot, but it still needs a live sample before it can be promoted as validated output. |
-| `Nodding Blue Lily` | Issue-theory only | Issue `#1526` description | `Nodding Blue Lily` remains an issue-theory hypothesis until a repo-local source or live sample anchors it. |
+| `Nodding Blue Lily` | Issue-theory only — baseline formula defined, no live sample yet | Issue `#1526`, issue `#3393` | Per-hour baseline derivation formula added by issue `#3393`: `(hits / session_minutes) * 60`. Template row `forage-theory-001` documents the measurement protocol. Alchemy-hub theory status: **UNCONFIRMED** — promote only after a live forage session populates the template. |
 | `Fungi Tunic` | Issue-theory only | `docs/wiki/Research-MQ2-Deep-Dive.md` | `Fungi Tunic` currently appears only in a generic item-command example, not a Sebilis evidence source. |
 | `Froglok Blood` | Issue-theory only | Issue `#1526` description | `Froglok Blood` currently has no repo-local Sebilis evidence source beyond the issue theory. |
 
