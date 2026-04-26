@@ -659,6 +659,17 @@ impl HotkeyRegistry {
         None
     }
 
+    /// Check if a binding is a built-in (reserved) hotkey that cannot be overridden
+    pub fn is_builtin_hotkey(&self, binding: &KeyBinding, config: &UiKeyboardConfig) -> bool {
+        let key_str = binding.to_string_pretty();
+        for shortcut in builtin_shortcuts(config) {
+            if shortcut.keys == key_str {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Find the action for a keyboard event
     pub fn get_action(
         &self,
