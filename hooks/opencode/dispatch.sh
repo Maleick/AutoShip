@@ -76,15 +76,9 @@ resolve_model() {
     return 0
   fi
   if [[ -f "$ROUTING_FILE" ]]; then
-    local routing_log
-    routing_log=$(bash "$SCRIPT_DIR/select-model.sh" --log "$task_type" "$issue_num" 2>/dev/null || echo "")
+    ROUTING_LOG=$(bash "$SCRIPT_DIR/select-model.sh" --log "$task_type" "$issue_num" 2>/dev/null || echo "")
     local selected_model
     selected_model=$(bash "$SCRIPT_DIR/select-model.sh" "$task_type" "$issue_num" 2>/dev/null || echo "")
-    if [[ -n "$routing_log" ]]; then
-      mkdir -p "$WORKSPACE_PATH"
-      log_file="$WORKSPACE_PATH/routing-log.txt"
-      printf '%s\n' "$routing_log" > "$log_file"
-    fi
     printf '%s\n' "$selected_model"
     return 0
   fi
