@@ -159,25 +159,27 @@ create_verified_pr() {
   local body_path="$workspace/AUTOSHIP_PR_BODY.md"
   local number title labels pr_title pr_url branch
 
+  [[ -d "$workspace" ]] || return 1
+
   number=$(issue_number "$issue")
   title=$(issue_title "$issue")
   labels=$(issue_labels "$issue")
   pr_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$number" --title "$title" --labels "$labels")
-  branch=$(git branch --show-current 2>/dev/null || true)
+  branch=$(git -C "$workspace" branch --show-current 2>/dev/null || true)
   [[ -n "$branch" ]] || branch="autoship/issue-$number"
 
   generate_pr_body "$issue"
 
-  git add -A -- . ':!.autoship'
-  if git diff --cached --quiet; then
+  git -C "$workspace" add -A -- .
+  if git -C "$workspace" diff --cached --quiet; then
     return 1
   fi
-  git commit -m "$pr_title
+  git -C "$workspace" commit -m "$pr_title
 
 Closes #$number
 Dispatched by AutoShip." >/dev/null
 
-  pr_url=$(gh pr create \
+  pr_url=$(cd "$workspace" && gh pr create \
     --title "$pr_title" \
     --body-file "$body_path" \
     --label autoship \
