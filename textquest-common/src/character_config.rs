@@ -146,7 +146,7 @@ impl Default for TributeStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ImproveAutoPromoteConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -156,6 +156,15 @@ pub struct ImproveAutoPromoteConfig {
 
 fn default_min_confidence() -> f32 {
     0.85
+}
+
+impl Default for ImproveAutoPromoteConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            min_confidence: default_min_confidence(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -493,5 +502,26 @@ mod tests {
         let encoded = serde_json::to_string(&pref).expect("serialize");
         let decoded: RewardPreference = serde_json::from_str(&encoded).expect("deserialize");
         assert_eq!(decoded, pref);
+    }
+
+    #[test]
+    fn improve_auto_promote_default_uses_confidence_gate() {
+        let cfg = ImproveAutoPromoteConfig::default();
+        assert!(!cfg.enabled);
+        assert!((cfg.min_confidence - 0.85).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn character_config_missing_improve_auto_promote_uses_safe_default_threshold() {
+        let mut value = serde_json::to_value(sample_config()).expect("serialize sample config");
+        value
+            .as_object_mut()
+            .expect("character config should be a JSON object")
+            .remove("improve_auto_promote");
+
+        let cfg: CharacterConfig =
+            serde_json::from_value(value).expect("deserialize character config");
+        assert!(!cfg.improve_auto_promote.enabled);
+        assert!((cfg.improve_auto_promote.min_confidence - 0.85).abs() < f32::EPSILON);
     }
 }
