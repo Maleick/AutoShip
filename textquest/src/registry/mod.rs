@@ -434,8 +434,13 @@ impl CommandRegistry {
     ) -> CommandId {
         let mut options = CommandOptions::enabled();
         options.allow_shadowing = true;
-        self.register_with_options(path, priority, source_id, options, handler)
-            .expect("legacy command registration should allow shadowing")
+        match self.register_with_options(path, priority, source_id, options, handler) {
+            Ok(id) => id,
+            Err(error) => {
+                tracing::warn!(%error, "legacy command registration rejected invalid input");
+                CommandId(0)
+            }
+        }
     }
 
     /// Register a command with duplicate conflict detection enabled.
@@ -869,8 +874,13 @@ impl ScriptHotkeyRegistry {
             allow_shadowing: true,
             ..HotkeyOptions::default()
         };
-        self.register_with_options(combo, priority, source_id, options, callback)
-            .expect("legacy hotkey registration should allow shadowing")
+        match self.register_with_options(combo, priority, source_id, options, callback) {
+            Ok(id) => id,
+            Err(error) => {
+                tracing::warn!(%error, "legacy hotkey registration rejected invalid input");
+                ScriptHotkeyId(0)
+            }
+        }
     }
 
     /// Register a hotkey with duplicate conflict detection enabled.
@@ -1191,17 +1201,16 @@ mod tests {
 
     #[test]
     fn command_invocation_parses_quoted_tail_arguments() {
-        let parsed = CommandInvocation::parse(r#""assist \"Rathyl\" now""#).expect("quoted args should parse");
-        assert_eq!(
-            parsed.args,
-            vec!["assist \"Rathyl\" now".to_string()]
-        );
+        let parsed = CommandInvocation::parse(r#""assist \"Rathyl\" now""#)
+            .expect("quoted args should parse");
+        assert_eq!(parsed.args, vec!["assist \"Rathyl\" now".to_string()]);
         assert_eq!(parsed.raw, r#""assist \"Rathyl\" now""#);
     }
 
     #[test]
     fn command_invocation_rejects_unclosed_quote() {
-        let error = CommandInvocation::parse(r#""assist now"#).expect_err("unclosed quotes should fail");
+        let error =
+            CommandInvocation::parse(r#""assist now"#).expect_err("unclosed quotes should fail");
         assert!(matches!(error, RegistryError::UnclosedQuote));
     }
 
@@ -1227,6 +1236,15 @@ mod tests {
     fn command_dispatch_returns_false_for_unregistered() {
         let reg = CommandRegistry::new();
         assert!(!reg.dispatch("/unknown"));
+    }
+
+    #[test]
+    fn legacy_command_register_rejects_invalid_input_without_panicking() {
+        let mut reg = CommandRegistry::new();
+        let id = reg.register("invalid", Priority::Script, "my_script", Box::new(|_| {}));
+
+        assert_eq!(id.as_raw(), 0);
+        assert_eq!(reg.len(), 0);
     }
 
     #[test]
@@ -1438,6 +1456,15 @@ mod tests {
     fn hotkey_fire_returns_false_for_unregistered() {
         let reg = ScriptHotkeyRegistry::new();
         assert!(!reg.fire("ctrl+f1"));
+    }
+
+    #[test]
+    fn legacy_hotkey_register_rejects_invalid_input_without_panicking() {
+        let mut reg = ScriptHotkeyRegistry::new();
+        let id = reg.register("", Priority::Script, "my_script", Box::new(|| {}));
+
+        assert_eq!(id.as_raw(), 0);
+        assert_eq!(reg.len(), 0);
     }
 
     #[test]
