@@ -7,6 +7,13 @@
 //! Extended for MQ2React parity: regex pattern matching on chat messages and
 //! `/say` channel monitoring (MQ2Say), plus audio and TTS action variants.
 
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+type CachedRegex = Result<regex::Regex, String>;
+
+static TRIGGER_REGEX_CACHE: OnceLock<Mutex<HashMap<String, CachedRegex>>> = OnceLock::new();
+
 /// A game event that can be matched by trigger conditions.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GameEvent {
@@ -109,12 +116,29 @@ impl TriggerCondition {
     }
 
     fn regex_imatches(pattern: &str, text: &str) -> bool {
-        match regex::Regex::new(&format!("(?i){pattern}")) {
+        let cache = TRIGGER_REGEX_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        let compiled = {
+            let mut guard = cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            guard
+                .entry(pattern.to_owned())
+                .or_insert_with(|| {
+                    regex::RegexBuilder::new(pattern)
+                        .case_insensitive(true)
+                        .build()
+                        .map_err(|e| {
+                            let msg = e.to_string();
+                            tracing::warn!("invalid trigger regex {pattern:?}: {msg}");
+                            msg
+                        })
+                })
+                .clone()
+        };
+
+        match compiled {
             Ok(re) => re.is_match(text),
-            Err(e) => {
-                tracing::warn!("invalid trigger regex {pattern:?}: {e}");
-                false
-            }
+            Err(_) => false,
         }
     }
 }
@@ -290,6 +314,29 @@ mod tests {
         };
         assert!(!cond.matches(&GameEvent::SpawnDied {
             name: "death knight".into()
+        }));
+    }
+
+    #[test]
+    fn chat_message_regex_matches_case_insensitive() {
+        let cond = TriggerCondition::ChatMessageRegex {
+            pattern: r"^kira tells you".into(),
+        };
+        assert!(cond.matches(&GameEvent::ChatReceived {
+            message: "KIRA tells you, 'hello'".into()
+        }));
+        assert!(!cond.matches(&GameEvent::ChatReceived {
+            message: "someone else tells you, 'hello'".into()
+        }));
+    }
+
+    #[test]
+    fn chat_message_regex_invalid_pattern_is_non_matching() {
+        let cond = TriggerCondition::ChatMessageRegex {
+            pattern: "(".into(),
+        };
+        assert!(!cond.matches(&GameEvent::ChatReceived {
+            message: "Kira tells you, 'hello'".into()
         }));
     }
 
