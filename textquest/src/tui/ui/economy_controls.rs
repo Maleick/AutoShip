@@ -367,7 +367,7 @@ fn draw_rules_panel(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = Style::default().fg(t.text_accent); // cyan
     let blk = panel(" RULES ", border_style, t);
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![
             Span::styled(
                 "active rule set default.ron",
