@@ -2,12 +2,55 @@
 
 use std::{path::Path, sync::Arc};
 
-use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::get,
+};
 use serde::Serialize;
 
 use crate::AppState;
 
 use super::json_error;
+
+/// Checks admin authentication independently of the global auth_disabled flag.
+/// Admin endpoints should always require valid credentials, even in dev mode.
+///
+/// Returns Ok(()) if auth passes, or Err(Response) if it fails.
+fn check_admin_auth(state: &Arc<AppState>, headers: &HeaderMap) -> Result<(), impl IntoResponse> {
+    match state.api_token {
+        Some(ref expected_token) => {
+            let provided = headers.get("x-api-token").and_then(|v| v.to_str().ok());
+
+            match provided {
+                Some(token)
+                    if textquest_common::crypto::cmp::constant_time_eq(
+                        token.as_bytes(),
+                        expected_token.as_bytes(),
+                    ) =>
+                {
+                    Ok(())
+                }
+                _ => {
+                    tracing::warn!("Admin request rejected: missing or invalid X-API-Token");
+                    Err(json_error(
+                        StatusCode::UNAUTHORIZED,
+                        "Admin access requires valid X-API-Token header",
+                    ))
+                }
+            }
+        }
+        None => {
+            tracing::error!("Admin request rejected: TEXTQUEST_API_TOKEN is not configured");
+            Err(json_error(
+                StatusCode::UNAUTHORIZED,
+                "Admin access requires TEXTQUEST_API_TOKEN to be configured",
+            ))
+        }
+    }
+}
 
 /// Stable lifecycle label persisted by the orchestrator for admin inventory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -124,6 +167,9 @@ pub struct AdminSessionRecord {
 
 /// Get all managed sessions for the admin dashboard.
 ///
+/// **Authentication:** Requires valid X-API-Token header, independent of global auth_disabled flag.
+/// Admin endpoints must always be protected, even in dev/test modes.
+///
 /// Priority order for session data:
 /// 1. Admin session snapshot (`admin_session_snapshot_path`) — written by the
 ///    orchestrator and contains fully-enriched records (group_id, routing_scope,
@@ -132,7 +178,14 @@ pub struct AdminSessionRecord {
 ///    from `session_control_state` (group_id, routing_scope) and derived class
 ///    name from `class_id`.
 /// 3. Character config entries — placeholder records for demo / offline mode.
-pub async fn list_admin_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn list_admin_sessions(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    // Guard: admin endpoints always require auth, regardless of global auth_disabled flag
+    if let Err(error_response) = check_admin_auth(&state, &headers) {
+        return error_response.into_response();
+    }
     // ── Priority 1: admin snapshot (orchestrator-managed, fully enriched) ──
     if let Ok(admin_sessions) = read_admin_sessions(&state.admin_session_snapshot_path)
         && !admin_sessions.is_empty()
@@ -325,5 +378,71 @@ mod tests {
         assert_eq!(json["group_id"], 3);
         assert_eq!(json["class_name"], "WAR");
         assert_eq!(json["routing_scope"], "group:3:G3");
+    }
+
+    #[tokio::test]
+    async fn list_admin_sessions_rejects_unauthenticated_access() {
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode, header},
+        };
+        use tower::ServiceExt;
+
+        let state = crate::test_support::demo_app_state();
+        let app = router().with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/sessions")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "admin sessions endpoint should require X-API-Token"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_admin_sessions_accepts_valid_token() {
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode, header},
+        };
+        use tower::ServiceExt;
+
+        let state = crate::test_support::demo_app_state();
+        // Override auth to require a token (not disabled)
+        let state = Arc::new({
+            let mut s = (*state).clone();
+            s.auth_disabled = false;
+            s.api_token = Some("test-secret-token".to_string());
+            s
+        });
+        let app = router().with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/sessions")
+                    .header("x-api-token", "test-secret-token")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "admin sessions endpoint should accept valid token"
+        );
     }
 }
