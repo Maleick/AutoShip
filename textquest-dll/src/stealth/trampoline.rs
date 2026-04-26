@@ -110,39 +110,41 @@ impl TrampolineHardener {
     #[cfg(not(windows))]
     pub fn protect(&self, _addr: *mut u8, _size: usize) {}
 
-    /// Convert small private execute-write regions, typical of detour trampoline
-    /// slabs, to RX after hook installation.
+    /// Convert registered trampoline execute-write pages to RX after hook
+    /// installation.
     #[cfg(windows)]
     pub fn harden_private_rwx_allocations(&self) -> usize {
-        use std::mem::size_of;
-
         use windows::Win32::System::Memory::{
             MEM_COMMIT, MEM_PRIVATE, MEMORY_BASIC_INFORMATION, PAGE_PROTECTION_FLAGS,
             VirtualProtect, VirtualQuery,
         };
 
-        let mut address = 0usize;
+        let entries: Vec<(usize, usize)> = registry()
+            .lock()
+            .map(|map| map.iter().map(|(a, (s, _))| (*a, *s)).collect())
+            .unwrap_or_default();
         let mut hardened = 0usize;
 
-        for _ in 0..1_048_576 {
+        for (addr, size) in entries {
+            if size == 0 || size > MAX_PRIVATE_RWX_TRAMPOLINE_SIZE {
+                continue;
+            }
+
             let mut mbi = MEMORY_BASIC_INFORMATION::default();
-            // SAFETY: VirtualQuery accepts arbitrary process addresses and fills
-            // `mbi` for the containing region when the address is queryable.
+            // SAFETY: `addr` points at a registered trampoline region in the current
+            // process; VirtualQuery fills `mbi` for the containing allocation.
             let queried = unsafe {
                 VirtualQuery(
-                    Some(address as *const _),
+                    Some(addr as *const _),
                     &mut mbi,
-                    size_of::<MEMORY_BASIC_INFORMATION>(),
+                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
                 )
             };
             if queried == 0 || mbi.RegionSize == 0 {
-                break;
+                continue;
             }
 
-            if mbi.State == MEM_COMMIT
-                && mbi.Type == MEM_PRIVATE
-                && mbi.RegionSize <= MAX_PRIVATE_RWX_TRAMPOLINE_SIZE
-            {
+            if mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && size <= mbi.RegionSize {
                 if let Some(new_protect) = hardened_private_execute_protection(mbi.Protect.0) {
                     let mut old = PAGE_PROTECTION_FLAGS(0);
                     // SAFETY: The region is committed memory in the current process.
@@ -150,8 +152,8 @@ impl TrampolineHardener {
                     // executable pages after hook installation has completed.
                     match unsafe {
                         VirtualProtect(
-                            mbi.BaseAddress as *const _,
-                            mbi.RegionSize,
+                            addr as *const _,
+                            size,
                             PAGE_PROTECTION_FLAGS(new_protect),
                             &mut old,
                         )
@@ -171,13 +173,6 @@ impl TrampolineHardener {
                     }
                 }
             }
-
-            let base = mbi.BaseAddress as usize;
-            let next = base.saturating_add(mbi.RegionSize);
-            if next <= address {
-                break;
-            }
-            address = next;
         }
 
         if hardened > 0 {
