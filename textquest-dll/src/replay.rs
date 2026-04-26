@@ -8,12 +8,14 @@
 //! This module is best-effort. If file creation or compression setup fails, the
 //! DLL continues running and the recorder stays disabled.
 
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::{
     collections::{BTreeSet, HashMap},
     fs::{self, File, OpenOptions},
     hash::{Hash, Hasher},
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 
@@ -197,11 +199,7 @@ impl EventWriter {
     }
 
     fn open(path: &PathBuf, level: i32, dictionary: Option<&[u8]>) -> io::Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(path)?;
+        let file = secure_create_file(path)?;
         Self::from_file(file, level, dictionary)
     }
 
@@ -294,7 +292,7 @@ impl ReplayRecorder {
 
         let character = sanitize_component(&display_name(local_player));
         let root_dir = replay_root_dir().join(&character).join(&self.session_id);
-        fs::create_dir_all(&root_dir)?;
+        ensure_secure_replay_dir(&root_dir)?;
 
         self.root_dir = root_dir.clone();
         self.stream_path = root_dir.join("game_state.ndjson.zst");
@@ -362,8 +360,10 @@ impl ReplayRecorder {
         let current_pcs = self.collect_player_spawns(frame);
         let current_npcs = self.collect_engaged_npc_spawns(frame, &engaged_npcs);
 
-        let current_pc_ids: BTreeSet<CharId> = current_pcs.iter().map(|spawn| spawn.spawn_id).collect();
-        let current_npc_ids: BTreeSet<SpawnId> = current_npcs.iter().map(|spawn| spawn.spawn_id).collect();
+        let current_pc_ids: BTreeSet<CharId> =
+            current_pcs.iter().map(|spawn| spawn.spawn_id).collect();
+        let current_npc_ids: BTreeSet<SpawnId> =
+            current_npcs.iter().map(|spawn| spawn.spawn_id).collect();
 
         let mut events: Vec<(char, Value)> = Vec::new();
         for spawn in current_pcs {
@@ -419,7 +419,10 @@ impl ReplayRecorder {
 
     fn stop(&mut self) {
         if let Some(mut meta) = self.metadata.take() {
-            meta.end_ts = Some(self.last_sync_ms.max(self.started_at_ms.unwrap_or(self.last_sync_ms)));
+            meta.end_ts = Some(
+                self.last_sync_ms
+                    .max(self.started_at_ms.unwrap_or(self.last_sync_ms)),
+            );
             meta.party = self.party.iter().cloned().collect();
             meta.zones = self.zones.iter().cloned().collect();
             self.metadata = Some(meta);
@@ -500,7 +503,8 @@ impl ReplayRecorder {
         {
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
             if eq_base != 0 {
-                if let Some(targets) = unsafe { crate::combat::xtarget::read_extended_targets(eq_base) }
+                if let Some(targets) =
+                    unsafe { crate::combat::xtarget::read_extended_targets(eq_base) }
                 {
                     ids.extend(targets.hater_spawn_ids());
                 }
@@ -597,7 +601,7 @@ impl ReplayRecorder {
             .filter_map(|(&spawn_id, tracked)| {
                 (!current_npc_ids.contains(&spawn_id)
                     && now_ms.saturating_sub(tracked.last_seen_ms) >= DELTA_INTERVAL_MS)
-                .then_some(spawn_id)
+                    .then_some(spawn_id)
             })
             .collect();
 
@@ -621,7 +625,7 @@ impl ReplayRecorder {
             .filter_map(|(&character_id, tracked)| {
                 (!current_pc_ids.contains(&character_id)
                     && now_ms.saturating_sub(tracked.last_seen_ms) >= DELTA_INTERVAL_MS)
-                .then_some(character_id)
+                    .then_some(character_id)
             })
             .collect();
 
@@ -694,16 +698,21 @@ impl ReplayRecorder {
         frame
             .active_buffs
             .iter()
-            .filter(|buff| matches!(buff.category, BuffCategory::LongBuff | BuffCategory::ShortBuff))
+            .filter(|buff| {
+                matches!(
+                    buff.category,
+                    BuffCategory::LongBuff | BuffCategory::ShortBuff
+                )
+            })
             .map(buff_slot_from_info)
             .collect()
     }
 
     fn persist_meta(&self) -> io::Result<()> {
         if let Some(meta) = self.metadata.as_ref() {
-            fs::write(
+            secure_replace_file(
                 &self.meta_path,
-                serde_json::to_vec_pretty(meta).map_err(io::Error::other)?,
+                &serde_json::to_vec_pretty(meta).map_err(io::Error::other)?,
             )
         } else {
             Ok(())
@@ -717,7 +726,7 @@ impl ReplayRecorder {
 
         let samples: Vec<&[u8]> = self.sample_lines.iter().map(Vec::as_slice).collect();
         let dict = zstd::dict::from_samples(&samples, DICTIONARY_SIZE).map_err(io::Error::other)?;
-        fs::write(&self.dictionary_path, &dict)?;
+        secure_create_and_write_file(&self.dictionary_path, &dict)?;
 
         if let Some(writer) = self.writer.take() {
             let file = writer.finish()?;
@@ -733,6 +742,70 @@ impl ReplayRecorder {
         self.sample_lines.clear();
         Ok(())
     }
+}
+
+fn ensure_secure_replay_dir(path: &Path) -> io::Result<()> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        match fs::symlink_metadata(&current) {
+            Ok(meta) => {
+                if meta.file_type().is_symlink() {
+                    return Err(io::Error::other(format!(
+                        "refusing to write replay data through symlinked directory: {}",
+                        current.display()
+                    )));
+                }
+                if !meta.is_dir() {
+                    return Err(io::Error::other(format!(
+                        "replay path component is not a directory: {}",
+                        current.display()
+                    )));
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let mut builder = fs::DirBuilder::new();
+                #[cfg(unix)]
+                builder.mode(0o700);
+                builder.create(&current)?;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+fn secure_create_file(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    options.open(path)
+}
+
+fn secure_create_and_write_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut file = secure_create_file(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
+}
+
+fn secure_replace_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    if let Ok(meta) = fs::symlink_metadata(path) {
+        if meta.file_type().is_symlink() {
+            return Err(io::Error::other(format!(
+                "refusing to overwrite symlinked replay file: {}",
+                path.display()
+            )));
+        }
+        if !meta.is_file() {
+            return Err(io::Error::other(format!(
+                "replay metadata path is not a regular file: {}",
+                path.display()
+            )));
+        }
+        fs::remove_file(path)?;
+    }
+    secure_create_and_write_file(path, bytes)
 }
 
 fn replay_root_dir() -> PathBuf {
