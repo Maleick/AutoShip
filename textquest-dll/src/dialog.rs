@@ -301,6 +301,18 @@ fn contains_filter(haystack: Option<&str>, needle: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn equals_filter(value: Option<&str>, candidate: &str) -> bool {
+    let candidate = normalize_filter(candidate);
+    if candidate.is_empty() {
+        return false;
+    }
+
+    value
+        .map(normalize_filter)
+        .map(|actual| actual == candidate)
+        .unwrap_or(false)
+}
+
 fn source_matches_any(source: Option<&str>, filters: &[String]) -> bool {
     filters
         .iter()
@@ -335,7 +347,10 @@ fn rule_matches(
 fn source_allowed_by_trust_mode(settings: &AutoAcceptSettings, source: Option<&str>) -> bool {
     match settings.trust_mode {
         AutoAcceptTrustMode::Anyone => true,
-        AutoAcceptTrustMode::TrustList => source_matches_any(source, &settings.trusted_players),
+        AutoAcceptTrustMode::TrustList => settings
+            .trusted_players
+            .iter()
+            .any(|trusted| equals_filter(source, trusted)),
     }
 }
 
@@ -1099,6 +1114,46 @@ mod tests {
                 Some("Stranger invites you to join a group."),
             ),
             AutoAcceptAction::Ignore
+        );
+    }
+
+    #[test]
+    fn trust_list_rejects_substring_matches() {
+        let settings = AutoAcceptSettings {
+            enabled: true,
+            trust_mode: AutoAcceptTrustMode::TrustList,
+            trusted_players: vec!["Leader".into()],
+            ..AutoAcceptSettings::default()
+        };
+
+        assert_eq!(
+            decide_generic_dialog_action(
+                &settings,
+                AutoAcceptRequestKind::GroupInvite,
+                Some("LeaderX"),
+                Some("LeaderX invites you to join a group."),
+            ),
+            AutoAcceptAction::Ignore
+        );
+    }
+
+    #[test]
+    fn trust_list_still_matches_case_insensitive_exact_name() {
+        let settings = AutoAcceptSettings {
+            enabled: true,
+            trust_mode: AutoAcceptTrustMode::TrustList,
+            trusted_players: vec!["Leader".into()],
+            ..AutoAcceptSettings::default()
+        };
+
+        assert_eq!(
+            decide_generic_dialog_action(
+                &settings,
+                AutoAcceptRequestKind::GroupInvite,
+                Some("  leader  "),
+                Some("leader invites you to join a group."),
+            ),
+            AutoAcceptAction::Accept
         );
     }
 
