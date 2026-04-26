@@ -210,7 +210,7 @@ async fn api_token_auth(
 
             match provided {
                 Some(token)
-                    if textquest_common::crypto::cmp::constant_time_eq(
+                    if textquest_common::crypto::cmp::constant_time_eq_expected_len(
                         token.as_bytes(),
                         expected_token.as_bytes(),
                     ) => {}
