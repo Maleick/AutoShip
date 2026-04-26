@@ -125,7 +125,8 @@ impl RiskWeights {
         if gm_available {
             self
         } else {
-            let total_without_gm = self.deaths + self.runner + self.see_invis + self.social_aggro + self.pvp;
+            let total_without_gm =
+                self.deaths + self.runner + self.see_invis + self.social_aggro + self.pvp;
             let scale = 1.0 / total_without_gm;
             Self {
                 deaths: self.deaths * scale,
@@ -213,9 +214,8 @@ impl RiskModel {
         };
 
         // Check if score should trigger recomputation (deaths delta ≥ 0.5)
-        let needs_recomputation = (deaths_raw - self.get_cached_deaths_component(&cache_key))
-            .abs()
-            >= 0.5;
+        let needs_recomputation =
+            (deaths_raw - self.get_cached_deaths_raw(&cache_key)).abs() >= 0.5;
 
         let component_breakdown = ComponentBreakdown {
             deaths_component: effective_weights.deaths * deaths_raw,
@@ -223,9 +223,7 @@ impl RiskModel {
             see_invis_component: effective_weights.see_invis * see_invis_raw,
             social_aggro_component: effective_weights.social_aggro * social_aggro_raw,
             pvp_component: effective_weights.pvp * pvp_raw,
-            gm_component: hazards
-                .gm_activity_score
-                .map(|g| effective_weights.gm * g),
+            gm_component: hazards.gm_activity_score.map(|g| effective_weights.gm * g),
             weights: effective_weights,
         };
 
@@ -309,10 +307,17 @@ impl RiskModel {
         }
     }
 
-    fn get_cached_deaths_component(&self, cache_key: &(String, String)) -> f64 {
+    fn get_cached_deaths_raw(&self, cache_key: &(String, String)) -> f64 {
         self.score_cache
             .get(cache_key)
-            .map(|s| s.component_breakdown.deaths_component)
+            .map(|s| {
+                let weight = s.component_breakdown.weights.deaths;
+                if weight > 0.0 {
+                    s.component_breakdown.deaths_component / weight
+                } else {
+                    0.0
+                }
+            })
             .unwrap_or(0.0)
     }
 }
@@ -382,7 +387,10 @@ mod tests {
             gm_activity_score: None,
         };
         let score = model.compute_risk(hazards);
-        assert!(score.score >= 0.30 && score.score < 0.65, "Moderate hazards = medium risk");
+        assert!(
+            score.score >= 0.30 && score.score < 0.65,
+            "Moderate hazards = medium risk"
+        );
         assert_eq!(score.band, RiskBand::Medium);
     }
 
@@ -391,8 +399,11 @@ mod tests {
         let weights = RiskWeights::default();
         let normalized = weights.normalized_for_gm_availability(false);
         assert_eq!(normalized.gm, 0.0);
-        let sum = normalized.deaths + normalized.runner + normalized.see_invis
-            + normalized.social_aggro + normalized.pvp;
+        let sum = normalized.deaths
+            + normalized.runner
+            + normalized.see_invis
+            + normalized.social_aggro
+            + normalized.pvp;
         assert!((sum - 1.0).abs() < 0.001, "Weights should sum to 1.0");
     }
 
@@ -441,7 +452,10 @@ mod tests {
 
         model.recalibrate();
         let auc = model.compute_auc();
-        assert!(auc >= 0.80, "AUC should be reasonable with 30 labeled examples");
+        assert!(
+            auc >= 0.80,
+            "AUC should be reasonable with 30 labeled examples"
+        );
     }
 
     #[test]
@@ -466,6 +480,51 @@ mod tests {
         assert!(
             score2.needs_recomputation,
             "Should flag recomputation when deaths delta >= 0.5"
+        );
+    }
+
+    #[test]
+    fn test_recomputation_not_triggered_for_unchanged_deaths() {
+        let mut model = RiskModel::new();
+        let hazards = CampHazards {
+            camp_id: "test".to_string(),
+            party_signature: "sig".to_string(),
+            deaths_per_session: 5.0,
+            runner_density: 0.0,
+            see_invis_density: 0.0,
+            social_aggro_index: 0.0,
+            pvp_flag: 0.0,
+            gm_activity_score: None,
+        };
+
+        let _score1 = model.compute_risk(hazards.clone());
+        let score2 = model.compute_risk(hazards);
+        assert!(
+            !score2.needs_recomputation,
+            "Should not flag recomputation when deaths are unchanged"
+        );
+    }
+
+    #[test]
+    fn test_recomputation_triggered_for_large_deaths_decrease() {
+        let mut model = RiskModel::new();
+        let mut hazards = CampHazards {
+            camp_id: "test".to_string(),
+            party_signature: "sig".to_string(),
+            deaths_per_session: 5.0,
+            runner_density: 0.0,
+            see_invis_density: 0.0,
+            social_aggro_index: 0.0,
+            pvp_flag: 0.0,
+            gm_activity_score: None,
+        };
+
+        let _score1 = model.compute_risk(hazards.clone());
+        hazards.deaths_per_session = 2.0;
+        let score2 = model.compute_risk(hazards);
+        assert!(
+            score2.needs_recomputation,
+            "Should flag recomputation when deaths delta >= 0.5 after a decrease"
         );
     }
 }
