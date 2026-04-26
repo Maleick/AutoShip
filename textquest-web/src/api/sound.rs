@@ -1,5 +1,4 @@
 //! Sound alert configuration API handlers.
-#![allow(dead_code)]
 
 use axum::{
     Json,
@@ -11,18 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::AppState;
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum GameEventType {
-    LowHp,
-    Death,
-    NamedSpawn,
-    GmEnter,
-    TellReceived,
-    #[default]
-    Custom,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
