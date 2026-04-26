@@ -1,0 +1,162 @@
+#==============================================================================
+# Guk Epic-Component Camp Configuration
+#==============================================================================
+# Issue: #3383 — Define Guk safe spots, pull points, and 6-waypoint route
+# Parent: #1780 — Epic-component lair farming
+#
+# Zone Context:
+# - Upper Guk (zone: upperguk), classic dungeon beneath the Innothule Swamp.
+# - Primary target: Yendar Starpyre (Cleric epic component — Words of Bondage)
+#   and supporting epic-component trash in the Undead Wing.
+# - Zone is multi-level; vertical geometry requires z-coordinate care.
+# - Mobs: froglok gaz knights, froglok gaz shamans, froglok gaz wizards,
+#   various undead frogloks. Social aggro radius is moderate.
+# - Safe pull segmentation critical — live froglok and undead wings share
+#   corridors near the zone center; wrong-wing pulls cascade quickly.
+#
+# Safe-Spot Architecture:
+# - safe_med_hall: Alcove east of the undead wing entrance (narrow, off main
+#   corridor, dead-end geometry). Mobs do not path here from west corridor.
+# - safe_evac_alcove: West side of the upper level near the zone entrance
+#   ramp; reliable evac fallback when the med hall is compromised.
+# - These two spots segment the undead wing from the live froglok wing.
+#
+# Pull-Point Architecture:
+# - pull_point (primary): Undead wing doorway junction — line-of-sight for
+#   single-mob pulls without widening into the east corridor or Yendar room.
+# - secondary_pull_corner: South corridor bend; used for Yendar cycle approach
+#   when the primary pull point becomes congested.
+#
+# 6-Waypoint Route — Undead Wing Loop:
+#   WP1 (safe_med_hall)       → camp anchor and med stack
+#   WP2 (pull_handoff_door)   → undead wing entrance, pull lands here
+#   WP3 (corridor_east_bend)  → east corridor bend, first trash pocket
+#   WP4 (cross_corridor)      → cross-junction, second trash pocket
+#   WP5 (yendar_approach)     → approach to Yendar Starpyre spawn room
+#   WP6 (south_reset)         → south corridor reset point, route closes back
+# Loop returns from WP6 to WP2 for the next pull cycle.
+#
+# Spawn-Pattern Notes:
+# - Undead wing: ~6-minute respawn on core trash (froglok gaz knight/shaman/
+#   wizard). Full route clears in approximately 4 minutes, leaving ~2 minutes
+#   of med/reset before the next wave.
+# - Yendar Starpyre: 22-36 minute respawn; rare named variant of froglok gaz
+#   shaman. Mark and burn on sight; does not reset between cycles.
+# - Cross-corridor (WP4) sees occasional froglok ton knight roamer that paths
+#   from the live wing — treat as a pull abort signal (ignore or FD reset).
+# - South corridor (WP6) is a dead-end; no through-traffic from the live wing.
+#
+# References:
+# - Named mobs: config/named_mobs/upperguk.toml
+# - Zone progression chain: lguk_live_side → lguk_dead_side
+
+name = "guk"
+zone = "upperguk"
+
+# WP1: safe_med_hall — alcove east of the undead wing entrance. Dead-end
+# geometry keeps the 6-box stack off the main corridor roam path.
+camp_center = [80.0, -60.0, -10.0]
+
+# WP2: pull_handoff_door — undead wing entrance doorway junction. Single-mob
+# pulls land here; line-of-sight reset toward camp without widening west.
+pull_point = [97.0, -45.0, -10.0]
+
+# Pull radius: covers undead wing core (WP2–WP5) without reaching the
+# live froglok wing west corridor or Yendar's back room directly.
+pull_radius = 220
+
+# Tight camp radius to keep the group stack in the safe_med_hall alcove and
+# off the main corridor (which Yendar occasionally wanders near reset time).
+camp_radius = 28
+
+# Leash radius: short to abort bad pulls before the cross-corridor junction
+# (WP4) can cascade into live-wing traffic or the froglok ton knight roamer.
+leash_radius = 130
+
+# Mana thresholds: undead frogloks hit moderately hard; cleric needs recovery
+# time between pulls. rest_mana_pct kept at 70 to handle Yendar's backstab
+# damage burst (she has a rogue-type proc on some server variants).
+rest_mana_pct = 70
+pull_mana_pct = 40
+
+# Level range: undead wing targets are level 28-34; Yendar is level 32.
+# Lower bound 28 allows a fresh group entering from the Innothule side.
+level_range = [28, 36]
+
+pull_mob_names = [
+  "a froglok gaz knight",
+  "a froglok gaz shaman",
+  "a froglok gaz wizard",
+  "a froglok gaz necromancer",
+  "a froglok ghoul",
+  "a froglok skeleton",
+  "an undead froglok",
+]
+
+ignore_mob_names = [
+  "a froglok ton knight",   # live-wing roamer at WP4; abort signal if spotted
+  "a froglok ton shaman",   # live-wing; social with tonne knights
+  "a froglok tuk knight",   # deep live-wing; never pull across the junction
+]
+
+burn_mob_names = [
+  "Yendar Starpyre",        # Cleric epic: Words of Bondage drop
+]
+
+# Suppress return-to-camp while carrying undead aggro — the main corridor
+# between WP2 and WP1 is narrow; a returning puller with live mobs will
+# aggro the med stack or clip the froglok tonne roamer at WP4.
+return_no_aggro = true
+
+# Progression: Upper Guk leads into Lower Guk live-side at the level ceiling.
+next_camp = "lguk_live_side"
+
+#==============================================================================
+# 6-Waypoint Route (parsed as route metadata; ignored by CampConfig loader)
+#==============================================================================
+# These waypoints define the undead wing farming loop. The runtime schema
+# (textquest/src/camp/config.rs) does not yet consume [[waypoints]] blocks
+# (see issue #1900 for planned schema expansion). They are recorded here as
+# structured TOML for forward-compatibility and reviewer reference.
+
+[[waypoints]]
+id = 1
+label = "safe_med_hall"
+role = "camp"
+coords = [80.0, -60.0, -10.0]
+notes = "Alcove east of undead wing entrance. Dead-end geometry, off main corridor roam path. Primary med and stack position."
+
+[[waypoints]]
+id = 2
+label = "pull_handoff_door"
+role = "pull"
+coords = [97.0, -45.0, -10.0]
+notes = "Undead wing entrance doorway junction. Line-of-sight pull handoff. Mob resets toward camp; does not widen into west corridor."
+
+[[waypoints]]
+id = 3
+label = "corridor_east_bend"
+role = "route"
+coords = [130.0, -45.0, -10.0]
+notes = "East corridor bend. First trash pocket (gaz knight / gaz shaman pair). Pull one at a time; second mob has delayed social aggro."
+
+[[waypoints]]
+id = 4
+label = "cross_corridor"
+role = "route"
+coords = [150.0, -55.0, -10.0]
+notes = "Cross-junction. Second trash pocket. Froglok tonne knight roamer occasionally paths through from west; abort/FD reset if present."
+
+[[waypoints]]
+id = 5
+label = "yendar_approach"
+role = "route"
+coords = [155.0, -85.0, -10.0]
+notes = "Approach to Yendar Starpyre spawn room. Check for Yendar before pulling corridor trash; burn on sight (epic component drop)."
+
+[[waypoints]]
+id = 6
+label = "south_reset"
+role = "reset"
+coords = [130.0, -100.0, -10.0]
+notes = "South corridor dead-end reset point. No through-traffic from live wing. Route loops back to WP2 (pull_handoff_door) from here."
