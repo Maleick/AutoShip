@@ -16,8 +16,10 @@ run_with_anti_flake() {
   while (( attempt <= FLAME_RETRY_COUNT )); do
     ((attempt++))
 
+    set +e
     eval "$test_cmd" 2>&1
     last_status=$?
+    set -e
 
     if [[ $last_status -eq 0 ]]; then
       if [[ $attempt -gt 1 ]]; then

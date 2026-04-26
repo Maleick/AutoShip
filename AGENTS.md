@@ -23,6 +23,8 @@ Core orchestration hooks in `hooks/opencode/`:
 - `create-pr.sh` - Create PR from approved work
 - `verify-result.sh` - Verify worker results
 - `monitor-agents.sh` - Monitor running workers
+- `monitor-ci.sh` - Monitor PR CI checks
+- `auto-merge.sh` - Merge opted-in PRs after CI passes
 - `reconcile-state.sh` - Reconcile state
 
 Safety hooks:
@@ -30,12 +32,18 @@ Safety hooks:
 - `diff-size-guard.sh` - Diff size guardrail (#280)
 - `anti-flake.sh` - Anti-flake test retry (#282)
 - `classify-issue.sh` - Protected label guards (#258)
+- `worktree-checksum.sh` - Worktree checksum/scope reports (#260)
+- `quota-guard.sh` - Free-model quota pause/resume guardrail (#284)
 
 Utilities:
 - `check.sh` - Pre-commit verification umbrella (#269)
 - `gh-retry.sh` - GitHub API retry with backoff (#257)
 - `item-record.sh` - Per-issue durable records (#259)
 - `extract-criteria.sh` - Acceptance criteria extraction (#278)
+- `audit.sh` - GitHub/local drift audit (#256)
+- `dashboard.sh` - Metrics dashboard (#266)
+- `pr-body.sh` - Structured PR descriptions (#279)
+- `policy-hash.sh` - Plan invalidation policy hash (#264)
 
 ## Local State
 

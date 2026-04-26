@@ -16,6 +16,7 @@ if [[ -z "$MAX" && -f "$AUTOSHIP_DIR/config.json" ]]; then
 fi
 MAX="${MAX:-15}"
 DRY_RUN="${AUTOSHIP_RUNNER_DRY_RUN:-false}"
+CHECKPOINT_EVERY="${AUTOSHIP_CHECKPOINT_EVERY:-0}"
 
 active_count() {
   local count=0
@@ -208,6 +209,10 @@ for dir in "$WORKSPACES_DIR"/*/; do
   issue_id="$(basename "$dir")"
   echo "RUNNING" > "$status_file"
   bash "$REPO_ROOT/hooks/update-state.sh" set-running "$(basename "$dir")" agent="$model" model="$model" role="$role" 2>/dev/null || true
+  if [[ "$CHECKPOINT_EVERY" != "0" ]]; then
+    date -u +%Y-%m-%dT%H:%M:%SZ > "$dir/checkpoint_at" 2>/dev/null || true
+  fi
+  bash "$REPO_ROOT/hooks/opencode/quota-guard.sh" >/dev/null 2>&1 || { echo "Quota guard paused dispatch"; break; }
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "DRY_RUN start $(basename "$dir") with $model"

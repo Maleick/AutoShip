@@ -183,6 +183,29 @@ async function doctor() {
     hasFailure = true;
   }
 
+  for (const tool of ["gh", "git", "jq", "opencode"]) {
+    try {
+      execSync(`command -v ${tool}`, { stdio: "ignore", shell: "/bin/sh" });
+      checks.push({ name: `tool-${tool}`, status: "PASS", message: `${tool} is available` });
+    } catch {
+      checks.push({ name: `tool-${tool}`, status: tool === "jq" ? "WARN" : "FAIL", message: `${tool} is not available in PATH` });
+      if (tool !== "jq") hasFailure = true;
+    }
+  }
+
+  try {
+    const configPath = join(projectAutoshipDir, "config.json");
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    const maxAgents = Number(config.maxConcurrentAgents ?? config.max_agents ?? 0);
+    if (maxAgents > 0 && maxAgents <= 15) {
+      checks.push({ name: "worker-cap", status: "PASS", message: `Worker cap is ${maxAgents}` });
+    } else {
+      checks.push({ name: "worker-cap", status: "WARN", message: `Worker cap ${maxAgents || "unset"} is outside recommended range 1-15` });
+    }
+  } catch {
+    checks.push({ name: "worker-cap", status: "WARN", message: "Unable to validate worker cap" });
+  }
+
   try {
     await access(join(autoshipDir, "hooks"));
     checks.push({ name: "hooks", status: "PASS", message: "Hooks directory exists" });

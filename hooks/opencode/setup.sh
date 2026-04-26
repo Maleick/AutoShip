@@ -342,6 +342,10 @@ with open(config_path, "w", encoding="utf-8") as f:
     f.write("\n")
 PY
 
+if [[ -x "$SCRIPT_DIR/validate-project.sh" ]]; then
+  bash "$SCRIPT_DIR/validate-project.sh" > "$AUTOSHIP_DIR/project-commands.json" 2>/dev/null || true
+fi
+
 date -u +%Y-%m-%dT%H:%M:%SZ > "$AUTOSHIP_DIR/.onboarded"
 echo "AutoShip OpenCode setup complete"
 echo "Configured models: $SELECTED_MODELS"

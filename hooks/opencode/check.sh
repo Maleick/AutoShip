@@ -19,6 +19,7 @@ Options:
   --policy     Run only test-policy.sh
   --smoke      Run only smoke-test.sh
   --syntax     Run only bash syntax checks
+  --lint       Run shellcheck and shfmt checks
   -h, --help  Show this help message
 
 Without options, runs all checks: syntax, test-policy, and smoke-test.
@@ -29,6 +30,7 @@ RUN_ALL=true
 RUN_POLICY=true
 RUN_SMOKE=true
 RUN_SYNTAX=true
+RUN_LINT=true
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,24 +39,35 @@ while [[ $# -gt 0 ]]; do
       RUN_POLICY=false
       RUN_SMOKE=false
       RUN_SYNTAX=true
+      RUN_LINT=false
       shift
       ;;
     --policy)
       RUN_ALL=false
       RUN_SYNTAX=false
       RUN_SMOKE=false
+      RUN_LINT=false
       shift
       ;;
     --smoke)
       RUN_ALL=false
       RUN_SYNTAX=false
       RUN_POLICY=false
+      RUN_LINT=false
       shift
       ;;
     --syntax)
       RUN_ALL=false
       RUN_POLICY=false
       RUN_SMOKE=false
+      RUN_LINT=false
+      shift
+      ;;
+    --lint)
+      RUN_POLICY=false
+      RUN_SMOKE=false
+      RUN_SYNTAX=false
+      RUN_LINT=true
       shift
       ;;
     -h|--help)
@@ -123,6 +136,20 @@ run_smoke_check() {
   }
 }
 
+run_lint_check() {
+  echo "=== Shell lint/format check ==="
+  if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck "$HOOKS_DIR"/*.sh "$HOOKS_DIR/opencode"/*.sh || FAILED=1
+  else
+    echo "WARN: shellcheck not installed; skipping" >&2
+  fi
+  if command -v shfmt >/dev/null 2>&1; then
+    shfmt -d -i 2 -ci -bn "$HOOKS_DIR" || FAILED=1
+  else
+    echo "WARN: shfmt not installed; skipping" >&2
+  fi
+}
+
 if [[ "$RUN_SYNTAX" == "true" ]]; then
   run_syntax_check
 fi
@@ -133,6 +160,10 @@ fi
 
 if [[ "$RUN_SMOKE" == "true" ]]; then
   run_smoke_check
+fi
+
+if [[ "$RUN_LINT" == "true" ]]; then
+  run_lint_check
 fi
 
 if [[ $FAILED -ne 0 ]]; then
