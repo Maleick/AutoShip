@@ -14,7 +14,7 @@ run_with_anti_flake() {
   local last_status=0
 
   while (( attempt <= FLAME_RETRY_COUNT )); do
-    ((attempt++))
+    ((++attempt))
 
     set +e
     eval "$test_cmd" 2>&1
