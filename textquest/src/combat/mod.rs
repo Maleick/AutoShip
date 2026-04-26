@@ -20,6 +20,8 @@ pub mod events;
 pub mod heal_coordinator;
 /// Combat discipline scheduler with cooldown/endurance gating — MQ2Melee parity.
 pub mod melee_disc;
+/// Mez (crowd-control) immunity tracker with zone-change expiry.
+pub mod mez_tracker;
 /// Named NPC and boss encounter tracking.
 pub mod named;
 /// Spell database — spell IDs, casting times, resist types, levels.
