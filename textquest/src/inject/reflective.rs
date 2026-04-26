@@ -417,15 +417,15 @@ fn dllmain_shellcode_ops(
     fn mov_reg_reg(dst: GeneralRegister, src: GeneralRegister) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(3);
         let mut rex = 0x48;
-        if dst.high_bit() {
-            rex |= 0x01;
-        }
         if src.high_bit() {
             rex |= 0x04;
         }
+        if dst.high_bit() {
+            rex |= 0x01;
+        }
         bytes.push(rex);
         bytes.push(0x8B);
-        bytes.push(0xC0 | (src.code() << 3) | dst.code());
+        bytes.push(0xC0 | (dst.code() << 3) | src.code());
         bytes
     }
 
@@ -494,16 +494,8 @@ fn dllmain_shellcode_ops(
     } else {
         GeneralRegister::R10
     };
-    let scratch_for_entry = if matches!(entry_reg, GeneralRegister::R10) {
-        GeneralRegister::R11
-    } else {
-        GeneralRegister::R10
-    };
-    let scratch_for_base = if matches!(entry_reg, GeneralRegister::R10) {
-        GeneralRegister::R11
-    } else {
-        GeneralRegister::R10
-    };
+    let scratch_for_entry = GeneralRegister::R11;
+    let scratch_for_base = GeneralRegister::R10;
 
     let mut base_load_ops = if rng.next_usize(2) == 0 {
         vec![ShellcodeInstruction::new(mov_reg_imm64(
@@ -547,14 +539,16 @@ fn dllmain_shellcode_ops(
         ]
     };
 
-    let mut setup_ops = Vec::new();
-    setup_ops.append(&mut base_load_ops);
-    setup_ops.append(&mut reason_load_ops);
-    setup_ops.append(&mut reserved_load_ops);
-    setup_ops.append(&mut entry_load_ops);
-
-    shuffle_in_place(&mut rng, &mut setup_ops);
-    ops.extend(setup_ops);
+    let mut setup_op_groups = vec![
+        std::mem::take(&mut base_load_ops),
+        std::mem::take(&mut reason_load_ops),
+        std::mem::take(&mut reserved_load_ops),
+        std::mem::take(&mut entry_load_ops),
+    ];
+    shuffle_in_place(&mut rng, &mut setup_op_groups);
+    for setup_group in setup_op_groups {
+        ops.extend(setup_group);
+    }
 
     ops.push(ShellcodeInstruction::new(call_reg(entry_reg)));
 
