@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::bandit::{
-    context::{ContextSpec, ContextVec},
+    context::{CTX_DIM, ContextSpec, ContextVec},
     linucb::LinUcbArm,
     model::{AlgorithmTag, ModelFile},
     shadow::{PolicyMode, ShadowLog},
@@ -30,6 +30,12 @@ pub enum BanditError {
     SchemaMismatch { model_hash: u64, runtime_hash: u64 },
     #[error("model version {found} != expected {expected}")]
     VersionMismatch { found: u32, expected: u32 },
+    #[error("invalid model context_dim={found}; expected {expected} and <= {max}")]
+    InvalidContextDim {
+        found: u32,
+        expected: u32,
+        max: usize,
+    },
 }
 
 enum ArmState {
@@ -98,6 +104,14 @@ impl BanditRuntime {
             return Err(BanditError::SchemaMismatch {
                 model_hash: model.context_spec_hash,
                 runtime_hash: expected_hash,
+            });
+        }
+
+        if model.context_dim != expected_spec.dim || (model.context_dim as usize) > CTX_DIM {
+            return Err(BanditError::InvalidContextDim {
+                found: model.context_dim,
+                expected: expected_spec.dim,
+                max: CTX_DIM,
             });
         }
 
@@ -235,9 +249,9 @@ impl BanditRuntime {
 mod tests {
     use super::*;
     use crate::bandit::{
-        context::{ContextSpec, CTX_DIM},
+        context::{CTX_DIM, ContextSpec},
         linucb::LinUcbModel,
-        model::{AlgorithmTag, BanditScope, ModelFile, MODEL_FILE_VERSION},
+        model::{AlgorithmTag, BanditScope, MODEL_FILE_VERSION, ModelFile},
         shadow::ShadowLog,
     };
 
@@ -282,6 +296,36 @@ mod tests {
         assert!(
             matches!(err, BanditError::SchemaMismatch { .. }),
             "expected SchemaMismatch"
+        );
+    }
+
+    #[test]
+    fn test_oversized_context_dim_rejected_at_load() {
+        let spec = ContextSpec::base();
+        let mut model = ModelFile::from_bytes(&make_linucb_bytes(&spec)).unwrap();
+        model.context_spec_hash = spec.hash_fingerprint();
+        model.context_dim = (CTX_DIM as u32) + 1;
+        let bytes = model.to_bytes().unwrap();
+
+        let err = BanditRuntime::from_bytes(&bytes, &spec).unwrap_err();
+        assert!(
+            matches!(err, BanditError::InvalidContextDim { .. }),
+            "expected InvalidContextDim"
+        );
+    }
+
+    #[test]
+    fn test_context_dim_mismatch_rejected_at_load() {
+        let spec = ContextSpec::base();
+        let mut model = ModelFile::from_bytes(&make_linucb_bytes(&spec)).unwrap();
+        model.context_spec_hash = spec.hash_fingerprint();
+        model.context_dim = spec.dim + 1;
+        let bytes = model.to_bytes().unwrap();
+
+        let err = BanditRuntime::from_bytes(&bytes, &spec).unwrap_err();
+        assert!(
+            matches!(err, BanditError::InvalidContextDim { .. }),
+            "expected InvalidContextDim"
         );
     }
 
