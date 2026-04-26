@@ -650,7 +650,10 @@ fn build_soul_router() -> Router<Arc<AppState>> {
             get(api::soul::export_character_audit_csv),
         )
         .route("/debrief", post(api::soul::receive_session_debrief))
-        .route("/debrief/{character_id}", get(api::soul::get_session_debrief))
+        .route(
+            "/debrief/{character_id}",
+            get(api::soul::get_session_debrief),
+        )
 }
 
 /// Build the loot sub-router.  Loot handlers extract `State<Arc<AppState>>`
@@ -889,14 +892,38 @@ fn build_api_router() -> Router<Arc<AppState>> {
         // Admin Sessions API
         .nest("/admin/sessions", api::admin_sessions::router())
         // Self-Improvement API — event recording, suggestion generation, operator feedback
-        .route("/improvement/events", post(api::self_improvement::record_event))
-        .route("/improvement/suggestions", get(api::self_improvement::get_suggestions))
-        .route("/improvement/analyze/:session_id", post(api::self_improvement::analyze_session))
-        .route("/improvement/accept/:id", post(api::self_improvement::accept_suggestion))
-        .route("/improvement/reject/:id", post(api::self_improvement::reject_suggestion))
-        .route("/improvement/apply/:id", post(api::self_improvement::apply_suggestion))
-        .route("/improvement/undo/:id", post(api::self_improvement::undo_suggestion))
-        .route("/improvement/metrics/:session_id", post(api::self_improvement::update_session_metrics))
+        .route(
+            "/improvement/events",
+            post(api::self_improvement::record_event),
+        )
+        .route(
+            "/improvement/suggestions",
+            get(api::self_improvement::get_suggestions),
+        )
+        .route(
+            "/improvement/analyze/:session_id",
+            post(api::self_improvement::analyze_session),
+        )
+        .route(
+            "/improvement/accept/:id",
+            post(api::self_improvement::accept_suggestion),
+        )
+        .route(
+            "/improvement/reject/:id",
+            post(api::self_improvement::reject_suggestion),
+        )
+        .route(
+            "/improvement/apply/:id",
+            post(api::self_improvement::apply_suggestion),
+        )
+        .route(
+            "/improvement/undo/:id",
+            post(api::self_improvement::undo_suggestion),
+        )
+        .route(
+            "/improvement/metrics/:session_id",
+            post(api::self_improvement::update_session_metrics),
+        )
         .fallback(api::api_not_found)
 }
 

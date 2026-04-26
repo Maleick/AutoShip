@@ -24,14 +24,15 @@ pub mod loot;
 pub mod paranoid;
 pub mod player_watch;
 pub mod say_detection;
+pub mod self_improvement;
 pub mod session_control;
 pub mod sessions_db;
 pub mod soul;
 pub mod sound;
 pub mod spawn_alerts;
-pub mod self_improvement;
 pub mod suggestions;
 pub mod text_to_speech;
+pub mod theme_config;
 pub mod transport;
 pub mod vendor_watch;
 pub mod xassist;
@@ -1564,7 +1565,11 @@ pub async fn put_character_config(
             .unwrap_or_default(),
         improve_auto_promote: config
             .improve_auto_promote
-            .or_else(|| existing.as_ref().map(|cfg| cfg.improve_auto_promote.clone()))
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .map(|cfg| cfg.improve_auto_promote.clone())
+            })
             .unwrap_or_default(),
     };
     let previous = configs_map.insert(saved.character_name.clone(), saved.clone());
