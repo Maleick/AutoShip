@@ -1,0 +1,99 @@
+# Howling Stones Entrance Camp Configuration
+# Research baseline for issue #3385. Runtime only consumes the TOML fields
+# below. Extended waypoint lattice, restriction zones, and wing rotation notes
+# are documented in docs/wiki/Howling-Stones.md until the camp schema can
+# model them directly (see issue #1900 for planned schema expansion).
+#
+# CAMP OVERVIEW:
+# - Zone: Charasis (Howling Stones, Kunark era)
+# - Primary farming route: Entrance corridor (safest first anchor for 51-56)
+# - Group minimum: 51, Recommended: 53+ (allow for undead AE lifetap variance)
+# - Survival setup: Cleric or Shaman heals; Enchanter/Bard for CC (no invis)
+# - Key item: Key to Charasis (required for zone entry — pre-flight check required)
+#
+# FACTION NOTES:
+# - Venril Sathir (degraded): Farming here lowers VS faction
+# - Monitor faction events and set a session cap if Sebilis rotation is planned
+#
+# NAVIGATION RISK:
+# - Multiple mobs see through invisibility — all repositioning moves driver-attended
+# - Basement is a vertical drop with no automated recovery path confirmed
+# - Wing splits (north/west/south) lead to 56-59+ content — hard-stop enforced
+#
+# REFERENCES:
+# See docs/wiki/Howling-Stones.md for:
+# - Complete waypoint lattice with coordinates and confidence ratings
+# - Restriction zones (basement_no_auto, wing driver-only boundaries)
+# - Wing rotation notes (entrance, basement, north, west, south)
+# - Coverage evidence for parent issue #1781
+
+name = "howling_stones_entrance"
+zone = "charasis"
+
+# CAMP COORDINATES
+# Safe med spot: entrance corridor before the first wing split (waypoint: entrance_safe_med).
+# Derived from zone geometry; treat as planning anchor until live telemetry confirms.
+camp_center = [70.0, -200.0, 4.0]
+
+# Pull handoff: corridor mouth at the entrance approach (waypoint: entrance_pull_handoff).
+pull_point = [120.0, -170.0, 4.0]
+
+# Pull Radius: 320 meters from pull_point.
+# Covers entrance-area undead without reaching the basement drop or wing splits.
+pull_radius = 320
+
+# Camp Radius: 40 meters from camp_center.
+# Tight entrance corridor med footprint.
+camp_radius = 40
+
+# Leash Radius: 220 meters from camp_center.
+# Drop bad pulls before they reach the wing split corridor.
+leash_radius = 220
+
+# MANA THRESHOLDS AND REST BEHAVIOR
+# rest_mana_pct: 70%
+# - Stop pulling when mana drops below this threshold
+# - Undead AE lifetap pulls spike healer mana quickly; conservative recovery needed
+#
+# pull_mana_pct: 45%
+# - Do not initiate a new pull below this floor
+# - Provides safety margin for mid-pull heals on AE lifetap encounters
+#
+# return_no_aggro: true
+# - Do not auto-snap puller back to camp while still carrying live undead
+# - Undead in entrance corridor have wide social aggro radius
+rest_mana_pct = 70
+pull_mana_pct = 45
+
+# LEVEL RANGE
+# [51, 56]: Matches the entrance-area progression bracket
+# - 51: Minimum for entrance-area routing (Key to Charasis access)
+# - 56: Upper bound before transition to basement or wing content
+# - Basement (53-59) and wings (56-59) require separate camp definitions
+level_range = [51, 56]
+
+pull_mob_names = [
+  "a decaying skeleton",
+  "a rotting skeleton",
+  "a decrepit skeleton",
+  "a festering hatchling",
+  "a putrid skeleton",
+  "a charasis ghoul",
+  "a howling skeleton",
+  "a plagued skeleton",
+]
+
+ignore_mob_names = [
+  "a greater skeleton",
+  "a charasis specter",
+]
+
+burn_mob_names = [
+  "Arch Duke Iatol",
+  "Arch Lich Rhag`Zadune",
+  "Dread Lord Chottal",
+  "Grand Vizier Sathiuq",
+]
+
+return_no_aggro = true
+prev_camp = "sebilis_disco"
