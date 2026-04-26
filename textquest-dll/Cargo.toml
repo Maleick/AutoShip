@@ -77,3 +77,10 @@ trace-commands = []
 ## packet_op, direction, size, and client_id fields. Off by default
 ## because it fires on every network packet (very high volume).
 trace-packets = []
+## Enable the Gargoyle-style waitable timer path in the stealth thread pool.
+## When active, `stealth::timer_queue_sleep` fires `CreateTimerQueueTimer`
+## callbacks on the process-default pool at a configurable interval (default
+## 1 500 ms) so `.text` stays encrypted during long idle periods.  Disable at
+## compile time by building without this feature; disable at runtime by setting
+## `stealth.timer_enabled = false` in `textquest.toml`.
+stealth-timer = []

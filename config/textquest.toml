@@ -63,6 +63,17 @@ eq_path = "C:\\Path\\To\\EverQuest"
 # port = 2112
 # auto_connect = true
 
+# ─── Stealth / Sleep Obfuscation ───
+# Gargoyle-style waitable timer that fires encrypt/decrypt cycles during idle
+# periods (login screen, zone loads, alt-tabbed clients) where the per-frame
+# path never triggers.  Requires the `stealth-timer` compile-time feature.
+[stealth]
+# Milliseconds between timer-queue sleep cycles.  Default: 1500 ms.
+timer_interval_ms = 1500
+# Set to false to keep the timer-queue path disabled at runtime (compile-time
+# feature `stealth-timer` must also be enabled for this to take effect).
+timer_enabled = true
+
 # ─── Soul Engine ───
 # AI personality system for character behavior and social dynamics.
 # [soul]

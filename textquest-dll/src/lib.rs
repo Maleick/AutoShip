@@ -327,6 +327,25 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
     }
 
+    // 5.1. Arm the Gargoyle-style waitable timer path (issue #3406).
+    //
+    // This covers idle windows — login screen, zone loads, alt-tabbed clients —
+    // where the per-frame wake/sleep path never fires.  The timer callback
+    // executes on the process-default thread pool (consistent with PoolParty),
+    // so no new thread-creation events are generated.
+    //
+    // Config surface: `[stealth]` section of `textquest.toml`.
+    // Compile-time gate: `stealth-timer` feature flag in `Cargo.toml`.
+    {
+        let stealth_cfg = load_stealth_config();
+        if let Err(e) = stealth::timer_queue_sleep::init_from_config(&stealth_cfg) {
+            tracing::warn!(
+                "Waitable timer (Gargoyle-style) init failed (non-fatal): {}",
+                e
+            );
+        }
+    }
+
     // 5.5. Hook integrity self-check — verify HWBP slot state before accepting IPC
     // commands. If any slot is inconsistent (active without address/callback,
     // or stale metadata after removal), enter safe mode: the IPC listener will
@@ -377,6 +396,46 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("TextQuest DLL initialized successfully");
     Ok(())
+}
+
+/// Load the `[stealth]` section from `config/textquest.toml`.
+///
+/// Uses the same path-resolution strategy as other per-module config loaders
+/// (current directory → `config/textquest.toml`).  Falls back to
+/// [`StealthConfig::default`] on any parse or IO error so a missing or
+/// malformed section is never fatal.
+#[allow(dead_code)] // Called from initialize()
+fn load_stealth_config() -> stealth::timer_queue_sleep::StealthConfig {
+    /// Wrapper so we can deserialize only the `[stealth]` table.
+    #[derive(serde::Deserialize, Default)]
+    struct Root {
+        #[serde(default)]
+        stealth: stealth::timer_queue_sleep::StealthConfig,
+    }
+
+    let config_path = std::env::current_dir()
+        .unwrap_or_default()
+        .join("config/textquest.toml");
+
+    let Ok(contents) = std::fs::read_to_string(&config_path) else {
+        tracing::debug!(
+            path = %config_path.display(),
+            "textquest.toml not found; using default stealth config"
+        );
+        return stealth::timer_queue_sleep::StealthConfig::default();
+    };
+
+    match toml::from_str::<Root>(&contents) {
+        Ok(root) => root.stealth,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                path = %config_path.display(),
+                "Failed to parse [stealth] from textquest.toml; using defaults"
+            );
+            stealth::timer_queue_sleep::StealthConfig::default()
+        }
+    }
 }
 
 /// Initialize tracing with file output. Falls back silently if setup fails —
@@ -917,6 +976,9 @@ fn shutdown() {
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn graceful_shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
+    // Shut down the waitable timer before disabling per-frame obfuscation to
+    // ensure the callback cannot fire concurrently with the decrypt transition.
+    stealth::timer_queue_sleep::shutdown();
     stealth::disable();
     hooks::remove_all();
     ipc::stop();
