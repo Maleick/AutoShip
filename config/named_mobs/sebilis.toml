@@ -35,3 +35,26 @@ respawn_max_minutes = 28
 location = [-1350.0, 100.0, -60.0]
 drops = ["Sebilite Scale Leggings"]
 priority = "medium"
+
+# --- Juggs/Myconids camp named --- issue #3391: pending live cadence measurement
+# respawn windows below are research-backed P99 estimates; replace with live samples.
+
+[[named]]
+name = "Sebilite Juggernaut"
+level = 55
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-800.0, 600.0, -80.0]
+drops = ["Runebranded Girdle"]
+priority = "high"
+# evidence_state = "research-estimate" — live cadence measurement required (#3391)
+
+[[named]]
+name = "Myconid Spore King"
+level = 54
+respawn_min_minutes = 18
+respawn_max_minutes = 24
+location = [-750.0, 650.0, -80.0]
+drops = ["Fungi Tunic"]
+priority = "high"
+# evidence_state = "research-estimate" — live cadence measurement required (#3391)

@@ -180,6 +180,76 @@ Current live-evidence ownership under issue `#1526`:
 - `#1841` owns the macro-safety and operator-risk slice only; it is not a
   substitute for route, spawn, forage, or output proof.
 
+## Issue #3391 — Crypt and Juggs/Myconids Spawn Cadence Measurement
+
+Issue `#3391` is a child of `#1838` (camp-by-camp spawn cadence and rotation-overlap measurement).
+This section tracks the specific acceptance criteria for Crypt and Juggs/Myconids camps and
+records the live-measurement targets an operator must capture on Frostreaver before this issue can close.
+
+### Evidence state: BLOCKED — requires live EQ server access
+
+All fields below are **pending live measurement**. Do not promote research estimates as validated data.
+
+### Crypt camp — target measurements
+
+| Field | Target | Current value | Evidence state |
+| --- | --- | --- | --- |
+| `placeholder_count` | total Crypt placeholder spawns in a 120-minute window | — | pending live sample |
+| `named_count` | number of Crypt Caretaker appearances in a 120-minute window | — | pending live sample |
+| `mean_respawn_minutes` | observed mean time from placeholder kill to next spawn | 22–28 min (research estimate) | research-estimate — unvalidated |
+| `wait_time_minutes` | time the group spends idle waiting for a placeholder or named spawn | — | pending live sample |
+
+Current `config/named_mobs/sebilis.toml` records `Crypt Caretaker` with a research-estimate window of
+`22–28 minutes`. That estimate must be replaced with the live mean before the Crypt camp rotation can be
+treated as validated.
+
+### Juggs/Myconids camp — target measurements
+
+| Field | Target | Current value | Evidence state |
+| --- | --- | --- | --- |
+| `placeholder_count` | total Juggernaut/Myconid placeholder spawns in a 120-minute window | — | pending live sample |
+| `named_count` | number of Sebilite Juggernaut + Myconid Spore King appearances combined | — | pending live sample |
+| `mean_respawn_minutes` | observed mean time from placeholder kill to next spawn | 18–24 min (research estimate for Myconid Spore King), 22–28 min (Sebilite Juggernaut) | research-estimate — unvalidated |
+| `wait_time_minutes` | time the group spends idle waiting for a placeholder or named spawn | — | pending live sample |
+
+`Sebilite Juggernaut` and `Myconid Spore King` were added to `config/named_mobs/sebilis.toml` in
+issue `#3391` with research-estimate respawn windows. Both entries are marked `evidence_state = "research-estimate"`
+and must be updated with live measurements before any automation can rely on them.
+
+### Overlap evaluation — target findings
+
+After capturing per-camp cadence, the operator must evaluate whether Crypt and Juggs/Myconids
+respawn windows overlap favorably enough to support a camp rotation:
+
+- If both camps produce a named or placeholder spawn within a 10-minute window of each other,
+  a two-group rotation is viable without dead-wait gaps.
+- If mean wait times exceed 30 minutes at one camp, single-camp camping may be more efficient
+  than rotating.
+- Record findings in `docs/wiki/assets/sebilis-validation-template.csv` using `camp_name =
+  sebilis_crypt_to_juggs` and `target_metric = camp_wait_duration_minutes`.
+
+### Pre-populated template rows
+
+Five rows have been pre-populated in
+[sebilis-validation-template.csv](assets/sebilis-validation-template.csv) with
+`evidence_state = pending` for the measurements above:
+
+- `sebilis-crypt-3391-1` — Crypt placeholder respawn interval
+- `sebilis-crypt-3391-2` — Crypt named seen per hour
+- `sebilis-juggs-3391-1` — Juggs/Myconids placeholder respawn interval
+- `sebilis-juggs-3391-2` — Juggs/Myconids named seen per hour
+- `sebilis-overlap-3391-1` — Crypt + Juggs rotation overlap wait time
+
+Replace each `PENDING` cell with live operator observations to close this issue.
+
+### Acceptance criteria checklist
+
+- [ ] `placeholder_count`, `named_count`, `mean_respawn_minutes`, and `wait_time_minutes` recorded for Crypt camp
+- [ ] `placeholder_count`, `named_count`, `mean_respawn_minutes`, and `wait_time_minutes` recorded for Juggs/Myconids camp
+- [ ] Overlap findings evaluated against current rotation theory and noted in `sebilis-overlap-3391-1` row
+- [ ] `config/named_mobs/sebilis.toml` updated with validated live respawn windows for `Sebilite Juggernaut` and `Myconid Spore King`
+- [ ] `evidence_state` column in all five template rows changed from `pending` to `validated`
+
 ## Validation procedure
 
 ### 1. Routing validation
