@@ -4,6 +4,22 @@ version = "0.6.0"
 edition = "2021"
 description = "Offline RL training harness for TextQuest policies (L-0 scaffold)"
 
+[lib]
+name = "textquest_learn"
+path = "src/lib.rs"
+
+[[bin]]
+name = "textquest-learn"
+path = "src/main.rs"
+
 [dependencies]
 anyhow.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[features]
+runtime-only = []
 

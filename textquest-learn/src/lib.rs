@@ -21,7 +21,7 @@ pub mod canary;
 pub mod policy;
 pub mod advisor;
 
-pub use ledger::Ledger;
+pub use ledger::{ExperienceEntry, ExperienceLedger, ExperienceLedgerWriter};
 pub use reward::RewardFn;
 pub use paramsearch::ParamSearch;
 pub use bandits::Bandit;
