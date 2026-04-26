@@ -27,13 +27,13 @@ git diff main...HEAD --stat
 ### Step 2: Get PR Title
 
 ```bash
-bash hooks/opencode/pr-title.sh --issue <number>
+TITLE="$(bash hooks/opencode/pr-title.sh --issue <number>)"
 ```
 
 ### Step 3: Create PR
 
 ```bash
-gh pr create --title "<title>" --body "$(cat <<'EOF'
+gh pr create --title "$TITLE" --body "$(cat <<'EOF'
 ## Summary
 - <summary>
 

@@ -147,4 +147,8 @@ jq -n \
     timestamp: $now
   }' > "$FAILURE_FILE"
 
+if [[ -x "$REPO_ROOT/hooks/opencode/item-record.sh" ]]; then
+  bash "$REPO_ROOT/hooks/opencode/item-record.sh" append "$ISSUE_NUMBER" failed "$ATTEMPT" "$MODEL" "$CATEGORY: $ERROR_SUMMARY" >/dev/null 2>&1 || true
+fi
+
 echo "Failure artifact captured: $FAILURE_FILE"

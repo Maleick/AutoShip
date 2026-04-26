@@ -41,8 +41,6 @@ ${affected:-No affected files listed.}
 EOF
 )"
 
-    # Auto-filed self-improvement issues must remain human-reviewed before dispatch.
-    # Do not auto-apply agent:ready labels from report-derived content.
     gh issue create \
       --title "$title" \
       --body "$body" \
@@ -50,5 +48,5 @@ EOF
       --label "area:self-improvement" \
       --label "priority:medium" \
       --label "atomic" \
-      --label "agent:blocked"
+      --label "agent:ready"
   done

@@ -28,6 +28,16 @@ STATE_FILE="$AUTOSHIP_DIR/state.json"
 ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
+ITEM_RECORD="$SCRIPT_DIR/item-record.sh"
+
+if [[ -f "$STATE_FILE" ]] && jq -e --arg key "$ISSUE_KEY" '(.issues[$key].terminal_failure // false) == true or (.issues[$key].retry_eligible // true) == false' "$STATE_FILE" >/dev/null 2>&1; then
+  mkdir -p "$WORKSPACE_PATH"
+  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
+  reason=$(jq -r --arg key "$ISSUE_KEY" '.issues[$key].escalation_reason // "retry limit reached"' "$STATE_FILE" 2>/dev/null || echo "retry limit reached")
+  printf '%s\n' "$reason" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
+  echo "BLOCKED $ISSUE_KEY: $reason"
+  exit 0
+fi
 
 max_agents=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$STATE_FILE" 2>/dev/null || true)
 if [[ -z "$max_agents" && -f "$AUTOSHIP_DIR/config.json" ]]; then
@@ -43,15 +53,18 @@ fi
 TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title' 2>/dev/null || echo "Issue $ISSUE_NUM")
 BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body' 2>/dev/null || echo "")
 LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
-
-safety=$(bash "$SCRIPT_DIR/safety-filter.sh" --text "$TITLE" "$LABELS" "$BODY" || true)
-if [[ "$safety" == BLOCKED:* ]]; then
-  mkdir -p "$WORKSPACE_PATH"
-  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
-  printf '%s\n' "$safety" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
-  bash "$REPO_ROOT/hooks/update-state.sh" set-blocked "$ISSUE_KEY" reason="$safety" 2>/dev/null || true
-  echo "BLOCKED $ISSUE_KEY: $safety"
-  exit 0
+SANITIZED_BODY="$BODY"
+if [[ -x "$SCRIPT_DIR/sanitize-issue.sh" ]]; then
+  SANITIZED_BODY=$(bash "$SCRIPT_DIR/sanitize-issue.sh" sanitize "$ISSUE_NUM" "$BODY" 2>/dev/null || printf '%s' "$BODY")
+fi
+CRITERIA_JSON='{}'
+if [[ -x "$SCRIPT_DIR/extract-criteria.sh" ]]; then
+  CRITERIA_JSON=$(bash "$SCRIPT_DIR/extract-criteria.sh" extract "$BODY" 2>/dev/null || echo '{}')
+fi
+FAILURE_CONTEXT=""
+latest_failure=$(ls -t "$AUTOSHIP_DIR/failures"/*-"$ISSUE_KEY".json 2>/dev/null | head -1 || true)
+if [[ -n "$latest_failure" ]]; then
+  FAILURE_CONTEXT=$(jq -r '"Previous failure: " + (.failure_category // "unknown") + " - " + (.error_summary // "")' "$latest_failure" 2>/dev/null || true)
 fi
 
 resolve_model() {
@@ -112,10 +125,16 @@ fi
 
 FULL_WORKSPACE_PATH=$(bash "$SCRIPT_DIR/create-worktree.sh" "$ISSUE_KEY" "autoship/issue-${ISSUE_NUM}")
 mkdir -p "$WORKSPACE_PATH"
+if [[ -x "$ITEM_RECORD" ]]; then
+  bash "$ITEM_RECORD" init "$ISSUE_NUM" "$TITLE" >/dev/null 2>&1 || true
+  bash "$ITEM_RECORD" append "$ISSUE_NUM" queued 1 "$MODEL" "dispatched as $TASK_TYPE" >/dev/null 2>&1 || true
+fi
 date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE_PATH/started_at"
 printf 'QUEUED\n' > "$WORKSPACE_PATH/status"
 printf '%s\n' "$MODEL" > "$WORKSPACE_PATH/model"
 printf '%s\n' "$ROLE" > "$WORKSPACE_PATH/role"
+printf '%s\n' "$CRITERIA_JSON" > "$WORKSPACE_PATH/acceptance-criteria.json"
+bash "$SCRIPT_DIR/worktree-checksum.sh" checksum "$FULL_WORKSPACE_PATH" > "$WORKSPACE_PATH/shasum.before" 2>/dev/null || true
 
 cat > "$WORKSPACE_PATH/AUTOSHIP_PROMPT.md" <<EOF
 # AutoShip Agent Prompt
@@ -135,7 +154,13 @@ $MODEL
 $ROLE
 
 ## Body
-$BODY
+$(bash "$SCRIPT_DIR/sanitize-issue.sh" wrap "$SANITIZED_BODY" 2>/dev/null || printf '%s' "$SANITIZED_BODY")
+
+## Normalized Acceptance Criteria
+$CRITERIA_JSON
+
+## Previous Failure Context
+${FAILURE_CONTEXT:-No previous failure context.}
 
 ## Instructions
 - Work only in this worktree: $FULL_WORKSPACE_PATH

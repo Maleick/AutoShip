@@ -3,7 +3,7 @@ set -euo pipefail
 
 # update-state.sh — Update .autoship/state.json for a given issue.
 # Usage: update-state.sh <action> <issue-id> [key=value ...]
-# Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused
+# Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-stuck, set-merged, set-failed, set-paused
 
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
@@ -22,7 +22,11 @@ LEDGER_FILE="$REPO_ROOT/$LEDGER_FILE"
 LOCK_FILE="${STATE_FILE%.json}.lock"
 if [[ -z "${AUTOSHIP_STATE_LOCKED:-}" ]]; then
   export AUTOSHIP_STATE_LOCKED=1
-  if command -v flock >/dev/null 2>&1; then
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
+    # macOS (BSD): prefer lockf. Some environments provide a non-BSD flock
+    # whose FD locking semantics can hang under test fixtures.
+    exec lockf -k "$LOCK_FILE" "$0" "$@"
+  elif command -v flock >/dev/null 2>&1; then
     # Linux: hold FD lock for script duration
     if [[ -L "$LOCK_FILE" ]]; then
       echo "Error: refusing symlink lock file: $LOCK_FILE" >&2
@@ -50,7 +54,7 @@ fi
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <action> <issue-id> [key=value ...]" >&2
-  echo "Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused" >&2
+  echo "Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-stuck, set-merged, set-failed, set-paused" >&2
   exit 1
 fi
 
@@ -226,6 +230,87 @@ trap cleanup EXIT
 
 make_tmp() { local t; t=$(mktemp); TMP_FILES+=("$t"); echo "$t"; }
 
+arg_value() {
+  local wanted="$1"
+  local pair
+  shift
+  for pair in "$@"; do
+    if [[ "$pair" == "$wanted="* ]]; then
+      printf '%s\n' "${pair#*=}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+record_failure_retry_state() {
+  local issue_id="$1"
+  shift
+  local attempt retry_limit terminal retry_eligible escalation_reason error_summary latest_failure evidence_json tmp
+
+  attempt=$(jq -r --arg id "$issue_id" '.issues[$id].attempt // 1' "$STATE_FILE" 2>/dev/null || echo 1)
+  retry_limit=$(jq -r '.config.maxRetries // .config.max_retries // .config.retryLimit // .config.retry_limit // 3' "$STATE_FILE" 2>/dev/null || echo 3)
+  if [[ ! "$attempt" =~ ^[0-9]+$ ]]; then
+    attempt=1
+  fi
+  if [[ ! "$retry_limit" =~ ^[0-9]+$ ]] || [[ "$retry_limit" -lt 1 ]]; then
+    retry_limit=3
+  fi
+
+  terminal=false
+  retry_eligible=true
+  escalation_reason=$(arg_value escalation_reason "$@" || true)
+  if (( attempt >= retry_limit )); then
+    terminal=true
+    retry_eligible=false
+    escalation_reason="${escalation_reason:-retry limit reached}"
+  else
+    escalation_reason="${escalation_reason:-failure recorded; retry eligible}"
+  fi
+
+  error_summary=$(arg_value error_summary "$@" || true)
+  latest_failure=""
+  if [[ -d "$REPO_ROOT/.autoship/failures" ]]; then
+    latest_failure=$(find "$REPO_ROOT/.autoship/failures" -type f -name "*-${issue_id}.json" 2>/dev/null | sort | tail -1 || true)
+  fi
+  if [[ -n "$latest_failure" && -f "$latest_failure" ]]; then
+    evidence_json=$(jq -c --arg file "$latest_failure" '{
+      failure_file: $file,
+      failure_id: (.failure_id // ""),
+      failure_category: (.failure_category // ""),
+      error_summary: (.error_summary // ""),
+      attempt: (.attempt // null),
+      timestamp: (.timestamp // "")
+    }' "$latest_failure" 2>/dev/null || true)
+  fi
+  if [[ -z "${evidence_json:-}" ]]; then
+    evidence_json=$(jq -n -c \
+      --arg hook "hooks/update-state.sh" \
+      --arg error "$error_summary" \
+      --arg now "$NOW" \
+      --argjson attempt "$attempt" \
+      '{hook: $hook, error_summary: $error, attempt: $attempt, timestamp: $now}')
+  fi
+
+  tmp=$(make_tmp)
+  jq --arg id "$issue_id" \
+    --arg reason "$escalation_reason" \
+    --arg now "$NOW" \
+    --argjson attempt "$attempt" \
+    --argjson limit "$retry_limit" \
+    --argjson terminal "$terminal" \
+    --argjson eligible "$retry_eligible" \
+    --argjson evidence "$evidence_json" \
+    '.issues[$id].retry_count = $attempt |
+     .issues[$id].retry_limit = $limit |
+     .issues[$id].retry_eligible = $eligible |
+     .issues[$id].terminal_failure = $terminal |
+     .issues[$id].escalation_reason = $reason |
+     .issues[$id].failure_evidence = $evidence |
+     if $terminal then .issues[$id].terminal_failed_at = $now else . end' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+}
+
 # Map action to state, stat counter, and GitHub labels
 case "$ACTION" in
   set-claimed)
@@ -264,6 +349,12 @@ case "$ACTION" in
     ADD_LABEL="autoship:blocked"
     REMOVE_LABELS=("autoship:in-progress" "autoship:paused" "autoship:done")
     ;;
+  set-stuck)
+    NEW_STATE="stuck"
+    STAT_KEY="failed"
+    ADD_LABEL="autoship:blocked"
+    REMOVE_LABELS=("autoship:in-progress" "autoship:paused" "autoship:done")
+    ;;
   set-merged)
     NEW_STATE="merged"
     STAT_KEY="completed"  # signals: increment session_completed + total_completed_all_time
@@ -284,7 +375,7 @@ case "$ACTION" in
     ;;
   *)
     echo "Error: unknown action '$ACTION'" >&2
-    echo "Valid actions: set-claimed, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused" >&2
+    echo "Valid actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-stuck, set-merged, set-failed, set-paused" >&2
     exit 1
     ;;
 esac
@@ -419,5 +510,9 @@ for pair in "$@"; do
   fi
 
 done
+
+if [[ "$ACTION" == "set-failed" ]]; then
+  record_failure_retry_state "$ISSUE_ID" "$@"
+fi
 
 echo "Updated issue $ISSUE_ID: state=$NEW_STATE"

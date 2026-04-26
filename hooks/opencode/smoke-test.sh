@@ -5,6 +5,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "Error: not inside a git repository" >&2
   exit 1
 }
+source "$REPO_ROOT/hooks/opencode/test-fixtures/mock-opencode-models.sh"
 
 capture_e2e_failure() {
   local status="$1"
@@ -15,6 +16,8 @@ capture_e2e_failure() {
 }
 
 CONFIG_HOME="$(mktemp -d)"
+REAL_CONFIG_DIR="$(mktemp -d)"
+PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 AUTOSHIP_BACKUP=""
 if [[ -d "$REPO_ROOT/.autoship" ]]; then
   AUTOSHIP_BACKUP="$(mktemp -d)"
@@ -22,37 +25,24 @@ if [[ -d "$REPO_ROOT/.autoship" ]]; then
   rm -rf "$REPO_ROOT/.autoship"
 fi
 
-trap 'status=$?; capture_e2e_failure "$status"; rm -rf "$CONFIG_HOME"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP/.autoship" ]]; then rm -rf "$REPO_ROOT/.autoship"; cp -R "$AUTOSHIP_BACKUP/.autoship" "$REPO_ROOT/"; fi; rm -rf "$AUTOSHIP_BACKUP"; exit $status' EXIT
+trap 'status=$?; capture_e2e_failure "$status"; rm -rf "$CONFIG_HOME" "$REAL_CONFIG_DIR" "$PACKAGE_FIXTURE_DIR"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP/.autoship" ]]; then rm -rf "$REPO_ROOT/.autoship"; cp -R "$AUTOSHIP_BACKUP/.autoship" "$REPO_ROOT/"; fi; rm -rf "$AUTOSHIP_BACKUP"; exit $status' EXIT
 
 export XDG_CONFIG_HOME="$CONFIG_HOME"
+export OPENCODE_CONFIG_DIR="$REAL_CONFIG_DIR/opencode"
+mkdir -p "$OPENCODE_CONFIG_DIR"
+cat > "$OPENCODE_CONFIG_DIR/opencode.json" <<'JSON'
+{"plugin":["real-user-plugin"]}
+JSON
 BIN_DIR="$CONFIG_HOME/bin"
 mkdir -p "$BIN_DIR"
-cat > "$BIN_DIR/opencode" <<'SH'
-#!/usr/bin/env bash
-if [[ "$1" == "models" ]]; then
-  printf '%s\n' 'opencode/minimax-m2.5-free' 'opencode/nemotron-3-super-free' 'openai/gpt-5.5'
-  exit 0
-fi
-printf '%s\n' '1.14.22'
-SH
-cat > "$BIN_DIR/gh" <<'SH'
-#!/usr/bin/env bash
-if [[ "$1 $2" == "auth status" ]]; then
-  exit 0
-fi
-if [[ "$1 $2" == "label create" ]]; then
-  exit 0
-fi
-exit 0
-SH
-chmod +x "$BIN_DIR/opencode" "$BIN_DIR/gh"
+install_mock_opencode_models_fixture "$BIN_DIR"
 export PATH="$BIN_DIR:$PATH"
 
-PACKAGE_REPO="$(mktemp -d)"
-cp -R "$REPO_ROOT/." "$PACKAGE_REPO/"
-rm -rf "$PACKAGE_REPO/.git" "$PACKAGE_REPO/.autoship" "$PACKAGE_REPO/node_modules" "$PACKAGE_REPO/dist"
-(cd "$PACKAGE_REPO" && npm install --package-lock=false --no-audit --no-fund >/dev/null && npm run build >/dev/null)
-node "$PACKAGE_REPO/dist/cli.js" install >/dev/null
+source "$REPO_ROOT/hooks/opencode/e2e-package-install-fixture.sh"
+autoship_install_package_fixture "$REPO_ROOT" "$CONFIG_HOME" "$PACKAGE_FIXTURE_DIR"
+
+jq -e '.plugin == ["real-user-plugin"]' "$REAL_CONFIG_DIR/opencode/opencode.json" >/dev/null
+[[ ! -d "$REAL_CONFIG_DIR/opencode/.autoship" ]]
 
 CONFIG_FILE="$CONFIG_HOME/opencode/opencode.json"
 STATE_FILE="$REPO_ROOT/.autoship/state.json"
@@ -67,14 +57,29 @@ fi
 [[ -d "$AUTOSHIP_INSTALL_DIR/hooks" ]]
 [[ -d "$AUTOSHIP_INSTALL_DIR/commands" ]]
 [[ -d "$AUTOSHIP_INSTALL_DIR/skills" ]]
+[[ -f "$AUTOSHIP_INSTALL_DIR/plugins/autoship.ts" ]]
 [[ -f "$AUTOSHIP_INSTALL_DIR/AGENTS.md" ]]
 [[ -f "$AUTOSHIP_INSTALL_DIR/VERSION" ]]
 
 bash "$REPO_ROOT/hooks/opencode/init.sh" >/dev/null
 
+INSTALLED_PROJECT="$PACKAGE_FIXTURE_DIR/installed-project"
+mkdir -p "$INSTALLED_PROJECT"
+git init -q "$INSTALLED_PROJECT"
+(
+  cd "$INSTALLED_PROJECT"
+  OPENCODE_CONFIG_DIR="$CONFIG_HOME/opencode" bash "$AUTOSHIP_INSTALL_DIR/hooks/opencode/init.sh" >/dev/null
+  OPENCODE_CONFIG_DIR="$CONFIG_HOME/opencode" node "$AUTOSHIP_PACKAGE_FIXTURE_ROOT/dist/cli.js" doctor >/dev/null
+)
+[[ -d "$AUTOSHIP_INSTALL_DIR/hooks" ]]
+[[ -d "$AUTOSHIP_INSTALL_DIR/commands" ]]
+[[ -d "$AUTOSHIP_INSTALL_DIR/skills" ]]
+[[ -f "$AUTOSHIP_INSTALL_DIR/plugins/autoship.ts" ]]
+
 [[ -f "$STATE_FILE" ]]
 [[ "$(cat "$HOOKS_FILE")" == "$REPO_ROOT/hooks" ]]
 jq -e '.config.maxConcurrentAgents == 15' "$STATE_FILE" >/dev/null
+[[ -f "$REPO_ROOT/.autoship/model-history.json" ]]
 [[ -f "$REPO_ROOT/.autoship/model-routing.json" ]]
 jq -e '[.models[] | select(.cost == "free")] | length > 0' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null
 jq -e 'all(.models[]; .id | test("^[a-z0-9._-]+/.+"))' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null

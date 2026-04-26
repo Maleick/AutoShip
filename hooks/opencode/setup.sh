@@ -177,8 +177,7 @@ if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]
 fi
 
 if ! gh auth status >/dev/null 2>&1; then
-  echo "Error: GitHub authentication required. Run 'gh auth login' or set GH_TOKEN." >&2
-  exit 1
+  echo "Warning: GitHub authentication not detected. Run 'gh auth login' before dispatch." >&2
 fi
 
 if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]; then
@@ -341,6 +340,10 @@ with open(config_path, "w", encoding="utf-8") as f:
     }, f, indent=2)
     f.write("\n")
 PY
+
+if [[ -x "$SCRIPT_DIR/validate-project.sh" ]]; then
+  bash "$SCRIPT_DIR/validate-project.sh" > "$AUTOSHIP_DIR/project-commands.json" 2>/dev/null || true
+fi
 
 date -u +%Y-%m-%dT%H:%M:%SZ > "$AUTOSHIP_DIR/.onboarded"
 echo "AutoShip OpenCode setup complete"

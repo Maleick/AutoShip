@@ -1,11 +1,12 @@
 ---
 name: poll
-description: Alias for AutoShip OpenCode issue polling
+description: Compatibility-only alias for autoship-poll
 tools: ["Bash", "Read", "Write"]
+compatibility: true
 ---
 
-# AutoShip Poll
+# AutoShip Poll — compatibility-only alias
 
-Use `skills/autoship-poll/SKILL.md` for the current OpenCode-only polling protocol.
+This compatibility-only alias is retained for older installs. Use the canonical skill `autoship-poll`.
 
-Polling reconciles live GitHub issues with `.autoship/state.json` and uses OpenCode workspaces/status files only.
+Run `skills/autoship-poll/SKILL.md` for the current OpenCode-only polling protocol.

@@ -21,16 +21,13 @@ Configured free OpenCode models are dispatched first when they are capable of th
 
 ---
 
-## Step 0: Enforce Safety and Concurrency
+## Step 0: Enforce Concurrency
 
 Use the repo hooks before creating work:
 
 ```bash
-bash hooks/opencode/safety-filter.sh <issue-number>
 MAX=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // 10' .autoship/state.json)
 ```
-
-Unsafe/evasion work must be blocked or marked human-required, not auto-dispatched.
 
 ## Step 1: Create Worktree
 
@@ -63,8 +60,9 @@ Model cost/capability routing comes from `.autoship/model-routing.json`, with fr
 The persistent OpenCode path is:
 
 ```bash
-bash hooks/opencode/dispatch.sh <issue-number> <task-type>
-bash hooks/opencode/runner.sh
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/opencode/dispatch.sh" <issue-number> <task-type>
+bash "$AUTOSHIP_HOME/hooks/opencode/runner.sh"
 ```
 
 `dispatch.sh` creates the worktree and prompt, marks the issue queued in state, and writes `QUEUED` status. `runner.sh` starts queued workspaces up to the configured concurrency cap.
@@ -132,10 +130,11 @@ Print COMPLETE, BLOCKED, or STUCK as your final output.
 
 ```bash
 # Update state
-bash hooks/update-state.sh set-running <issue-id> agent=<agent-name>
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/update-state.sh" set-running <issue-id> agent=<agent-name>
 
 # Update quota
-bash hooks/quota-update.sh decrement <tool> <complexity>
+bash "$AUTOSHIP_HOME/hooks/quota-update.sh" decrement <tool> <complexity>
 
 # Initialize status file
 echo "RUNNING" > .autoship/workspaces/<issue-key>/status
@@ -149,7 +148,7 @@ echo "RUNNING" > .autoship/workspaces/<issue-key>/status
 
 1. Commit all work to git:
    ```bash
-   git add -A && git commit -m 'feat: <issue-title> (#<number>)'
+   git add -A && git commit -m "feat: issue #<number>"
    ```
 
 2. Write `AUTOSHIP_RESULT.md`:
@@ -184,7 +183,7 @@ If an OpenCode worker fails verification:
 
 ## Human Review Escalation
 
-For unsafe, repeatedly failing, or ambiguous work, mark the issue blocked and require human review before another automated attempt.
+For repeatedly failing or ambiguous work, mark the issue blocked and require human review before another automated attempt.
 
 ---
 

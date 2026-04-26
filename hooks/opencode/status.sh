@@ -13,6 +13,7 @@ done
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [[ ! -f "$STATE_FILE" ]]; then
   cat <<'EOF'
@@ -25,6 +26,10 @@ Run /autoship to start orchestration.
 ═══════════════════════════════════════════
 EOF
   exit 0
+fi
+
+if [[ "${AUTOSHIP_STATUS_SKIP_MONITOR:-0}" != "1" && -f "$SCRIPT_DIR/monitor-agents.sh" ]]; then
+  (cd "$REPO_ROOT" && AUTOSHIP_STATUS_SKIP_MONITOR=1 bash "$SCRIPT_DIR/monitor-agents.sh") >/dev/null 2>&1 || true
 fi
 
 max=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$STATE_FILE")

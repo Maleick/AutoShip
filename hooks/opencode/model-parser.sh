@@ -13,18 +13,43 @@ is_free_model() {
 
 default_free_models() {
   local available_model_ids="$1"
-  local free_models=""
+  local ranked_models
+  local result
+  ranked_models=$(mktemp)
   while IFS= read -r model; do
     [[ -z "$model" ]] && continue
     if is_free_model "$model"; then
-      if [[ -n "$free_models" ]]; then
-        free_models="$free_models,$model"
-      else
-        free_models="$model"
-      fi
+      printf '%s\t%s\n' "$(free_model_rank "$model")" "$model" >> "$ranked_models"
     fi
   done <<< "$available_model_ids"
-  printf '%s\n' "$free_models"
+  result=$(sort -t $'\t' -k1,1nr -k2,2 "$ranked_models" | cut -f2 | paste -sd ',' -)
+  rm -f "$ranked_models"
+  printf '%s\n' "$result"
+}
+
+free_model_rank() {
+  local model
+  model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  local score=40
+
+  case "$model" in
+    *nemotron-3-super*) score=95 ;;
+    *gpt-oss-120b*) score=92 ;;
+    *llama-3.3-70b*) score=88 ;;
+    *minimax-m2.5*) score=84 ;;
+    *qwen*|*glm*|*kimi*|*mimo*) score=80 ;;
+    *gemma-3-27b*|*gemma-4-31b*) score=72 ;;
+    *mistral*|*devstral*) score=68 ;;
+    *ling*) score=62 ;;
+    *hy3*) score=56 ;;
+  esac
+
+  case "$model" in
+    opencode/*) score=$((score + 6)) ;;
+    openrouter/*) score=$((score + 3)) ;;
+  esac
+
+  printf '%s\n' "$score"
 }
 
 reject_forbidden_models() {

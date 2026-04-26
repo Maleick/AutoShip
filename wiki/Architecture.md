@@ -4,7 +4,7 @@ AutoShip is OpenCode-only.
 
 ## Pipeline
 
-1. `plan-issues.sh` builds an ascending, safety-filtered issue plan.
+1. `plan-issues.sh` builds an ascending issue plan.
 2. `setup.sh` discovers live models with `opencode models` and writes `.autoship/model-routing.json`.
 3. `dispatch.sh` creates worktrees, prompts, and queued status files.
 4. `select-model.sh` chooses the best worker model for each task using task fit, cost class, configured strength, and history.
@@ -20,6 +20,7 @@ AutoShip is OpenCode-only.
 | Coordinator | `openai/gpt-5.5` |
 | Orchestrator | `openai/gpt-5.5` |
 | Reviewer | `openai/gpt-5.5` |
+| Lead | `openai/gpt-5.5` |
 | Workers | Best configured model per task |
 
 `openai/gpt-5.5-fast` is not allowed.

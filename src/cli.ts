@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
+import { execSync } from "node:child_process";
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 const VERSION = (await readFile(join(PACKAGE_ROOT, "VERSION"), "utf8")).trim();
@@ -28,6 +29,18 @@ function resolveConfigDir(): string {
     return join(process.env.XDG_CONFIG_HOME, "opencode");
   }
   return join(homedir(), ".config", "opencode");
+}
+
+function resolveProjectAutoshipDir(): string {
+  try {
+    const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (root) {
+      return join(root, ".autoship");
+    }
+  } catch {
+    // Fall back to the current directory when doctor is run outside git.
+  }
+  return join(process.cwd(), ".autoship");
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {
@@ -61,7 +74,7 @@ async function install() {
   const configDir = resolveConfigDir();
   const autoshipDir = join(configDir, ".autoship");
 
-  console.log(`Installing opencode-autoship v${VERSION} to ${configDir}`);
+  console.log(`Installing opencode-autoship ${VERSION} to ${configDir}`);
 
   await mkdir(autoshipDir, { recursive: true });
 
@@ -69,6 +82,7 @@ async function install() {
     { src: join(PACKAGE_ROOT, "hooks"), dest: join(autoshipDir, "hooks") },
     { src: join(PACKAGE_ROOT, "commands"), dest: join(autoshipDir, "commands") },
     { src: join(PACKAGE_ROOT, "skills"), dest: join(autoshipDir, "skills") },
+    { src: join(PACKAGE_ROOT, "plugins"), dest: join(autoshipDir, "plugins") },
     { src: join(PACKAGE_ROOT, "AGENTS.md"), dest: join(autoshipDir, "AGENTS.md") },
     { src: join(PACKAGE_ROOT, "VERSION"), dest: join(autoshipDir, "VERSION") },
   ];
@@ -108,7 +122,7 @@ async function install() {
   config.plugin = plugins;
   await saveConfig(configPath, config);
 
-  console.log(`\nSuccessfully installed opencode-autoship v${VERSION}`);
+  console.log(`\nSuccessfully installed opencode-autoship ${VERSION}`);
   console.log(`Config: ${configPath}`);
   console.log("\nNext: Run 'opencode-autoship --help' to get started");
 }
@@ -129,6 +143,7 @@ async function doctor() {
 
   const configDir = resolveConfigDir();
   const autoshipDir = join(configDir, ".autoship");
+  const projectAutoshipDir = resolveProjectAutoshipDir();
   const opencodeConfigPath = join(configDir, "opencode.json");
 
   try {
@@ -153,19 +168,40 @@ async function doctor() {
   }
 
   try {
-    await access(join(autoshipDir, "config.json"));
+    await access(join(projectAutoshipDir, "config.json"));
     checks.push({ name: "config", status: "PASS", message: "Config file exists" });
   } catch {
-    checks.push({ name: "config", status: "FAIL", message: "Config file not found" });
-    hasFailure = true;
+    checks.push({ name: "config", status: "WARN", message: "Project .autoship/config.json not found; run /autoship-setup before dispatch" });
   }
 
   try {
-    await access(join(autoshipDir, "model-routing.json"));
+    await access(join(projectAutoshipDir, "model-routing.json"));
     checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
   } catch {
-    checks.push({ name: "model-routing", status: "FAIL", message: "Model routing file not found" });
-    hasFailure = true;
+    checks.push({ name: "model-routing", status: "WARN", message: "Project .autoship/model-routing.json not found; run /autoship-setup before dispatch" });
+  }
+
+  for (const tool of ["gh", "git", "jq", "opencode"]) {
+    try {
+      execSync(`command -v ${tool}`, { stdio: "ignore", shell: "/bin/sh" });
+      checks.push({ name: `tool-${tool}`, status: "PASS", message: `${tool} is available` });
+    } catch {
+      checks.push({ name: `tool-${tool}`, status: "FAIL", message: `${tool} is not available in PATH` });
+      hasFailure = true;
+    }
+  }
+
+  try {
+    const configPath = join(projectAutoshipDir, "config.json");
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    const maxAgents = Number(config.maxConcurrentAgents ?? config.max_agents ?? 0);
+    if (maxAgents > 0 && maxAgents <= 15) {
+      checks.push({ name: "worker-cap", status: "PASS", message: `Worker cap is ${maxAgents}` });
+    } else {
+      checks.push({ name: "worker-cap", status: "WARN", message: `Worker cap ${maxAgents || "unset"} is outside recommended range 1-15` });
+    }
+  } catch {
+    checks.push({ name: "worker-cap", status: "WARN", message: "Unable to validate worker cap" });
   }
 
   try {
@@ -226,7 +262,7 @@ async function doctor() {
     if (modelsOutput.trim().length > 0) {
       checks.push({ name: "model-inventory", status: "PASS", message: "OpenCode model inventory is accessible" });
       try {
-        const routingPath = join(autoshipDir, "model-routing.json");
+        const routingPath = join(projectAutoshipDir, "model-routing.json");
         await access(routingPath);
         const routingContent = await readFile(routingPath, "utf8");
         const routing = JSON.parse(routingContent);
@@ -291,7 +327,7 @@ async function doctor() {
 }
 
 function help() {
-  console.log(`opencode-autoship v${VERSION}
+  console.log(`opencode-autoship ${VERSION}
 
 Usage: opencode-autoship <command>
 
@@ -321,6 +357,10 @@ async function main() {
     case "--help":
     case "-h":
       help();
+      break;
+    case "--version":
+    case "-v":
+      console.log(`opencode-autoship ${VERSION}`);
       break;
     default:
       console.error(`Unknown command: ${command}`);

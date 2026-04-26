@@ -17,7 +17,8 @@ gh issue list --state open --json number,title,body,labels --limit 200 | jq 'sor
 ## Classify Each Issue
 
 ```bash
-bash hooks/opencode/plan-issues.sh --limit 10
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/opencode/plan-issues.sh" --limit 10
 ```
 
 ## Build Plan
@@ -61,4 +62,4 @@ Total: 6 issues across 2 phases
 ## No Execution
 
 This command only reads and analyzes. No agents are dispatched, no changes made.
-Eligible issues are ordered by ascending issue number. Unsafe/evasion issues appear in the blocked section instead of the dispatch plan.
+Eligible issues are ordered by ascending issue number. Issues already marked running, blocked, or human-required are excluded from the dispatch plan.

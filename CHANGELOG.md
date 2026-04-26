@@ -1,5 +1,61 @@
 # Changelog
 
+## v2.0.9
+
+- Add AutoShip audit, dashboard, retry, cancel, clean, and apply workflows for issue-to-PR orchestration operations.
+- Add safety guardrails for GitHub API retries, protected label classification, diff size limits, prompt sanitization, acceptance criteria extraction, worktree checksums, quota pauses, and anti-flake retries.
+- Harden CI and verification behavior for monitor polling, setup without GitHub auth, package diagnostics, and no-check PR merge blocking.
+
+## v2.0.8
+
+- Refresh worker monitoring from `status.sh` so dead worker PIDs are marked stuck during normal status checks.
+- Make worker timeout parsing portable across macOS and Linux and configurable with `workerTimeoutMs` / `stall_timeout_ms`.
+- Harden monitor event queue creation and lock fallback so missing queues or non-GNU `flock` do not stop reconciliation.
+
+## v2.0.7
+
+- Make `opencode-autoship doctor` validate project-local `.autoship/config.json` and `.autoship/model-routing.json` instead of global installed assets.
+- Update installed OpenCode skills and commands to call hooks from the installed AutoShip asset directory when used outside the AutoShip repo.
+- Extend smoke coverage for installed-project `doctor` after installed-project initialization.
+
+## v2.0.6
+
+- Fix installed `init.sh` so running from `~/.config/opencode/.autoship` no longer deletes installed hooks, commands, skills, or plugins.
+- Add smoke coverage for initializing a project through the installed OpenCode asset copy.
+
+## v2.0.5
+
+- Add `opencode-autoship --version` and `opencode-autoship -v` for global CLI version checks.
+
+## v2.0.4
+
+- Normalize npm package metadata so the global `opencode-autoship` binary is preserved during publish.
+
+## v2.0.3
+
+- Make global npm install the primary long-term install path across README, Pages, and wiki docs.
+- Document `bunx` as the one-time/no-global install path.
+- Remove stale Pages safety-policy copy from the model routing table.
+
+## v2.0.2
+
+- Remove content-based unsafe issue blockers from planning, dispatch, classification, and self-improvement issue filing.
+- Rank default free worker models from the live OpenCode provider list before writing model routing.
+- Package and install plugin assets under `.autoship/plugins`, initialize model history, and add diagnostics for OpenCode `Session not found` worker failures.
+
+## v2.0.1
+
+- Fix package CLI version output so `VERSION` values that already include `v` do not print as `vv...`.
+- Add package installer regression coverage for double-`v` version output.
+
+## v2.0.0
+
+- Package AutoShip as `opencode-autoship` with package-style install and doctor flows.
+- Add first-run setup, free-model-first routing, frontier lead roles, specialized role assets, and package diagnostics.
+- Add deterministic verification, reviewer verdict parsing, PR creation, event queue processing, retry/escalation state, and E2E dry-run coverage.
+- Add structured failure artifacts, self-improvement reports, safe issue filing, stale worker detection, paid-model fallback, and hardened cleanup.
+- Refresh README, GitHub Pages, wiki, command aliases, package publish checklist, version alignment checks, and npm pack verification.
+
 ## v1.6.2
 
 - Fix OpenCode worker launches by clearing inherited parent OpenCode session environment variables.
@@ -22,5 +78,4 @@
 - Free worker models by default, with operator-selected Spark, Go-provider, Nvidia, OpenRouter, and other OpenCode models allowed when available.
 - Learned worker model selection using task fit, configured strength, cost class, and prior success/failure history.
 - Default active worker cap increased to 15.
-- Unsafe/evasion-prone issues block for human review.
 - Removed stale runtime, assistant, and pre-rename references from docs and public pages.

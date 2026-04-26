@@ -20,15 +20,28 @@ REPO_REF="Maleick/AutoShip"
 
 mkdir -p "$PLUGIN_DIR" "$AUTOSHIP_HOME"
 
+if [[ "$(cd "$REPO_ROOT" && pwd -P)" == "$(cd "$AUTOSHIP_HOME" && pwd -P)" ]]; then
+  if [[ -f "$AUTOSHIP_HOME/plugins/autoship.ts" ]]; then
+    cp -f "$AUTOSHIP_HOME/plugins/autoship.ts" "$PLUGIN_DEST"
+  fi
+  if [[ -f "$AUTOSHIP_HOME/VERSION" ]]; then
+    tr -d '[:space:]' < "$AUTOSHIP_HOME/VERSION" > "$VERSION_FILE"
+  else
+    printf '%s\n' "installed" > "$VERSION_FILE"
+  fi
+  exit 0
+fi
+
 copy_assets() {
   local src="$1"
   rm -f "$PLUGIN_DEST"
   cp -f "$src/plugins/autoship.ts" "$PLUGIN_DEST"
-  rm -rf "$AUTOSHIP_HOME/hooks" "$AUTOSHIP_HOME/skills" "$AUTOSHIP_HOME/commands"
+  rm -rf "$AUTOSHIP_HOME/hooks" "$AUTOSHIP_HOME/skills" "$AUTOSHIP_HOME/commands" "$AUTOSHIP_HOME/plugins"
   mkdir -p "$AUTOSHIP_HOME"
   cp -R "$src/hooks" "$AUTOSHIP_HOME/hooks"
   cp -R "$src/skills" "$AUTOSHIP_HOME/skills"
   cp -R "$src/commands" "$AUTOSHIP_HOME/commands"
+  cp -R "$src/plugins" "$AUTOSHIP_HOME/plugins"
   if [[ -f "$src/AGENTS.md" ]]; then
     cp -f "$src/AGENTS.md" "$AUTOSHIP_HOME/AGENTS.md"
   fi
@@ -38,6 +51,12 @@ copy_assets() {
 }
 
 LATEST_TAG=""
+if [[ "${AUTOSHIP_UNVERIFIED_RELEASE_SYNC:-0}" != "1" ]]; then
+  copy_assets "$REPO_ROOT"
+  printf '%s\n' "dev" > "$VERSION_FILE"
+  exit 0
+fi
+
 if command -v gh >/dev/null 2>&1; then
   LATEST_TAG=$(gh api "repos/$REPO_REF/releases/latest" --jq '.tag_name' 2>/dev/null || true)
 fi

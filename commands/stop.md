@@ -1,8 +1,11 @@
 ---
 name: stop
-description: Stop AutoShip OpenCode orchestration
+description: Compatibility-only alias for /autoship-stop
+compatibility: true
 ---
 
-# /autoship:stop
+# /autoship-stop — compatibility-only alias
 
-Stop queued/running AutoShip OpenCode workspaces and preserve `.autoship/state.json` for recovery.
+This compatibility-only alias is retained for older installs. Use the canonical public command `/autoship-stop`.
+
+Run `commands/autoship-stop.md`.

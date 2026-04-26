@@ -153,10 +153,11 @@ How often should AutoShip refresh model inventory?
 
 ```bash
 # Interactive mode
-bash hooks/opencode/setup.sh
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/opencode/setup.sh"
 
 # Non-interactive mode (--no-tui)
-bash hooks/opencode/setup.sh --no-tui \
+bash "$AUTOSHIP_HOME/hooks/opencode/setup.sh" --no-tui \
   --max-agents 10 \
   --labels "agent:ready" \
   --refresh-models \

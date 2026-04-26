@@ -136,6 +136,25 @@
     .card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
     .card p { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
 
+    /* -- Quick start -- */
+    .quickstart {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px;
+    }
+    .quickstep {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .quickstep-num { color: var(--amber); font-weight: 900; font-size: 0.82rem; letter-spacing: .04em; }
+    .quickstep h3 { margin-top: 8px; font-size: 1rem; }
+    .quickstep > code {
+      display: block; margin-top: 12px; padding: 10px 12px;
+      background: #0d1117; border: 1px solid var(--border); border-radius: 7px;
+      color: var(--green); font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .quickstep p code { color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; }
+    .quickstep p { margin-top: 10px; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+
     /* ── Before/After ── */
     .ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media (max-width: 600px) { .ba-grid { grid-template-columns: 1fr; } }
@@ -206,10 +225,11 @@
   <div class="nav-links">
     <a href="#how-it-works">How It Works</a>
     <a href="#features">Features</a>
+    <a href="#quick-start">Quick Start</a>
     <a href="#agents">Agents</a>
     <a href="https://github.com/Maleick/AutoShip">GitHub</a>
   </div>
-  <a class="nav-cta" href="https://github.com/Maleick/AutoShip/blob/main/docs/OPENCODE_INSTALL.md">Install</a>
+  <a class="nav-cta" href="#quick-start">Install</a>
 </nav>
 
 <!-- Hero -->
@@ -231,16 +251,17 @@
   </p>
 
   <div class="hero-actions">
-    <a class="btn-primary" href="https://github.com/Maleick/AutoShip#install">Get Started</a>
+    <a class="btn-primary" href="#quick-start">Get Started</a>
     <a class="btn-secondary" href="https://github.com/Maleick/AutoShip">View on GitHub</a>
   </div>
 
   <div class="install-box">
-    <div class="install-header">bash — one-time install</div>
+    <div class="install-header">npm — global CLI install</div>
     <div class="install-cmd">
-      <code>bash hooks/opencode/install.sh</code>
-      <button class="copy-btn" onclick="navigator.clipboard.writeText('bash hooks/opencode/install.sh').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
+      <code>npm install -g opencode-autoship && opencode-autoship install</code>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install -g opencode-autoship && opencode-autoship install').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
     </div>
+    <p style="margin:12px 0 0;color:var(--muted);font-size:.88rem;">Use <code>bunx opencode-autoship install</code> for a one-time install without keeping the CLI globally.</p>
   </div>
 </div>
 
@@ -265,6 +286,52 @@
 </div>
 
 <hr class="divider" style="margin-top: 72px;" />
+
+<!-- Quick Start -->
+<section id="quick-start">
+  <h2>Package <span>Quick Start</span></h2>
+  <p class="section-sub">Install the package, register it with OpenCode, verify the local setup, then start orchestration.</p>
+  <div class="quickstart">
+    <div class="quickstep">
+      <div class="quickstep-num">STEP 1</div>
+      <h3>Install CLI globally</h3>
+      <code>npm install -g opencode-autoship</code>
+      <p>Installs the long-term <code>opencode-autoship</code> command on your PATH. For a one-time run, use <code>bunx opencode-autoship install</code>.</p>
+    </div>
+    <div class="quickstep">
+      <div class="quickstep-num">STEP 2</div>
+      <h3>Install for OpenCode</h3>
+      <code>opencode-autoship install</code>
+      <p>Registers the package with OpenCode and installs AutoShip assets into your OpenCode config directory.</p>
+    </div>
+    <div class="quickstep">
+      <div class="quickstep-num">STEP 3</div>
+      <h3>Run doctor</h3>
+      <code>opencode-autoship doctor</code>
+      <p>Checks package registration, installed asset versions, OpenCode model inventory, and GitHub auth.</p>
+    </div>
+    <div class="quickstep">
+      <div class="quickstep-num">STEP 4</div>
+      <h3>Configure routing</h3>
+      <code>/autoship-setup</code>
+      <p>Discovers live <code>opencode models</code>, chooses worker routing, and writes <code>.autoship/model-routing.json</code>.</p>
+    </div>
+    <div class="quickstep">
+      <div class="quickstep-num">STEP 5</div>
+      <h3>Start AutoShip</h3>
+      <code>/autoship</code>
+      <p>Plans eligible <code>agent:ready</code> issues, dispatches workers, verifies results, and opens reviewed PRs.</p>
+    </div>
+    <div class="quickstep">
+      <div class="quickstep-num">STEP 6</div>
+      <h3>Keep it healthy</h3>
+      <code>opencode-autoship doctor</code>
+      <p>Rerun doctor after upgrades or setup changes to confirm package assets and routing are aligned.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
 
 <!-- Before / After -->
 <section id="before-after">
@@ -293,7 +360,7 @@
       <h3>🚀 With AutoShip</h3>
       <pre class="hero-code">/autoship</pre>
       <p style="font-size:.88rem;color:var(--muted);line-height:1.6;">
-        AutoShip reads your issues, classifies each one, picks a configured OpenCode model,
+        After package install, doctor, and setup, AutoShip reads your issues, classifies each one, picks a configured OpenCode model,
         creates an isolated worktree, dispatches with a focused prompt,
         verifies the result, and opens a reviewed PR for the work that passed.
       </p>
@@ -308,20 +375,20 @@
 <!-- How It Works -->
 <section id="how-it-works">
   <h2>How It <span>Works</span></h2>
-  <p class="section-sub">Six steps, fully automated, runs in a loop.</p>
+  <p class="section-sub">After <code>opencode-autoship doctor</code> and <code>/autoship-setup</code> pass, orchestration runs in a loop.</p>
   <div class="pipeline">
     <div class="pipeline-step">
       <div class="step-num">1</div>
       <div class="step-content">
         <h4>Classify</h4>
-        <p>Each open issue is classified into task types such as docs, simple_code, medium_code, mechanical, ci_fix, or complex. Unsafe/evasion-prone work is blocked for human review.</p>
+        <p>Each open issue is classified into task types such as docs, simple_code, medium_code, mechanical, ci_fix, or complex.</p>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="step-num">2</div>
       <div class="step-content">
         <h4>Route</h4>
-        <p>Task type + the live <code>opencode models</code> inventory determines the worker model. Setup defaults to currently available free models; operators can explicitly select models.</p>
+        <p>Task type + the live <code>opencode models</code> inventory determines the worker model. <code>/autoship-setup</code> defaults to ranked free models; operators can explicitly select models.</p>
       </div>
     </div>
     <div class="pipeline-step">
@@ -380,7 +447,7 @@
     <div class="card">
       <div class="card-icon">🗺️</div>
       <h3>Live model routing</h3>
-      <p>Run setup to detect the live <code>opencode models</code> list, or set <code>AUTOSHIP_MODELS</code> to choose exact model IDs.</p>
+      <p>Run <code>/autoship-setup</code> to detect the live <code>opencode models</code> list, or set <code>AUTOSHIP_MODELS</code> to choose exact model IDs.</p>
     </div>
     <div class="card">
       <div class="card-icon">💾</div>
@@ -390,12 +457,12 @@
     <div class="card">
       <div class="card-icon">📊</div>
       <h3>Status dashboard</h3>
-      <p><code>/autoship:status</code> shows active, queued, completed, blocked, and stuck workspace counts plus configured concurrency.</p>
+      <p><code>/autoship-status</code> shows active, queued, completed, blocked, and stuck workspace counts plus configured concurrency.</p>
     </div>
     <div class="card">
-      <div class="card-icon">🦀</div>
-      <h3>Safety filter</h3>
-      <p>Anti-cheat evasion, stealth, VM/fingerprint evasion, shellcode, hook signature evasion, and similar work is blocked for human review.</p>
+      <div class="card-icon">🧾</div>
+      <h3>Failure evidence</h3>
+      <p>Reviewer and verification failures are captured as structured artifacts so follow-up work starts from concrete evidence.</p>
     </div>
     <div class="card">
       <div class="card-icon">🏗️</div>
@@ -420,7 +487,7 @@
 <!-- Agent matrix -->
 <section id="agents">
   <h2>Dispatch <span>Matrix</span></h2>
-  <p class="section-sub">AutoShip picks from the live OpenCode model inventory, preferring free models by default.</p>
+  <p class="section-sub"><code>/autoship-setup</code> picks from the live OpenCode model inventory, preferring free models by default.</p>
   <table>
     <thead>
       <tr>
@@ -437,7 +504,7 @@
       <tr><td>medium_code</td><td><strong>Capable free OpenCode model</strong></td><td>Operator-selected model</td><td>Human review</td></tr>
       <tr><td>mechanical</td><td>Live free OpenCode model</td><td>Operator-selected model</td><td>Human review</td></tr>
       <tr><td>ci_fix</td><td>Live free OpenCode model</td><td>Operator-selected model</td><td>Human review</td></tr>
-      <tr><td>rust_unsafe</td><td><strong>Blocked by safety policy when abuse-prone</strong></td><td>Human-approved selected model</td><td>Human review</td></tr>
+      <tr><td>rust_unsafe</td><td><strong>Capable free OpenCode model</strong></td><td>Human-approved selected model</td><td>Human review</td></tr>
       <tr><td>complex</td><td><strong>Capable free OpenCode model</strong></td><td>Operator-selected model</td><td>Human review</td></tr>
     </tbody>
   </table>
@@ -448,9 +515,9 @@
 <!-- CTA -->
 <section style="text-align:center; padding: 72px 24px;">
   <h2 style="font-size:2rem;">Ready to <span style="color:var(--amber);">turn backlog into reviewed PRs?</span></h2>
-  <p style="color:var(--muted);max-width:520px;margin:16px auto 36px;font-size:1.05rem;">One install. One command. AutoShip plans, routes, verifies, and packages the PRs.</p>
-  <a class="btn-primary" href="https://github.com/Maleick/AutoShip/blob/main/docs/OPENCODE_INSTALL.md" style="font-size:1.1rem;padding:15px 36px;">
-    Install AutoShip →
+  <p style="color:var(--muted);max-width:560px;margin:16px auto 36px;font-size:1.05rem;">Install the package, run doctor, complete setup, then use <code>/autoship</code> to plan, route, verify, and package PRs.</p>
+  <a class="btn-primary" href="#quick-start" style="font-size:1.1rem;padding:15px 36px;">
+    Start with npm
   </a>
   <p style="margin-top:20px;color:var(--muted);font-size:0.85rem;">
     Requires OpenCode · <a href="https://github.com/Maleick/AutoShip">View on GitHub</a>
