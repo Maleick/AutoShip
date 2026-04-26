@@ -18,6 +18,7 @@ const OPERATOR_STREAM_FILE: &str = "operator.ndjson.zst";
 const ORCHESTRATOR_STREAM_FILE: &str = "orchestrator.ndjson.zst";
 const OPERATOR_CAPTURE_LAYER: &str = "input_layer";
 const REDACTED_BOOKMARK: &str = "[redacted]";
+const REDACTED_INPUT: &str = "[redacted]";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OperatorStreamHeader {
@@ -74,11 +75,15 @@ impl OperatorEvent {
     }
 
     fn command(elapsed_secs: f64, command: impl Into<String>) -> Self {
+        let command = command.into();
+        let command = if operator_input_redaction_enabled() {
+            REDACTED_INPUT.to_string()
+        } else {
+            command
+        };
         Self {
             elapsed_secs,
-            kind: OperatorEventKind::Command {
-                command: command.into(),
-            },
+            kind: OperatorEventKind::Command { command },
         }
     }
 
@@ -191,6 +196,17 @@ impl ReplayStreamWriter {
             std::fs::create_dir_all(parent)?;
         }
 
+        #[cfg(unix)]
+        let file = {
+            use std::os::unix::fs::OpenOptionsExt;
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .mode(0o600)
+                .open(&path)?
+        };
+        #[cfg(not(unix))]
         let file = OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -248,7 +264,11 @@ fn state() -> &'static Mutex<ReplayState> {
 }
 
 pub fn session_id() -> String {
-    state().lock().expect("session replay state").session_id.clone()
+    state()
+        .lock()
+        .expect("session replay state")
+        .session_id
+        .clone()
 }
 
 pub fn policy_sha() -> String {
@@ -349,7 +369,9 @@ impl DecisionEventBuilder {
     pub fn build(self, details: BTreeMap<String, Value>) -> DecisionEvent {
         let inputs_hash = canonical_inputs_hash(&self.inputs);
         let mut guard = state().lock().expect("session replay state");
-        guard.inputs_by_hash.insert(inputs_hash.clone(), self.inputs.clone());
+        guard
+            .inputs_by_hash
+            .insert(inputs_hash.clone(), self.inputs.clone());
         let event = DecisionEvent {
             elapsed_secs: guard.started_at.elapsed().as_secs_f64(),
             actor: self.actor,
@@ -500,6 +522,10 @@ fn write_json_line<T: Serialize>(writer: &mut dyn Write, value: &T) -> std::io::
 }
 
 fn key_input_label(key: &KeyEvent) -> String {
+    if operator_input_redaction_enabled() {
+        return REDACTED_INPUT.to_string();
+    }
+
     match key.code {
         KeyCode::Char(ch) => ch.to_string(),
         KeyCode::F(n) => format!("F{n}"),
@@ -535,7 +561,13 @@ fn key_code_label(code: KeyCode, modifiers: KeyModifiers) -> String {
         KeyCode::Delete => String::from("Delete"),
         KeyCode::Insert => String::from("Insert"),
         KeyCode::F(n) => format!("F{n}"),
-        KeyCode::Char(ch) => ch.to_string(),
+        KeyCode::Char(ch) => {
+            if operator_input_redaction_enabled() {
+                String::from("Char")
+            } else {
+                ch.to_string()
+            }
+        }
         other => format!("{other:?}"),
     };
 
@@ -548,6 +580,12 @@ fn key_code_label(code: KeyCode, modifiers: KeyModifiers) -> String {
 
 fn bookmark_text_redaction_enabled() -> bool {
     std::env::var("TEXTQUEST_OPERATOR_BOOKMARKS_UNREDACTED")
+        .map(|value| value.trim().is_empty())
+        .unwrap_or(true)
+}
+
+fn operator_input_redaction_enabled() -> bool {
+    std::env::var("TEXTQUEST_OPERATOR_INPUT_UNREDACTED")
         .map(|value| value.trim().is_empty())
         .unwrap_or(true)
 }
@@ -603,7 +641,10 @@ fn current_time_sensitive_note(note: &str) -> String {
 
 #[allow(dead_code)]
 fn _bookmark_preview(note: &str) -> (String, String) {
-    (current_time_sensitive_note(note), sha256_hex(note.as_bytes()))
+    (
+        current_time_sensitive_note(note),
+        sha256_hex(note.as_bytes()),
+    )
 }
 
 #[cfg(test)]
@@ -656,9 +697,12 @@ mod tests {
 
     #[test]
     fn key_labels_include_modifiers() {
-        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL | KeyModifiers::SHIFT);
-        assert_eq!(key_code_label(key.code, key.modifiers), "Ctrl+Shift+x");
-        assert_eq!(key_input_label(&key), "x");
+        let key = KeyEvent::new(
+            KeyCode::Char('x'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert_eq!(key_code_label(key.code, key.modifiers), "Ctrl+Shift+Char");
+        assert_eq!(key_input_label(&key), "[redacted]");
     }
 
     #[test]
