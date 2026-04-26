@@ -7626,15 +7626,30 @@ impl App {
                 }
             },
             "theme" => {
-                if rest.is_empty() {
+                let parts: Vec<&str> = rest.split_whitespace().collect();
+                if parts.is_empty() {
+                    // No args: cycle to next theme
                     self.cycle_theme();
                     self.set_feedback(
                         ToastLevel::Success,
                         format!("Theme: {}", self.theme_kind.label()),
                         true,
                     );
+                } else if parts[0] == "list" {
+                    // List all available themes
+                    let themes = ThemeKind::ALL
+                        .iter()
+                        .map(|k| k.label())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Available themes: {}", themes),
+                        false,
+                    );
                 } else {
-                    match self.set_theme_by_name(rest) {
+                    // Specific theme name
+                    match self.set_theme_by_name(parts[0]) {
                         Ok(()) => self.set_feedback(
                             ToastLevel::Success,
                             format!("Theme: {}", self.theme_kind.label()),

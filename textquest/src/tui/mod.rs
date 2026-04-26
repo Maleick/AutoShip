@@ -26,6 +26,8 @@ pub mod companion;
 /// Demo data generator — synthetic spawns and player data for macOS
 /// development.
 pub mod demo_data;
+/// Default alert sound configuration — pre-configured triggers for common events.
+pub mod default_alert_sounds;
 /// DPS tracker — rolling-window damage-per-second calculation for group
 /// members.
 pub mod dps;

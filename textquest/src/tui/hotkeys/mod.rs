@@ -389,10 +389,47 @@ pub fn builtin_shortcuts(config: &UiKeyboardConfig) -> Vec<ShortcutDoc> {
     }
 
     if config.style == KeyboardStyle::Emacs {
+        // Movement keybindings
         shortcuts.push(ShortcutDoc {
-            context: "Emacs aliases",
+            context: "Emacs movement",
             keys: "Ctrl+N / Ctrl+P",
-            action: "Move to next or previous client",
+            action: "Move down or up in lists (next/previous)",
+        });
+        shortcuts.push(ShortcutDoc {
+            context: "Emacs movement",
+            keys: "Ctrl+F / Ctrl+B",
+            action: "Move right or left (forward/backward character)",
+        });
+
+        // Line editing
+        shortcuts.push(ShortcutDoc {
+            context: "Emacs line editing",
+            keys: "Ctrl+A / Ctrl+E",
+            action: "Jump to line start or end",
+        });
+        shortcuts.push(ShortcutDoc {
+            context: "Emacs line editing",
+            keys: "Ctrl+K",
+            action: "Kill (delete) to end of line",
+        });
+        shortcuts.push(ShortcutDoc {
+            context: "Emacs line editing",
+            keys: "Ctrl+U",
+            action: "Undo (clear) line",
+        });
+
+        // Word navigation
+        shortcuts.push(ShortcutDoc {
+            context: "Emacs word navigation",
+            keys: "Alt+F / Alt+B",
+            action: "Jump forward or backward by word",
+        });
+
+        // Search
+        shortcuts.push(ShortcutDoc {
+            context: "Emacs search",
+            keys: "Ctrl+S / Ctrl+R",
+            action: "Search forward or backward",
         });
     }
 
