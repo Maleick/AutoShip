@@ -403,15 +403,16 @@ impl TravelGraph for TravelGraphService {
             return Duration::from_secs(0);
         }
 
-        party
-            .members
-            .iter()
-            .filter_map(|member| {
-                let graph = self.graph_for_party_member(member, party);
-                self.route_from_graph(&graph, &from, &to).map(|route| route.eta_min)
-            })
-            .max()
-            .unwrap_or_else(|| Duration::from_secs(u64::MAX / 2))
+        let mut max_eta = Duration::from_secs(0);
+        for member in &party.members {
+            let graph = self.graph_for_party_member(member, party);
+            let Some(route) = self.route_from_graph(&graph, &from, &to) else {
+                return Duration::from_secs(u64::MAX / 2);
+            };
+            max_eta = max_eta.max(route.eta_min);
+        }
+
+        max_eta
     }
 
     fn refresh_character(&self, character: &Character) {
@@ -576,6 +577,22 @@ mod tests {
         );
 
         assert!(eta >= Duration::from_secs(10));
+    }
+
+    #[test]
+    fn party_eta_is_unbounded_when_any_member_is_unreachable() {
+        let service = TravelGraphService::new(world_with_poif_hedge());
+        let party = Party {
+            members: vec![druid(), wizard()],
+        };
+
+        let eta = service.party_eta(
+            point("pop", "Plane of Power", 0, 0, 0),
+            point("pof", "Plane of Fire", 1, 0, 0),
+            &party,
+        );
+
+        assert_eq!(eta, Duration::from_secs(u64::MAX / 2));
     }
 
     #[test]
