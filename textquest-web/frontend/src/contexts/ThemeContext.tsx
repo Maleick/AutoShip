@@ -27,6 +27,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return "dark";
   });
 
+  // Load theme from server on mount
+  useEffect(() => {
+    const loadThemeFromServer = async () => {
+      try {
+        const response = await fetch("/api/theme/settings");
+        if (response.ok) {
+          const data = await response.json();
+          const serverTheme = data.mode === "light" ? "light" : "dark";
+          setThemeState(serverTheme);
+          localStorage.setItem("theme", serverTheme);
+        }
+      } catch (error) {
+        console.warn("Failed to load theme from server, using localStorage", error);
+      }
+    };
+
+    loadThemeFromServer();
+  }, []);
+
+  // Persist theme changes to server and localStorage
   useEffect(() => {
     // Update localStorage
     localStorage.setItem("theme", theme);
@@ -40,6 +60,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.classList.add("dark-mode");
       root.classList.remove("light-mode");
     }
+
+    // Persist to server
+    const saveThemeToServer = async () => {
+      try {
+        await fetch("/api/theme/settings", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: theme,
+            contrast: "normal",
+          }),
+        });
+      } catch (error) {
+        console.warn("Failed to save theme to server", error);
+      }
+    };
+
+    saveThemeToServer();
   }, [theme]);
 
   const setTheme = (newTheme: Theme) => {

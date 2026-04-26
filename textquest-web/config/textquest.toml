@@ -3,3 +3,7 @@ enabled = false
 rotation = "none"
 level = "info"
 channels = ["tell", "guild"]
+
+[theme]
+mode = "dark"
+contrast = "normal"

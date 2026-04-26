@@ -119,6 +119,16 @@ impl OrchestratorLoop {
         }
     }
 
+    /// Access the metrics collector for querying accumulated fleet intelligence.
+    pub fn metrics_collector(&self) -> &MetricsCollector {
+        &self.metrics_collector
+    }
+
+    /// Mutably access the metrics collector for direct metric updates.
+    pub fn metrics_collector_mut(&mut self) -> &mut MetricsCollector {
+        &mut self.metrics_collector
+    }
+
     /// Build from an `AppConfig` and a shutdown channel.
     pub fn from_config(app_config: &AppConfig, shutdown_rx: watch::Receiver<bool>) -> Self {
         let config_hash = serde_json::to_value(&app_config.orchestrator)

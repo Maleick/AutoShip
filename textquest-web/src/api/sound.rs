@@ -70,6 +70,36 @@ impl Default for SoundConfig {
                     priority: 100,
                 },
                 SoundTrigger {
+                    id: "trigger_buff_expiration".into(),
+                    name: "Buff Expiration".into(),
+                    event_pattern: "buff_expired".into(),
+                    sound: SoundType::File {
+                        path: "sounds/buff_expiration.wav".into(),
+                    },
+                    enabled: true,
+                    priority: 90,
+                },
+                SoundTrigger {
+                    id: "trigger_mob_aggro".into(),
+                    name: "Mob Aggro".into(),
+                    event_pattern: "aggro".into(),
+                    sound: SoundType::File {
+                        path: "sounds/mob_aggro.wav".into(),
+                    },
+                    enabled: true,
+                    priority: 120,
+                },
+                SoundTrigger {
+                    id: "trigger_inventory_full".into(),
+                    name: "Inventory Full".into(),
+                    event_pattern: "inventory_full".into(),
+                    sound: SoundType::File {
+                        path: "sounds/inventory_full.wav".into(),
+                    },
+                    enabled: true,
+                    priority: 80,
+                },
+                SoundTrigger {
                     id: "trigger_death".into(),
                     name: "Death".into(),
                     event_pattern: "you_have_died".into(),
@@ -261,9 +291,12 @@ mod tests {
         let config = SoundConfig::default();
         assert!(config.enabled);
         assert!((config.volume - 0.75).abs() < f32::EPSILON);
-        assert_eq!(config.triggers.len(), 5);
+        assert_eq!(config.triggers.len(), 9);
         let names: Vec<_> = config.triggers.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&"Low HP"));
+        assert!(names.contains(&"Buff Expiration"));
+        assert!(names.contains(&"Mob Aggro"));
+        assert!(names.contains(&"Inventory Full"));
         assert!(names.contains(&"Death"));
         assert!(names.contains(&"Named Spawn"));
         assert!(names.contains(&"GM Detected"));

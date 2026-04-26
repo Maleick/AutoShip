@@ -78,7 +78,8 @@ export default function App() {
   const [privacy, setPrivacy] = useState(false);
   const [huntMode, setHuntMode] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const { mode, contrast } = useTheme();
+  const { mode, contrast, toggleMode, toggleContrast } = useTheme();
+  const { mode: keybindingMode } = useKeybindingMode();
   const backend = useBackendStatus();
   const connected = backend === "online";
   const serverName = "Bertoxxulous";
@@ -86,6 +87,24 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+
+      // Handle Vi keybindings if enabled
+      if (keybindingMode === "vi") {
+        const viAction = getViActionForKeyEvent(e.key, e.ctrlKey, e.shiftKey, e.altKey);
+
+        if (viAction) {
+          e.preventDefault();
+          const handled = handleViAction(viAction, {
+            onSearchForward: () => setPaletteOpen(true),
+            onCommandEntry: () => setPaletteOpen(true),
+          });
+          if (handled) {
+            return;
+          }
+        }
+      }
+
+      // Standard keybindings
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
@@ -93,7 +112,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [keybindingMode]);
 
   const paletteActions: PaletteAction[] = useMemo(() => {
     const navActions: PaletteAction[] = NAV.map((n) => ({

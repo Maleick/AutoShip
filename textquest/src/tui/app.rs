@@ -139,6 +139,8 @@ pub enum ActiveScreen {
     Metrics,
     /// Active policy debug panel — versions, sources, canary reports, rollback.
     Policy,
+    /// Hotkey configuration UI.
+    Hotkeys,
 }
 
 impl ActiveScreen {
@@ -155,11 +157,12 @@ impl ActiveScreen {
             Self::Orchestrator => "Third Gate",
             Self::Metrics => "Metrics",
             Self::Policy => "Policies",
+            Self::Hotkeys => "Hotkeys",
         }
     }
 
     /// All screen variants for iteration.
-    pub const ALL: [ActiveScreen; 9] = [
+    pub const ALL: [ActiveScreen; 10] = [
         Self::Overview,
         Self::Tactical,
         Self::Navigation,
@@ -169,6 +172,7 @@ impl ActiveScreen {
         Self::Orchestrator,
         Self::Metrics,
         Self::Policy,
+        Self::Hotkeys,
     ];
 }
 

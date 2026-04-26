@@ -1,9 +1,11 @@
-import { Palette, Sun, Moon, Contrast } from "lucide-react";
+import { Palette, Sun, Moon, Contrast, KeyRound } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
+import { useKeybindingMode } from "../hooks/useKeybindingMode";
 import { PageHeader } from "../components/PageHeader";
 
 export function Settings() {
   const { mode, contrast, toggleMode, toggleContrast } = useTheme();
+  const { mode: keybindingMode, setMode: setKeybindingMode } = useKeybindingMode();
 
   return (
     <div className="flex flex-col">

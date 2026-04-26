@@ -6,6 +6,10 @@
 //! - Configuration loading/saving from TOML files
 //! - Per-character hotkey profiles
 //! - Extensible action types (Command, ToggleMode, OpenHelp, SendAssist, Custom)
+//! - Emacs-style keybindings (Ctrl+N/P, Ctrl+A/E, Alt+F/B, etc.)
+
+pub mod emacs;
+pub mod conflict_dialog;
 
 use anyhow::{Result, anyhow};
 use crossterm::event::{KeyCode, KeyModifiers};
