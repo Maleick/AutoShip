@@ -79,10 +79,12 @@ for N in "$@"; do
     echo "3. Print exactly one of: COMPLETE | BLOCKED | STUCK as your final line"
   } > "$PROMPT"
 
-  # Dispatch claude in background with cwd=worktree
+  # Dispatch claude in background with cwd=worktree.
+  # Keep Claude permission prompts enabled to avoid prompt-injection-driven
+  # unrestricted command execution from untrusted issue content.
   (
     cd "$WS"
-    nohup claude -p --model "$MODEL" --dangerously-skip-permissions < AUTOSHIP_PROMPT.md > pane.log 2>&1
+    nohup claude -p --model "$MODEL" < AUTOSHIP_PROMPT.md > pane.log 2>&1
     # Mark completion
     if [[ -f AUTOSHIP_RESULT.md ]]; then
       echo "COMPLETE" >> pane.log

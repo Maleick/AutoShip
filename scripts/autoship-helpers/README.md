@@ -13,6 +13,8 @@ Uses model from `~/.codex/config.toml` (set to `gpt-5.4-mini` for low-quota fall
 ### `batch-dispatch-claude.sh <model> <issue-N> [issue-N ...]`
 Same pattern but uses `claude -p --model <haiku|sonnet>` subprocess.
 Useful when codex quota exhausted.
+Claude permission prompts remain enabled by default for safety when issue
+content is untrusted.
 
 ### `verify-and-pr.sh`
 Scans `.autoship/workspaces/issue-*/` for completed workers (presence of
