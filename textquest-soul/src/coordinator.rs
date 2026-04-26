@@ -791,7 +791,7 @@ impl SoulCoordinator {
         let speech_style = soul.speech_style.clone();
         let backstory = soul.backstory.clone();
         let recent_context = self.recent_contexts.get(&client_id).cloned();
-        drop(soul);
+        let _ = soul;
 
         let semantic_query = if let Some(context) = &recent_context {
             format!(

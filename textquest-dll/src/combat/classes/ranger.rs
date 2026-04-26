@@ -486,6 +486,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         }
     }
@@ -510,6 +513,9 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: Some(positional),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         }
     }
 
@@ -549,6 +555,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert!(ranger.should_assist(&ctx));

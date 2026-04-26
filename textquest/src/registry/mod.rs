@@ -739,7 +739,7 @@ impl HotkeyCombo {
                     }
                     parsed.shift = true;
                 }
-                key if matches!(key, "meta" | "cmd" | "super" | "win") => {
+                "meta" | "cmd" | "super" | "win" => {
                     return Err(RegistryError::UnsupportedModifier(token.to_string()));
                 }
                 key => {

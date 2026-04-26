@@ -1,7 +1,7 @@
-/// Configuration storage — base64 sharing + SQLite DB-backed persistence.
-///
-/// Provides compact base64-encoded strings for easy config sharing via chat,
-/// and SQLite-backed storage for per-character and per-server configurations.
+//! Configuration storage — base64 sharing + SQLite DB-backed persistence.
+//!
+//! Provides compact base64-encoded strings for easy config sharing via chat,
+//! and SQLite-backed storage for per-character and per-server configurations.
 
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose, Engine as _};
@@ -93,7 +93,7 @@ impl SqliteConfigStore {
 
         let config = stmt
             .query_row(params![character_name, server_name, group_name], |row| {
-                Ok(row.get::<_, String>(0)?)
+                row.get::<_, String>(0)
             })
             .optional()?;
 
@@ -116,7 +116,7 @@ impl SqliteConfigStore {
 
         let groups = stmt
             .query_map(params![character_name, server_name], |row| {
-                Ok(row.get::<_, String>(0)?)
+                row.get::<_, String>(0)
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
@@ -202,6 +202,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![],
             current_step: 0,
         }

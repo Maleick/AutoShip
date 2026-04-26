@@ -1,4 +1,0 @@
-Performance follow-up:
-- Run a live EQ session with `TEXTQUEST_PERF_TRACE=1`.
-- Capture before/after IPC write time and payload size.
-- Capture `read_all_spawns` latency and tactical map cache rebuild timing.

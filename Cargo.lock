@@ -8085,6 +8085,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "clap",
  "rand 0.9.4",
  "serde",
  "serde_json",
@@ -8092,6 +8093,10 @@ dependencies = [
  "siphasher",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -739,6 +739,10 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
+            positional: None,
         }
     }
 
@@ -860,6 +864,10 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
+            positional: None,
         };
 
         assert_eq!(ctx.pet().map(|slot| slot.name.as_str()), Some("Warder"));
@@ -888,6 +896,10 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
+            positional: None,
         };
 
         assert!(ctx.pet().is_none());
@@ -1069,12 +1081,14 @@ mod tests {
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 77,
                     name: "Warder".into(),
+                    aggro_pct: 0,
                 },
                 ExtendedTargetSlot {
                     slot_type: XTargetType::MyPetTarget,
                     status: XTargetSlotStatus::CurrentZone,
                     spawn_id: 99,
                     name: "a skeleton".into(),
+                    aggro_pct: 0,
                 },
             ],
             auto_add_haters: false,
@@ -1201,6 +1215,10 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
+            positional: None,
         };
         let result = lowest_hp_member(&ctx);
         assert_eq!(result, Some((2, 50.0)));
@@ -1252,6 +1270,10 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
+            positional: None,
         };
 
         assert_eq!(afflicted_member_count(&ctx), 2);

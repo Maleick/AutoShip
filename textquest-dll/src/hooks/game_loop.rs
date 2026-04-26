@@ -3809,6 +3809,9 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         | Command::SendMailToMule { .. } => {
             send_unsupported_command("Mail");
         }
+        Command::PollChecksumAlerts => {
+            send_unsupported_command("PollChecksumAlerts");
+        }
     }
 }
 

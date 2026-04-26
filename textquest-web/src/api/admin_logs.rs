@@ -37,11 +37,10 @@ pub async fn tail_logs(
     // This preserves access for legacy sessions where owner tracking was never populated.
     {
         let owners = state.session_logs_owner.read().await;
-        if let Some(owner) = owners.get(&session_id) {
-            if owner != "default_user" {
-                // User does not own this session — return 403 Forbidden
-                return (StatusCode::FORBIDDEN, Json::<Vec<String>>(Vec::new())).into_response();
-            }
+        if let Some(owner) = owners.get(&session_id)
+            && owner != "default_user"
+        {
+            return (StatusCode::FORBIDDEN, Json::<Vec<String>>(Vec::new())).into_response();
         }
     }
 

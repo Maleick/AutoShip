@@ -701,6 +701,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: target.is_some_and(strategy::is_mezzed),
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         }
     }
@@ -1099,6 +1102,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         let status = ctx.pet_status();
@@ -1129,6 +1135,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         let status = ctx.pet_status();
@@ -1198,6 +1207,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert_eq!(
@@ -1252,6 +1264,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert_eq!(

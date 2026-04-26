@@ -13,7 +13,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,8 +21,8 @@ use serde::{Deserialize, Serialize};
 /// lives in the orchestrator; this module expects a thin `Arc<TransportState>`
 /// in the Axum router state.
 ///
-/// Wire types are defined here to keep the web crate independent of the
-/// `textquest-net` crate (which is not yet a workspace member everywhere).
+/// Wire types are defined here for the web layer; the cross-client
+/// transport implementation (EQBC/DanNet/NetBots) lives outside this crate.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TransportConfigView {
@@ -97,7 +97,7 @@ pub struct DgaeRequest {
 }
 
 /// Stub app state — replace with the real `Arc<TransportHandle>` once the
-/// orchestrator wires up textquest-net.
+/// orchestrator wires up the cross-client transport layer.
 #[derive(Debug, Clone, Default)]
 pub struct TransportAppState {
     pub config: TransportConfigView,
@@ -164,7 +164,6 @@ async fn post_dgae(
 
 /// Build the transport API sub-router.  Mount at `/api/transport` in the main
 /// Axum router.
-#[must_use]
 pub fn router(state: TransportAppState) -> Router {
     Router::new()
         .route("/config", get(get_config).put(put_config))

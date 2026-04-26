@@ -4,8 +4,8 @@ use tempfile::tempdir;
 use textquest::window_title_runtime::{WindowTitleRuntime, default_config_path};
 use textquest_common::{
     character_config::{
-        CharacterConfig, ClassParams, RewardAutomationConfig, RotationEntry, TributePreferences,
-        TributeStatus,
+        CharacterConfig, ClassParams, ImproveAutoPromoteConfig, RewardAutomationConfig,
+        RotationEntry, TributePreferences, TributeStatus,
     },
     ipc::AutoRezConfig,
     window_title::default_window_title_format,
@@ -48,6 +48,7 @@ fn tick_loads_window_title_formats_from_disk() {
             reward_automation: RewardAutomationConfig::default(),
             tribute_preferences: TributePreferences::default(),
             tribute_status: TributeStatus::default(),
+            improve_auto_promote: ImproveAutoPromoteConfig::default(),
         },
     );
     fs::write(

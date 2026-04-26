@@ -56,44 +56,42 @@ A Rust workspace that reads live game state from EverQuest via `ReadProcessMemor
 
 Snapshot: **2026-04-26** · master HEAD `f368caae` · these numbers are live indicators refreshed by `scripts/update_readme_metrics.py`.
 
-| Crate                | Rust LOC  |
-| -------------------- | --------: |
-| `textquest`          | 177,000   |
-| `textquest-dll`      |  86,000   |
-| `textquest-common`   |  44,000   |
-| `textquest-web`      |  23,000   |
-| `textquest-soul`     |  21,000   |
-| `textquest-learn`    |   5,000   |
-| `textquest-net`      |   1,500   |
-| `textquest-client`   |     498   |
-| Other crates/tools   |  ~23,862  |
-| **Total**            | **360,860** |
+| Crate              |    Rust LOC |
+| ------------------ | ----------: |
+| `textquest`        |     177,000 |
+| `textquest-dll`    |      86,000 |
+| `textquest-common` |      44,000 |
+| `textquest-web`    |      23,000 |
+| `textquest-soul`   |      21,000 |
+| `textquest-learn`  |       5,000 |
+| Other crates/tools |     ~25,860 |
+| **Total**          | **360,860** |
 
-| Metric                | Value   |
-| --------------------- | ------: |
-| Test functions        |   7,605 |
-| Open issues           |     606 |
-| EPIC #3596 (deferred) |     158 |
-| Actionable issues     |    ~448 |
+| Metric                | Value |
+| --------------------- | ----: |
+| Test functions        | 7,605 |
+| Open issues           |   606 |
+| EPIC #3596 (deferred) |   158 |
+| Actionable issues     |  ~448 |
 
 Items under [EPIC #3596](https://github.com/Maleick/TextQuest/issues/3596) require live EverQuest validation; the AutoShip headless pipeline cannot close them without a connected Windows client.
 
 ## Features
 
-| Category             | What it does                                                                 |
-| -------------------- | ---------------------------------------------------------------------------- |
-| **DLL Injection**    | Rust `cdylib` injected into running EQ clients via reflective loader                 |
-| **IPC Pipeline**     | Named pipes for commands (bidirectional) + shared memory for live game state         |
+| Category             | What it does                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| **DLL Injection**    | Rust `cdylib` injected into running EQ clients via reflective loader                |
+| **IPC Pipeline**     | Named pipes for commands (bidirectional) + shared memory for live game state        |
 | **Camp Automation**  | Six-phase camp loop: pull → fight → loot → med → buff → recover                     |
 | **Combat Engine**    | Class-driven rotation engine for all 16 classes, CH chain, CC handling, MezTracker  |
-| **Login Automation** | Credential store, staggered launch, login FSM, post-login sequencing                 |
-| **Navigation**       | Navmesh pathfinding (MQ2Nav format), multi-zone A* graph, waypoint tooling           |
-| **TargetScanner**    | XTarget aggro% reader, configurable priority ordering, safe-targeting predicate      |
-| **Anti-Detection**   | PEB unlink, page encrypt, stack spoof, VEH hooks, memcheck counter hooks             |
-| **TUI Dashboard**    | Seven-screen operator surface with command mode, themes, privacy mode                |
-| **Soul Engine**      | LLM-backed character personalities, persistent memory, per-character model selector  |
-| **Web Dashboard**    | Axum + React SPA for configuration and monitoring (`textquest-web`)                  |
-| **Packet Monitor**   | Live WSASend/WSARecv capture with opcode filtering and decode                        |
+| **Login Automation** | Credential store, staggered launch, login FSM, post-login sequencing                |
+| **Navigation**       | Navmesh pathfinding (MQ2Nav format), multi-zone A\* graph, waypoint tooling         |
+| **TargetScanner**    | XTarget aggro% reader, configurable priority ordering, safe-targeting predicate     |
+| **Anti-Detection**   | PEB unlink, page encrypt, stack spoof, VEH hooks, memcheck counter hooks            |
+| **TUI Dashboard**    | Seven-screen operator surface with command mode, themes, privacy mode               |
+| **Soul Engine**      | LLM-backed character personalities, persistent memory, per-character model selector |
+| **Web Dashboard**    | Axum + React SPA for configuration and monitoring (`textquest-web`)                 |
+| **Packet Monitor**   | Live WSASend/WSARecv capture with opcode filtering and decode                       |
 
 ## Quick Start
 
@@ -204,21 +202,18 @@ flowchart TD
 
 ### Workspace crates
 
-| Crate                | Type   | Role                                                         |
-| -------------------- | ------ | ------------------------------------------------------------ |
-| `textquest`          | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client        |
-| `textquest-dll`      | cdylib | Injected DLL — game hooks, combat, nav, IPC server           |
-| `textquest-common`   | lib    | Shared types, offsets, IPC protocol, spawns, enums           |
-| `textquest-client`   | lib    | Per-client session management and monitor coordination       |
-| `textquest-soul`     | lib    | LLM-backed personalities, persistent memory, social dynamics |
-| `textquest-web`      | bin    | Axum REST backend + React SPA for web dashboard and config   |
-| `textquest-web-sdk`  | lib    | Typed API client SDK consumed by the React frontend          |
-| `textquest-net`      | lib    | Packet capture, WSASend/WSARecv hooks, opcode decode         |
-| `textquest-learn`    | lib    | Reinforcement learning harness and shadow-learning pipeline  |
-| `textquest-policy`   | lib    | Signature verification and policy enforcement (fail-closed)  |
-| `textquest-voice`    | lib    | Voice synthesis integration for character personalities      |
-| `plugins/*`          | cdylib | Hot-loadable inventory/API extension plugins                 |
-| `tools/*`            | bin    | Dev tools: `llm-client`, `eqdiff`, `etw-consumer`           |
+| Crate               | Type   | Role                                                         |
+| ------------------- | ------ | ------------------------------------------------------------ |
+| `textquest`         | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client        |
+| `textquest-dll`     | cdylib | Injected DLL — game hooks, combat, nav, IPC server           |
+| `textquest-common`  | lib    | Shared types, offsets, IPC protocol, spawns, enums           |
+| `textquest-soul`    | lib    | LLM-backed personalities, persistent memory, social dynamics |
+| `textquest-web`     | bin    | Axum REST backend + React SPA for web dashboard and config   |
+| `textquest-web-sdk` | lib    | Typed API client SDK consumed by the React frontend          |
+| `textquest-learn`   | lib    | Reinforcement learning harness and shadow-learning pipeline  |
+| `textquest-policy`  | lib    | Signature verification and policy enforcement (fail-closed)  |
+| `plugins/*`         | cdylib | Hot-loadable inventory/API extension plugins                 |
+| `tools/*`           | bin    | Dev tools: `llm-client`, `eqdiff`, `etw-consumer`            |
 
 ## Configuration
 
@@ -260,20 +255,20 @@ Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(wi
 
 ## Roadmap
 
-| Milestone           | Status     | Description                                           |
-| ------------------- | ---------- | ----------------------------------------------------- |
-| M1 — Process Reader | ✅ Done    | `ReadProcessMemory`, spawn list, offsets              |
-| M2 — Input Dispatch | ✅ Done    | DLL injection, InterpretCmd, IPC pipeline             |
-| M3 — Navigation     | ✅ Done    | Navmesh pathfinding, waypoints, stuck recovery        |
-| M4 — Login Chain    | ✅ Done    | Credential store, login FSM, post-login sequencing    |
-| M5 — Anti-Detection | ✅ Done    | PEB unlink, page encrypt, stack spoof, VEH hooks, launchpad bypass via /patchme |
-| M6 — Web Dashboard  | ✅ Done    | Axum REST + React SPA, group builder, loot config     |
-| M7 — Zoning         | 🔄 Active  | Zone transition FSM, safe-coordinate validation       |
-| M8 — Orchestrator   | 🔄 Active  | Camp loop, CH chain, cross-client coordination        |
-| M9 — Hunt Mode      | 🔲 Planned | Tank roam, formation, auto-progression                |
-| M10 — Economy       | 🔲 Planned | Krono farming, vendor cycle, loot distribution        |
-| M11 — Soul Engine   | 🔲 Planned | LLM personalities, persistent memory, social dynamics |
-| M12 — Shadow Learning | 🔲 Planned | Closed-loop RL improvement on top of M9/M11         |
+| Milestone             | Status     | Description                                                                     |
+| --------------------- | ---------- | ------------------------------------------------------------------------------- |
+| M1 — Process Reader   | ✅ Done    | `ReadProcessMemory`, spawn list, offsets                                        |
+| M2 — Input Dispatch   | ✅ Done    | DLL injection, InterpretCmd, IPC pipeline                                       |
+| M3 — Navigation       | ✅ Done    | Navmesh pathfinding, waypoints, stuck recovery                                  |
+| M4 — Login Chain      | ✅ Done    | Credential store, login FSM, post-login sequencing                              |
+| M5 — Anti-Detection   | ✅ Done    | PEB unlink, page encrypt, stack spoof, VEH hooks, launchpad bypass via /patchme |
+| M6 — Web Dashboard    | ✅ Done    | Axum REST + React SPA, group builder, loot config                               |
+| M7 — Zoning           | 🔄 Active  | Zone transition FSM, safe-coordinate validation                                 |
+| M8 — Orchestrator     | 🔄 Active  | Camp loop, CH chain, cross-client coordination                                  |
+| M9 — Hunt Mode        | 🔲 Planned | Tank roam, formation, auto-progression                                          |
+| M10 — Economy         | 🔲 Planned | Krono farming, vendor cycle, loot distribution                                  |
+| M11 — Soul Engine     | 🔲 Planned | LLM personalities, persistent memory, social dynamics                           |
+| M12 — Shadow Learning | 🔲 Planned | Closed-loop RL improvement on top of M9/M11                                     |
 
 README stays focused on building, running, and operating TextQuest. The current roadmap keeps economy work at `M10` and Soul Engine + LLM work at `M11`. Soul Engine + LLM behavior is tracked under `M11` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, and economy work.
 

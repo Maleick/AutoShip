@@ -156,10 +156,10 @@ impl HelpDatabase {
         let mut results = Vec::new();
 
         for (index, command) in self.commands.iter().enumerate() {
-            if let Some(category) = &query.category {
-                if *category != HelpCategory::Command {
-                    continue;
-                }
+            if let Some(category) = &query.category
+                && *category != HelpCategory::Command
+            {
+                continue;
             }
             if !matches_tags(&command.tags, &tags) {
                 continue;
@@ -176,10 +176,10 @@ impl HelpDatabase {
         }
 
         for faq in &self.faqs {
-            if let Some(category) = &query.category {
-                if *category != HelpCategory::Faq {
-                    continue;
-                }
+            if let Some(category) = &query.category
+                && *category != HelpCategory::Faq
+            {
+                continue;
             }
             if !matches_tags(&faq.tags, &tags) {
                 continue;
@@ -190,10 +190,10 @@ impl HelpDatabase {
         }
 
         for tip in &self.tips {
-            if let Some(category) = &query.category {
-                if *category != HelpCategory::Tip {
-                    continue;
-                }
+            if let Some(category) = &query.category
+                && *category != HelpCategory::Tip
+            {
+                continue;
             }
             if !matches_tags(&tip.tags, &tags) {
                 continue;
@@ -227,10 +227,10 @@ impl HelpDatabase {
         let Ok(mut cache) = self.search_cache.lock() else {
             return;
         };
-        if cache.len() >= SEARCH_CACHE_LIMIT {
-            if let Some(oldest_key) = cache.keys().next().cloned() {
-                cache.remove(&oldest_key);
-            }
+        if cache.len() >= SEARCH_CACHE_LIMIT
+            && let Some(oldest_key) = cache.keys().next().cloned()
+        {
+            cache.remove(&oldest_key);
         }
         cache.insert(key, results.to_vec());
     }
@@ -372,6 +372,7 @@ fn score_tip(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn score_fields(
     item_id: String,
     item_type: HelpItemType,

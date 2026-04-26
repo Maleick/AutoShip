@@ -353,6 +353,7 @@ mod tests {
             email_subject_prefix: "[Alert] ".into(),
             warning_batch_window_secs: 90,
             thresholds: textquest::config::AlertThresholdConfig::default(),
+            audio: Default::default(),
         };
         updated.thresholds.memory_warning_mb = 256;
 

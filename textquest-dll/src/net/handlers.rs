@@ -47,7 +47,7 @@
     clippy::module_name_repetitions
 )]
 
-use crate::hooks::memcheck::{self, BlockHash, MemRegionSpec, BLOCK_SIZE};
+use crate::hooks::memcheck::{self, BlockHash, MemRegionSpec};
 
 // ─── Opcode constants ─────────────────────────────────────────────────────────
 

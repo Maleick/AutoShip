@@ -397,7 +397,7 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn install_stub_succeeds_on_non_windows() {
-        let result = install(0x1401A_4320);
+        let result = install(0x1_401A_4320);
         assert!(result.is_ok(), "stub install must succeed: {result:?}");
         remove();
     }

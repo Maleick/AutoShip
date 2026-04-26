@@ -114,7 +114,7 @@ impl CastState {
             Self::Casting {
                 started_at,
                 spell_id,
-                target_id,
+                target_id: _,
             } => {
                 if let Ok(elapsed) = started_at.elapsed() {
                     if elapsed > max_cast_duration {

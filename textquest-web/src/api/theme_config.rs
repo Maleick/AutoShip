@@ -38,11 +38,11 @@ impl ThemeConfig {
 fn textquest_config_path() -> PathBuf {
     std::env::current_dir()
         .ok()
-        .and_then(|dir| {
+        .map(|dir| {
             if dir.join("textquest-web").exists() {
-                Some(dir.join("textquest-web/config/textquest.toml"))
+                dir.join("textquest-web/config/textquest.toml")
             } else {
-                Some(dir.join("config/textquest.toml"))
+                dir.join("config/textquest.toml")
             }
         })
         .unwrap_or_else(|| PathBuf::from("config/textquest.toml"))

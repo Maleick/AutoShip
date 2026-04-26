@@ -8,7 +8,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use textquest_common::ipc::AutoRezConfig;
 
 use crate::AppState;
 
@@ -93,7 +92,7 @@ pub fn router() -> Router<Arc<AppState>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn hp_threshold_validation() {

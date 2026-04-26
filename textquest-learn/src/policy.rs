@@ -1,6 +1,8 @@
 //! Policy representation, inference, and versioning.
 //! L-8: Neural network policy models and serialization.
 
+#![allow(dead_code)]
+
 /// Marker trait for policy implementations.
 pub trait Policy: Send + Sync {
     /// Infer action from state.

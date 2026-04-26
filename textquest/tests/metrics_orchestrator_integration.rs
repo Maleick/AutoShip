@@ -3,6 +3,7 @@
 //! Demonstrates that the metrics collector:
 //! 1. Receives events from the orchestrator loop
 //! 2. Properly types and formats those events
+#![cfg(windows)]
 //! 3. Is ticked on each orchestrator interval
 //! 4. Accumulates metrics without causing performance regression
 

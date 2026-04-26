@@ -63,7 +63,7 @@ impl EpsilonGreedyBandit {
         let n_arms = arm_labels.len();
         assert!(n_arms > 0, "must have at least one arm");
         assert!(
-            epsilon >= 0.0 && epsilon <= 1.0,
+            (0.0..=1.0).contains(&epsilon),
             "epsilon must be in [0, 1]"
         );
         Self {
@@ -93,9 +93,9 @@ impl EpsilonGreedyBandit {
 impl BanditPolicy for EpsilonGreedyBandit {
     fn select_arm(&mut self, _context: &Context) -> (usize, f32) {
         // Epsilon-greedy: with probability epsilon, pick uniformly; else pick best mean reward.
-        let mut rng = rand::thread_rng();
-        let arm_id = if rng.r#gen::<f32>() < self.epsilon {
-            rng.gen_range(0..self.n_arms)
+        let mut rng = rand::rng();
+        let arm_id = if rng.random::<f32>() < self.epsilon {
+            rng.random_range(0..self.n_arms)
         } else {
             (0..self.n_arms)
                 .max_by(|&a, &b| {
@@ -228,8 +228,8 @@ mod tests {
         let mut bandit = LinUCBBandit::new(&["a", "b"], 4, 0.5);
         let d = bandit.d;
         let mut ctx = [0.0f32; 32];
-        for i in 0..4 {
-            ctx[i] = 1.0;
+        for x in ctx[..4].iter_mut() {
+            *x = 1.0;
         }
 
         // Simulate arm 1 being better.

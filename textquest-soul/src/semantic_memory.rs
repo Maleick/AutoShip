@@ -7,14 +7,14 @@ use std::{
 
 use anyhow::{Context, Result};
 use arrow_array::{
-    Array, ArrayRef, FixedSizeListArray, Float32Array, Float32Type, Int32Array, Int64Array,
+    Array, FixedSizeListArray, Float32Array, Int32Array, Int64Array,
     RecordBatch, RecordBatchIterator, StringArray,
-    types::Float32Type as ArrowFloat32Type,
+    types::Float32Type,
 };
 use arrow_schema::{DataType, Field, Schema};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use futures::TryStreamExt;
-use lancedb::{Table, connect, index::Index};
+use lancedb::{Table, connect, index::Index, query::{ExecutableQuery, QueryBase}};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Builder;
 
@@ -82,7 +82,7 @@ impl SemanticMemoryRow {
     }
 }
 
-trait Embedder: Send + Sync {
+pub trait Embedder: Send + Sync {
     fn embed_document(&self, text: &str) -> Vec<f32>;
     fn embed_query(&self, text: &str) -> Vec<f32>;
 }
@@ -93,7 +93,7 @@ struct FastEmbedBackend {
 
 enum FastEmbedState {
     Uninitialized,
-    Ready(TextEmbedding),
+    Ready(Box<TextEmbedding>),
     Fallback,
 }
 
@@ -120,7 +120,7 @@ impl FastEmbedBackend {
                 InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(false),
             ) {
                 Ok(model) => {
-                    *guard = FastEmbedState::Ready(model);
+                    *guard = FastEmbedState::Ready(Box::new(model));
                     match &mut *guard {
                         FastEmbedState::Ready(model) => {
                             match model.embed([format!("{prefix}{text}")], None) {
@@ -163,6 +163,7 @@ impl Embedder for FastEmbedBackend {
     }
 }
 
+#[allow(dead_code)]
 struct HashEmbedBackend;
 
 impl Embedder for HashEmbedBackend {
@@ -254,7 +255,7 @@ fn semantic_schema() -> Arc<Schema> {
             "embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                SEMANTIC_EMBEDDING_DIM,
+                SEMANTIC_EMBEDDING_DIM as i32,
             ),
             false,
         ),
@@ -278,7 +279,7 @@ fn row_to_batch(row: &SemanticMemoryRow) -> Result<RecordBatch> {
     let embedding: Vec<Option<f32>> = row.embedding.iter().copied().map(Some).collect();
     let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
         std::iter::once(Some(embedding)),
-        SEMANTIC_EMBEDDING_DIM,
+        SEMANTIC_EMBEDDING_DIM as i32,
     );
     RecordBatch::try_new(
         schema,
@@ -545,6 +546,7 @@ impl SemanticMemoryStore {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_internal(
         &self,
         character_id: ClientId,
@@ -705,7 +707,7 @@ impl SemanticMemoryStore {
         let batch = row_to_batch(row)?;
         let batches = RecordBatchIterator::new(vec![batch].into_iter().map(Ok), semantic_schema());
         self.table
-            .add(Box::new(batches))
+            .add(Box::new(batches) as Box<dyn arrow_array::RecordBatchReader + Send>)
             .execute()
             .await
             .context("failed to insert semantic memory row")?;
@@ -723,7 +725,7 @@ impl SemanticMemoryStore {
 }
 
 fn merge_semantic_rows(
-    mut existing: SemanticMemoryRow,
+    existing: SemanticMemoryRow,
     mut incoming: SemanticMemoryRow,
 ) -> SemanticMemoryRow {
     let mut tags = existing.tags.into_iter().collect::<HashSet<_>>();

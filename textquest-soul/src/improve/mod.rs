@@ -74,6 +74,7 @@ pub struct AnomalyEvent {
 }
 
 impl AnomalyEvent {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: u64,
         kind: AnomalyKind,

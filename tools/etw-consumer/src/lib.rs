@@ -1222,6 +1222,7 @@ mod tests {
         assert_eq!(options.keyword_mask, 0x4);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn current_pipe_message(
         event_id: u16,
         task: u16,

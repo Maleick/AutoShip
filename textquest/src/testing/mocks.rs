@@ -13,20 +13,15 @@ pub trait EqProcessReader {
 }
 
 /// Lifecycle state for mock process handles used by macOS integration tests.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MockProcessState {
     /// Allocated but not started.
+    #[default]
     Created,
     /// Actively running.
     Running,
     /// Stopped by test control flow.
     Stopped,
-}
-
-impl Default for MockProcessState {
-    fn default() -> Self {
-        Self::Created
-    }
 }
 
 /// Trait for test-process lifecycles.

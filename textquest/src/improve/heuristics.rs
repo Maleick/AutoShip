@@ -127,7 +127,7 @@ impl DedupeState {
 
 // ── Statistical helpers ───────────────────────────────────────────────────────
 
-fn percentile(values: &mut Vec<f32>, pct: f32) -> Option<f32> {
+fn percentile(values: &mut [f32], pct: f32) -> Option<f32> {
     if values.is_empty() {
         return None;
     }
@@ -557,8 +557,8 @@ pub fn rule_route_waypoints(
 
     let cull: Vec<String> = traversals
         .iter()
-        .filter(|&(ref wp, &count)| {
-            count >= 10 && spawn_detections.get(wp.as_str()).copied().unwrap_or(0) == 0
+        .filter(|(wp, count)| {
+            **count >= 10 && spawn_detections.get(wp.as_str()).copied().unwrap_or(0) == 0
         })
         .map(|(wp, _)| wp.clone())
         .collect();

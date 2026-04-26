@@ -695,7 +695,17 @@ mod tests {
                 std::path::PathBuf::from("/tmp/test-extension-catalog.json"),
             ),
             session_logs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            session_logs_owner: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             session_control_state: Arc::new(SessionControlState::with_max_records(limit)),
+            raid_config: tokio::sync::RwLock::new(api::RaidConfig::default()),
+            raid_config_path: std::path::PathBuf::from("/tmp/test-raid-config.toml"),
+            raid_config_write_lock: tokio::sync::Mutex::new(()),
+            sound_config: tokio::sync::RwLock::new(api::sound::SoundConfig::default()),
+            text_to_speech_state: api::text_to_speech::TextToSpeechState::new(),
+            self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
+            suggestion_state: api::suggestions::SuggestionState::new(),
+            config_change_history: tokio::sync::RwLock::new(Vec::new()),
+            last_config_change: tokio::sync::RwLock::new(None),
         })
     }
 

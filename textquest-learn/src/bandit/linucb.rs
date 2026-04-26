@@ -135,8 +135,8 @@ mod tests {
 
         // Fixed context (all ones in first d slots).
         let mut ctx = [0.0f32; CTX_DIM];
-        for i in 0..d {
-            ctx[i] = 1.0;
+        for x in ctx[..d].iter_mut() {
+            *x = 1.0;
         }
         let ctx_slice = &ctx[..d];
 

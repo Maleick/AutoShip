@@ -1083,6 +1083,11 @@ mod tests {
             ),
             session_control_state: api::session_control::SessionControlState::new(),
             session_logs: tokio::sync::RwLock::new(HashMap::new()),
+            session_logs_owner: tokio::sync::RwLock::new(HashMap::new()),
+            self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
+            suggestion_state: api::suggestions::SuggestionState::new(),
+            config_change_history: tokio::sync::RwLock::new(Vec::new()),
+            last_config_change: tokio::sync::RwLock::new(None),
         })
     }
 

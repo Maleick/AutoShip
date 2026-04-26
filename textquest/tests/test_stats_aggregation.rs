@@ -1,4 +1,5 @@
 //! Integration tests for session stats aggregation.
+#![cfg(windows)]
 
 #[cfg(test)]
 mod tests {

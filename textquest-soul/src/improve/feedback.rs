@@ -223,11 +223,11 @@ mod tests {
     fn one_dismiss_no_demotion() {
         let mut fb = PipelineFeedback::new();
         let ev = make_event(1, AnomalyKind::ManaCollapseMad, Severity::Major);
-        fb.register_session(&[ev.clone()]);
+        fb.register_session(std::slice::from_ref(&ev));
         fb.record_action(OperatorAction::Dismiss(1));
 
         let ev2 = make_event(2, AnomalyKind::ManaCollapseMad, Severity::Major);
-        fb.register_session(&[ev2.clone()]);
+        fb.register_session(std::slice::from_ref(&ev2));
         let out = fb.filter(vec![ev2]);
         // 1 dismiss < 2 → no demotion yet
         assert_eq!(out[0].severity, Severity::Major);
@@ -245,7 +245,7 @@ mod tests {
         fb.record_action(OperatorAction::Dismiss(2));
 
         let ev3 = make_event(3, AnomalyKind::ManaCollapseMad, Severity::Major);
-        fb.register_session(&[ev3.clone()]);
+        fb.register_session(std::slice::from_ref(&ev3));
         let out = fb.filter(vec![ev3]);
         assert_eq!(out[0].severity, Severity::Average, "2 dismissals → Major demoted to Average");
     }
@@ -259,7 +259,7 @@ mod tests {
             fb.record_action(OperatorAction::Dismiss(i));
         }
         let ev5 = make_event(5, AnomalyKind::DeathClusterPageHinkley, Severity::Major);
-        fb.register_session(&[ev5.clone()]);
+        fb.register_session(std::slice::from_ref(&ev5));
         let out = fb.filter(vec![ev5]);
         assert_eq!(out[0].severity, Severity::Minor, "4+ dismissals → Minor");
     }
@@ -283,7 +283,7 @@ mod tests {
         fb.record_action(OperatorAction::RealButIgnore(1));
 
         let ev2 = make_event(2, AnomalyKind::ManaCollapseMad, Severity::Major);
-        fb.register_session(&[ev2.clone()]);
+        fb.register_session(std::slice::from_ref(&ev2));
         let out = fb.filter(vec![ev2]);
         // No threshold raise → still Major
         assert_eq!(out[0].severity, Severity::Major);
@@ -308,7 +308,7 @@ mod tests {
             AnomalyKind::LootRateStlMad { camp: "camp_b".into() },
             Severity::Average,
         );
-        fb.register_session(&[ev_b.clone()]);
+        fb.register_session(std::slice::from_ref(&ev_b));
         let out = fb.filter(vec![ev_b]);
         assert_eq!(out[0].severity, Severity::Average, "camp_b unaffected by camp_a dismissals");
     }
@@ -319,7 +319,7 @@ mod tests {
         let mut fb = PipelineFeedback::new();
         for i in 0..30u64 {
             let ev = make_event(i, AnomalyKind::ManaCollapseMad, Severity::Major);
-            fb.register_session(&[ev.clone()]);
+            fb.register_session(std::slice::from_ref(&ev));
             fb.record_action(OperatorAction::Dismiss(i));
             // After 4 dismissals, further alarms get demoted to Minor
         }

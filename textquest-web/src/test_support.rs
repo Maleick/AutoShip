@@ -38,11 +38,19 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         character_config_write_lock: tokio::sync::Mutex::new(()),
         chat_log_write_lock: tokio::sync::Mutex::new(()),
         auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
+        raid_config: tokio::sync::RwLock::new(api::RaidConfig::default()),
+        raid_config_path: std::env::temp_dir().join(format!(
+            "textquest-test-raid-config-{}.toml",
+            uuid::Uuid::new_v4()
+        )),
+        raid_config_write_lock: tokio::sync::Mutex::new(()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
         discord_state: api::discord::DiscordState::new_demo(),
+        sound_config: tokio::sync::RwLock::new(api::sound::SoundConfig::default()),
+        text_to_speech_state: api::text_to_speech::TextToSpeechState::new(),
         player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
         player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
@@ -86,5 +94,9 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
         session_logs_owner: tokio::sync::RwLock::new(HashMap::new()),
+        self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
+        suggestion_state: api::suggestions::SuggestionState::new(),
+        config_change_history: tokio::sync::RwLock::new(Vec::new()),
+        last_config_change: tokio::sync::RwLock::new(None),
     })
 }

@@ -232,10 +232,10 @@ mod tests {
         let mut posterior1 = Gaussian::with_prior(0.0, 100.0, 1.0);
         let mut posterior2 = Gaussian::with_prior(0.0, 100.0, 1.0);
 
-        for i in 0..10 {
+        for _ in 0..10 {
             posterior1.update(50.0);
         }
-        for i in 0..100 {
+        for _ in 0..100 {
             posterior2.update(50.0);
         }
 

@@ -294,6 +294,9 @@ mod tests {
             debuff_abilities: vec![],
             rest_command: "/sit".into(),
             twist_interval_secs: None,
+            modes: vec![],
+            active_mode: None,
+            burn_rotation: BurnRotation::default(),
         }
     }
 
@@ -399,6 +402,9 @@ mod tests {
             debuff_abilities: vec![],
             rest_command: "/sit".into(),
             twist_interval_secs: None,
+            modes: vec![],
+            active_mode: None,
+            burn_rotation: BurnRotation::default(),
         };
 
         let low_profile = config.profile_for_level(Some(10));

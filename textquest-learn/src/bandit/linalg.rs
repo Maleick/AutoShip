@@ -52,7 +52,7 @@ pub fn axpy(a: &mut [f32], b: &[f32], scale: f32) {
 /// `a_inv := a_inv - (a_inv @ u @ v.T @ a_inv) / (1 + v.T @ a_inv @ u)`
 ///
 /// For LinUCB arm update where `A += u u.T`, pass `u == v == x`.
-pub fn sherman_morrison_update(a_inv: &mut Vec<f32>, u: &[f32], v: &[f32], d: usize) {
+pub fn sherman_morrison_update(a_inv: &mut [f32], u: &[f32], v: &[f32], d: usize) {
     debug_assert_eq!(a_inv.len(), d * d);
     debug_assert_eq!(u.len(), d);
     debug_assert_eq!(v.len(), d);

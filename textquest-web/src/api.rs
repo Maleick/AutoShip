@@ -76,6 +76,7 @@ pub struct RaidGroup {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
+#[derive(Default)]
 pub struct ChChainConfig {
     pub enabled: bool,
     pub target: Option<String>,
@@ -93,6 +94,7 @@ pub struct RaidConfig {
     pub strategy_notes: String,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for RaidGroup {
     fn default() -> Self {
         Self {
@@ -103,16 +105,6 @@ impl Default for RaidGroup {
     }
 }
 
-impl Default for ChChainConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            target: None,
-            cleric_order: Vec::new(),
-            interval_ms: 0,
-        }
-    }
-}
 
 impl Default for RaidConfig {
     fn default() -> Self {
@@ -2435,6 +2427,7 @@ mod tests {
                 &["Arcane Fury", "Hero's Fortitude"],
                 180,
             )),
+            improve_auto_promote: None,
         };
         let Json(saved) =
             put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))

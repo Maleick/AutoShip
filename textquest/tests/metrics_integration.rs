@@ -3,6 +3,7 @@
 //! Exercises the `MetricsCollector`, `AdminMonitoringStore`, and `types`
 //! modules together to validate end-to-end metric collection, historical
 //! storage, and alert-threshold detection.
+#![cfg(windows)]
 //!
 //! The `metrics` module is `#[cfg(windows)]` in lib.rs (SQLite / IPC paths);
 //! these tests run on Windows (Frostreaver) only. macOS unit tests live

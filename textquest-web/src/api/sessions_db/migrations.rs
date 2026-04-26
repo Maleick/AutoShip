@@ -5,7 +5,6 @@
 
 use anyhow::{Context, Result};
 use rusqlite::Connection;
-use std::path::PathBuf;
 
 /// Migration metadata
 #[derive(Debug, Clone)]
@@ -20,12 +19,12 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
         name: "init_schema",
-        sql: include_str!("../../migrations/sessions/001_init_schema.sql"),
+        sql: include_str!("../../../migrations/sessions/001_init_schema.sql"),
     },
     Migration {
         version: 2,
         name: "retention_helpers",
-        sql: include_str!("../../migrations/sessions/002_retention_helpers.sql"),
+        sql: include_str!("../../../migrations/sessions/002_retention_helpers.sql"),
     },
 ];
 

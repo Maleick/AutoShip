@@ -425,6 +425,7 @@ impl TravelGraph for TravelGraphService {
     }
 }
 
+#[cfg(test)]
 fn point(id: &str, zone: &str, x: i32, y: i32, z: i32) -> ZonePoint {
     ZonePoint {
         id: id.to_string(),
@@ -663,7 +664,7 @@ mod tests {
             zone_points.push(point(
                 &format!("z{index}"),
                 "LiveEra",
-                index as i32,
+                index,
                 0,
                 0,
             ));

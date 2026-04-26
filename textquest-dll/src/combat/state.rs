@@ -2275,6 +2275,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::entry(
                 "UseClicky",
                 ActionType::Item(item_name.to_string()),
@@ -2303,6 +2305,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::entry_with_cooldown(
                 entry_name,
                 ActionType::Spell(entry_name.to_string()),
@@ -2326,6 +2330,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::RotationEntry {
                 name: entry_name.into(),
                 action_type: ActionType::Spell(action_name.to_string()),
@@ -2817,6 +2823,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![
                 rotation::entry("BurnPrimary", ActionType::Disc("BurnPrimary".into())),
                 rotation::entry("PrecisionLine", ActionType::Disc("PrecisionLine".into())),
@@ -2878,6 +2886,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::entry(
                 "KickFocus",
                 ActionType::Disc("KickFocus".into()),
@@ -2918,6 +2928,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::entry(
                 "KickFocus",
                 ActionType::Disc("KickFocus".into()),
@@ -2962,6 +2974,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::entry(
                 "PrecisionStrikes",
                 ActionType::Disc("PrecisionStrikes".into()),
@@ -3006,6 +3020,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::entry_if(
                 "Mend",
                 ActionType::Ability("Mend".into()),
@@ -3378,6 +3394,8 @@ mod tests {
             steps_per_frame: 1,
             full_rotation: false,
             hp_threshold: None,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: vec![rotation::RotationEntry {
                 name: "BurnDisc".into(),
                 action_type: ActionType::Disc("BurnDisc".into()),

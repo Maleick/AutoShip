@@ -595,6 +595,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         let spell = shaman.select_spell(&ctx);
@@ -634,6 +637,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         let spell = shaman.select_spell(&ctx);
@@ -664,6 +670,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         let spell = shaman.select_spell(&ctx);
@@ -695,6 +704,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert!(shaman.should_assist(&ctx));
@@ -731,6 +743,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
@@ -758,6 +773,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(99));
@@ -815,6 +833,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
@@ -858,6 +879,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
 
@@ -928,6 +952,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
 
@@ -959,6 +986,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         shaman.on_engage(&ctx);
@@ -990,6 +1020,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         shaman.on_engage(&ctx);
@@ -1015,6 +1048,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
         assert!(shaman.select_spell(&ctx).is_none());
@@ -1048,6 +1084,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
 
@@ -1133,6 +1172,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
 
@@ -1182,6 +1224,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
 
@@ -1219,6 +1264,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
 
@@ -1267,6 +1315,9 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             positional: None,
         };
 

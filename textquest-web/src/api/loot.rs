@@ -1050,7 +1050,22 @@ mod tests {
                 )),
             ),
             session_logs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            session_logs_owner: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             session_control_state: crate::api::session_control::SessionControlState::new(),
+            raid_config: tokio::sync::RwLock::new(crate::api::RaidConfig::default()),
+            raid_config_path: std::env::temp_dir().join(format!(
+                "tq-loot-test-raid-config-{}.toml",
+                uuid::Uuid::new_v4()
+            )),
+            raid_config_write_lock: tokio::sync::Mutex::new(()),
+            sound_config: tokio::sync::RwLock::new(crate::api::sound::SoundConfig::default()),
+            text_to_speech_state: crate::api::text_to_speech::TextToSpeechState::new(),
+            self_improvement_state: Arc::new(
+                crate::api::self_improvement::SelfImprovementState::new(),
+            ),
+            suggestion_state: crate::api::suggestions::SuggestionState::new(),
+            config_change_history: tokio::sync::RwLock::new(Vec::new()),
+            last_config_change: tokio::sync::RwLock::new(None),
         });
 
         let original = get_item_score(State(state.clone())).await.0;
