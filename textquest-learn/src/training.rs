@@ -2,6 +2,10 @@ use crate::dataset::FlaggedSegmentDataset;
 use crate::{BehaviorCloningError, Result};
 use ndarray::Array1;
 
+const MAX_CONTEXT_DIM: usize = 4096;
+const MAX_NUM_ACTIONS: usize = 4096;
+const MAX_WEIGHT_PARAMS: usize = 16_777_216;
+
 #[derive(Debug)]
 pub struct BehaviorCloningTrainer {
     learning_rate: f32,
@@ -18,14 +22,12 @@ impl BehaviorCloningTrainer {
         }
     }
 
-    pub fn train(
-        &self,
-        dataset: &FlaggedSegmentDataset,
-    ) -> Result<TrainedModel> {
+    pub fn train(&self, dataset: &FlaggedSegmentDataset) -> Result<TrainedModel> {
         let (train_pairs, _heldout_pairs) = dataset.split_train_heldout(0.2);
 
         let context_dim = dataset.context_dim();
         let num_actions = dataset.num_actions() as usize;
+        self.validate_model_dimensions(context_dim, num_actions)?;
 
         // Build training matrices
         let mut contexts = Vec::new();
@@ -42,7 +44,6 @@ impl BehaviorCloningTrainer {
             )
             .into());
         }
-
 
         // Initialize random weights for small MLP (2 layers, hidden_units per layer)
         // W1: (context_dim, hidden_units), b1: (hidden_units,)
@@ -91,6 +92,63 @@ impl BehaviorCloningTrainer {
         })
     }
 
+    fn validate_model_dimensions(&self, context_dim: usize, num_actions: usize) -> Result<()> {
+        if context_dim == 0 {
+            return Err(BehaviorCloningError::Dataset(
+                "Context vector cannot be empty".to_string(),
+            )
+            .into());
+        }
+
+        if context_dim > MAX_CONTEXT_DIM {
+            return Err(BehaviorCloningError::Dataset(format!(
+                "Context dimension {} exceeds maximum supported {}",
+                context_dim, MAX_CONTEXT_DIM
+            ))
+            .into());
+        }
+
+        if num_actions == 0 {
+            return Err(
+                BehaviorCloningError::Dataset("Action space cannot be empty".to_string()).into(),
+            );
+        }
+
+        if num_actions > MAX_NUM_ACTIONS {
+            return Err(BehaviorCloningError::Dataset(format!(
+                "Action space {} exceeds maximum supported {}",
+                num_actions, MAX_NUM_ACTIONS
+            ))
+            .into());
+        }
+
+        let w1_params = context_dim.checked_mul(self.hidden_units).ok_or_else(|| {
+            anyhow::anyhow!(BehaviorCloningError::Training(
+                "Model dimension overflow while sizing first layer".to_string()
+            ))
+        })?;
+        let w2_params = self.hidden_units.checked_mul(num_actions).ok_or_else(|| {
+            anyhow::anyhow!(BehaviorCloningError::Training(
+                "Model dimension overflow while sizing second layer".to_string()
+            ))
+        })?;
+        let total_params = w1_params.checked_add(w2_params).ok_or_else(|| {
+            anyhow::anyhow!(BehaviorCloningError::Training(
+                "Model dimension overflow while computing parameter count".to_string()
+            ))
+        })?;
+
+        if total_params > MAX_WEIGHT_PARAMS {
+            return Err(BehaviorCloningError::Training(format!(
+                "Model parameter count {} exceeds maximum supported {}",
+                total_params, MAX_WEIGHT_PARAMS
+            ))
+            .into());
+        }
+
+        Ok(())
+    }
+
     fn random_matrix(rows: usize, cols: usize) -> ndarray::Array2<f32> {
         use ndarray::Array2;
         let mut data = vec![0.0; rows * cols];
@@ -103,6 +161,39 @@ impl BehaviorCloningTrainer {
 
     fn relu(x: &ndarray::Array1<f32>) -> ndarray::Array1<f32> {
         x.mapv(|v| v.max(0.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dataset::{ContextActionPair, FlaggedSegmentDataset};
+
+    fn dataset_with_dims(context_dim: usize, action: u32) -> FlaggedSegmentDataset {
+        FlaggedSegmentDataset {
+            class: "cleric".to_string(),
+            pairs: vec![ContextActionPair {
+                context: vec![0.1; context_dim],
+                action,
+            }],
+            context_schema_version: "v3".to_string(),
+        }
+    }
+
+    #[test]
+    fn train_rejects_oversized_context_dimension() {
+        let trainer = BehaviorCloningTrainer::new(0.01, 1, 8);
+        let dataset = dataset_with_dims(MAX_CONTEXT_DIM + 1, 0);
+        let err = trainer.train(&dataset).unwrap_err().to_string();
+        assert!(err.contains("Context dimension"));
+    }
+
+    #[test]
+    fn train_rejects_oversized_action_space() {
+        let trainer = BehaviorCloningTrainer::new(0.01, 1, 8);
+        let dataset = dataset_with_dims(4, MAX_NUM_ACTIONS as u32);
+        let err = trainer.train(&dataset).unwrap_err().to_string();
+        assert!(err.contains("Action space"));
     }
 }
 
@@ -152,7 +243,11 @@ impl TrainedModel {
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx as u32)
-            .ok_or_else(|| anyhow::anyhow!(BehaviorCloningError::Training("No actions available".to_string())))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!(BehaviorCloningError::Training(
+                    "No actions available".to_string()
+                ))
+            })?;
 
         Ok(action)
     }
