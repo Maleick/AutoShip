@@ -74,7 +74,9 @@ is_worker_live() {
   [[ -s "$pid_file" ]] || return 0
   local pid
   local pid_re='^[0-9]+$'
+  set +u
   pid=$(tr -d '[:space:]' < "$pid_file")
+  set -u
   [[ "$pid" =~ $pid_re ]] || return 1
   kill -0 "$pid" 2>/dev/null
 }
