@@ -1,0 +1,16 @@
+id: combat.dps.generic.v1
+version: 1
+description: "Generic DPS reward: maximize encounter throughput + party survival"
+target_class: "*"
+target_camp: "*"
+terms:
+  - name: throughput
+    weight: +0.7
+    signal: encounter_throughput
+  - name: survival
+    weight: +0.2
+    signal: party_survival_time
+  - name: ban_risk
+    weight: -1.0
+    signal: antidetect.risk_score
+clamp: [-1.0, 1.0]

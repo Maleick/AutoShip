@@ -1,0 +1,19 @@
+id: combat.heal.cleric.v1
+version: 1
+description: "Cleric reward: emphasize party survival + efficient mana use"
+target_class: cleric
+target_camp: "*"
+terms:
+  - name: party_survival
+    weight: +0.6
+    signal: party_alive_fraction
+  - name: mana_efficiency
+    weight: +0.2
+    signal: mana_per_effective_heal
+  - name: overheal_penalty
+    weight: -0.1
+    signal: overheal_fraction
+  - name: ban_risk
+    weight: -1.0
+    signal: antidetect.risk_score
+clamp: [-1.0, 1.0]

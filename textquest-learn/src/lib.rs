@@ -3,6 +3,7 @@ pub mod bandits;
 pub mod evaluator;
 pub mod policy;
 pub mod py_trainer;
+pub mod reward;
 
 #[cfg(feature = "full")]
 pub mod bookmarks;

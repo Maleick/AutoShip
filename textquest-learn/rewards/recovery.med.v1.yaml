@@ -1,0 +1,13 @@
+id: recovery.med.v1
+version: 1
+description: "Recovery reward: minimize time to ready state after wipe"
+target_class: "*"
+target_camp: "*"
+terms:
+  - name: time_to_ready
+    weight: -0.9
+    signal: time_to_ready
+  - name: ban_risk
+    weight: -1.0
+    signal: antidetect.risk_score
+clamp: [-1.0, 1.0]

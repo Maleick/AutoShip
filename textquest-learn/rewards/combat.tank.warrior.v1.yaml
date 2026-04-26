@@ -1,0 +1,16 @@
+id: combat.tank.warrior.v1
+version: 1
+description: "Warrior reward: maximize aggro retention + mitigation"
+target_class: warrior
+target_camp: "*"
+terms:
+  - name: aggro_retention
+    weight: +0.6
+    signal: aggro_retention
+  - name: mitigation
+    weight: +0.3
+    signal: mitigation_ratio
+  - name: ban_risk
+    weight: -1.0
+    signal: antidetect.risk_score
+clamp: [-1.0, 1.0]

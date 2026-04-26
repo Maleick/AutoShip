@@ -1,0 +1,16 @@
+id: camp.throughput.v1
+version: 1
+description: "Camp reward: maximize kills per hour with downtime penalty"
+target_class: "*"
+target_camp: "*"
+terms:
+  - name: kills_per_hour
+    weight: +0.8
+    signal: kills_per_hour
+  - name: downtime_penalty
+    weight: -0.2
+    signal: downtime_penalty
+  - name: ban_risk
+    weight: -1.0
+    signal: antidetect.risk_score
+clamp: [-1.0, 1.0]
