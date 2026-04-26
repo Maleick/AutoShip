@@ -218,8 +218,12 @@ impl CanaryEvaluator {
             //   if delta < max_delta (more negative), fail.
             // For metrics where higher is worse (latency, ban-risk):
             //   if delta > max_delta (more positive), fail.
-            // Simplify: just check if absolute deviation exceeds budget magnitude.
-            if delta < budget.max_delta {
+            let exceeds_budget = match budget.metric {
+                MetricField::CommandLatency | MetricField::BanRisk => delta > budget.max_delta,
+                _ => delta < budget.max_delta,
+            };
+
+            if exceeds_budget {
                 failures.push(format!(
                     "Regression budget {:?}: delta={:.3} exceeds max={:.3}",
                     budget.metric, delta, budget.max_delta
@@ -439,6 +443,38 @@ mod tests {
         assert!(
             failures.iter().any(|f| f.contains("Regression budget")),
             "Should fail on regression budget violation"
+        );
+    }
+
+    /// Regression budget violation is detected for higher-is-worse metrics.
+    #[test]
+    fn test_regression_budget_violation_higher_is_worse_metric() {
+        let incumbent = ReplayMetrics {
+            encounter_throughput: 10.0,
+            party_survival_rate: 0.95,
+            command_latency_secs: 2.5,
+            ban_risk_score: 0.1,
+            operator_attribution_delta: 0.8,
+        };
+
+        let candidate = ReplayMetrics {
+            encounter_throughput: 12.0, // Wins on throughput
+            party_survival_rate: 0.96,
+            command_latency_secs: 2.8, // Regression beyond budget (+0.3)
+            ban_risk_score: 0.08,
+            operator_attribution_delta: 0.85,
+        };
+
+        let config = CanaryConfig::supervised(MetricField::EncounterThroughput)
+            .with_budget(MetricField::CommandLatency, 0.2); // Budget: +0.2s max
+
+        let evaluator = CanaryEvaluator::new(config);
+
+        let (decision, failures) = evaluator.evaluate(&incumbent, &candidate);
+        assert_eq!(decision, GatingDecision::Fail);
+        assert!(
+            failures.iter().any(|f| f.contains("Regression budget")),
+            "Should fail on regression budget violation for command latency"
         );
     }
 }
