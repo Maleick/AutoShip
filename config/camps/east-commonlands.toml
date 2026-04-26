@@ -1,0 +1,154 @@
+#==============================================================================
+# East Commonlands Primary Camp Configuration
+#==============================================================================
+# Issue: #3379 — Define East Commonlands safe spots, pull points, and 6-waypoint route
+# Parent: #1779
+#
+# Zone Context:
+# - East Commonlands (EC) is a classic starter/low-level outdoor zone on Antonica.
+# - Zone entry from West Commonlands at approximately (-1500, 0, 0) (west tunnel).
+# - Zone entry from Befallen dungeon at approximately (300, 800, 0) (south entrance).
+# - EC Tunnel (the player-driven bazaar/trading hub) is in the northeast corner.
+# - Primarily used for outdoor leveling 6-18; undead along the eastern wall at night.
+# - Mostly flat terrain; Z coordinate is 0 for the majority of the zone.
+# - Low risk for trained mobs; wide-open corridors allow safe FD and evac routes.
+# - No aggro during the day for most mobs unless approached; night spawns undead.
+#
+# SAFE SPOT NOTES:
+# - Primary safe med spot: just south of the EC Tunnel entrance wall.
+#   Coordinates approximately (-50, -1600, 0). NPCs do not aggro at this position.
+#   The tunnel corner provides natural line-of-sight blocking for pulled mobs.
+# - Fallback safe spot: West Commonlands tunnel mouth (-1480, 0, 0).
+#   Always accessible for emergency LoS reset or full group evac.
+# - Night-cycle evac fallback: Along the east wall north of Befallen entrance.
+#   Undead night-spawns do not roam into the main east road corridor.
+#
+# PULL POINT NOTES:
+# - Primary pull point: road fork near the central oasis pond (~20, -800, 0).
+#   Wide open approach; allows kite-resets and safe leash drops.
+# - Secondary pull point (named/orc camp extension): southwest orc camp road edge
+#   at approximately (-400, -600, 0). Used when camp shifts to orc-heavy pulls.
+# - Pull targets should be single or paired; zone social aggro is moderate.
+#   Always pull one at a time with FD-split or root-split technique.
+#
+# 6-WAYPOINT ROUTE (main road south-to-tunnel loop):
+# Waypoints traverse the central EC corridor from the Befallen side to EC Tunnel.
+# All Z coordinates are 0 (flat outdoor terrain). Confidence: map-derived.
+#
+#   WP1 — Camp Anchor / Med Point
+#         Coordinates: (-50, -1600, 0)
+#         Role: Safe med stack; behind EC Tunnel entrance wall.
+#         Notes: Zone-exit proximity gives fast evac if needed.
+#
+#   WP2 — Tunnel Exit Curve
+#         Coordinates: (-50, -1300, 0)
+#         Role: Initial pull approach; walking south away from EC Tunnel guards.
+#         Notes: Guards are faction-neutral at this position; stay moving.
+#
+#   WP3 — Road Mid-North
+#         Coordinates: (0, -900, 0)
+#         Role: First pull sector entry; road narrows toward oasis.
+#         Notes: Bandit camps visible to the west — do not widen pull radius here.
+#
+#   WP4 — Central Oasis Pull Handoff
+#         Coordinates: (20, -800, 0)
+#         Role: Primary pull point. Open ground; FD-split and kite resets work here.
+#         Notes: Undead only spawn east of this point at night; check time of day.
+#
+#   WP5 — Road Mid-South
+#         Coordinates: (-100, -500, 0)
+#         Role: Extension pull sector for orc/human camps; optional on slow nights.
+#         Notes: Befallen undead boundary begins ~200 units east; do not pull east.
+#
+#   WP6 — South Camp / Befallen Approach Gate
+#         Coordinates: (-200, -200, 0)
+#         Role: Hard southern boundary. Marks leash drop zone for bad pulls.
+#         Notes: Befallen entrance at ~(300, 800, 0) — do not advance past WP6.
+#
+# EARLY-CAMP PULL VALIDATION NOTES:
+# - This is a starter-zone config; validate pull behavior at level 6 before
+#   assuming pull mana thresholds are safe. Casters may need higher rest_mana_pct.
+# - Night undead spawns ("a spectral carrion", "a decaying skeleton") are higher
+#   level than day mobs. Do not extend pull radius east after dark without verifying
+#   group composition can handle level 16+ undead.
+# - Orc camps to the southwest can social-add 2-3 mobs if pulled near their spawn.
+#   Use the road and avoid pulling within 150 units of the orc camp at (-600, -500).
+# - Evac route: Druid/Wizard translocate to bind. Emergency FD behind tunnel wall.
+# - Schema note: Named waypoints and per-waypoint metadata are documented in
+#   comments (above) because textquest/src/camp/config.rs does not yet load
+#   structured waypoint arrays. See issue #1900 for planned schema expansion.
+
+name = "east-commonlands"
+zone = "eastcommonlands"
+
+# WP1: Safe med stack behind EC Tunnel entrance wall.
+camp_center = [-50.0, -1600.0, 0.0]
+
+# WP4: Central oasis road fork — primary pull handoff for single mobs.
+pull_point = [20.0, -800.0, 0.0]
+
+# Pull radius covers WP3–WP5 corridor; avoids orc camps to the southwest
+# and undead eastern boundary. Tuned for outdoor single-mob or paired pulls.
+pull_radius = 900
+
+# Tight camp radius; med stack stays behind tunnel wall out of pull paths.
+camp_radius = 40
+
+# Leash radius long enough to let bad pulls reset to WP5/WP6 before abandon,
+# but short enough to avoid dragging mobs into EC Tunnel or Befallen entrance.
+leash_radius = 1400
+
+# Conservative mana thresholds for starter-zone group (casters recovering early).
+# rest_mana_pct: 50% — outdoor pulls allow fast resets; healers can afford lower floor.
+# pull_mana_pct: 20% — only pull after bare minimum recovery.
+rest_mana_pct = 50
+pull_mana_pct = 20
+
+# Level range: EC road corridor. Lower bound 6 (post-newbie zone). Upper bound 18
+# covers both day orc/human mobs and night undead pulls.
+level_range = [6, 18]
+
+# Day pull targets: orcs, human bandits, and gnolls along the central road.
+pull_mob_names = [
+  "a gnoll",
+  "a gnoll pup",
+  "a carrion ghoul",
+  "a decaying skeleton",
+  "a mummy",
+  "a spectre",
+  "a spectral carrion",
+  "a darkbone skeleton",
+  "an orc",
+  "an orc pawn",
+  "an orc centurion",
+  "a dervish cutthroat",
+  "a plains lion",
+  "a black wolf",
+  "a large black bear",
+]
+
+# Named mobs, quest NPCs, and high-risk spawns to never engage.
+ignore_mob_names = [
+  "Tarbul Earthstrider",    # Level 22+ hill giant wanderer; summons
+  "a hill giant",           # Hard stop; much higher level than zone average
+  "Corn",                   # Named gnoll; summons and enrages
+  "Karn",                   # Named gnoll; summons and enrages
+  "The Bloodsaber King",    # Dark blue at 18 but social aggro chain
+  "a decaying ghoul",       # Night-only; only pull if group is 14+
+]
+
+# Burn on sight: named rare spawns with valuable drops for this level bracket.
+burn_mob_names = [
+  "a dervish master",       # Rare human named; occasional belt/ring drop
+  "a plains wanderer",      # Named gnoll; minor loot, easy kill at 12+
+]
+
+# Suppress snap-back while aggro active; EC is open terrain and a panicked
+# return path through the tunnel corner can agro EC Tunnel zone traffic.
+return_no_aggro = true
+
+# Progression chain.
+# prev_camp: Crescent Reach newbie yard (or equivalent newbie camp).
+# next_camp: Crushbone entrance when the group reaches level 8.
+prev_camp = "crescent_reach_undead"
+next_camp = "crushbone_entrance"
