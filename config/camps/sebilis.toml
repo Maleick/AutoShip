@@ -1,0 +1,202 @@
+#==============================================================================
+# Sebilis Main Camp Configuration
+#==============================================================================
+# Issue: #3358 — Define Sebilis safe spots, pull points, and 6-waypoint route
+# Parent: #1768 zone tracker
+#
+# Zone Context:
+# - Zone: Sebilis (Kunark era; access requires Trakanon Idol)
+# - Primary farming area: Lower Sebilis entry corridor (Level 45-50 bracket)
+# - Group minimum: 45, Recommended: 48+ (allow for resist variance, add risk)
+# - Survival setup: Cleric med anchor; warrior tank; ADPS rotation
+# - Coordinate system: EQ standard (X=east/west, Y=north/south, Z=up/down)
+#
+# Zone Entry:
+# - Zone-in from Field of Bone at approximately [-500.0, 1100.0, 3.0]
+# - Trakanon Idol required in inventory or keyring for zone entry
+#
+# SAFE SPOTS (documented here; runtime consumed from camp_center + pull_point):
+#
+#   safe_med_hall: [-750.0, 950.0, 0.0]
+#     Primary med stack. Entry hallway alcove south of zone-in corridor.
+#     Off the main roam path; line-of-sight blocked from deeper froglok spawns.
+#     Confidence: Derived from Sebilis entry map geometry and Project 1999 guides.
+#
+#   safe_evac_zoneline: [-500.0, 1070.0, 3.0]
+#     Emergency evac fallback near the zone-in line. Used when the med hall is
+#     compromised or a train approaches from the inner corridors.
+#     Confidence: High — direct pull-back to zone line.
+#
+# PULL POINTS:
+#
+#   pull_handoff_entry: [-680.0, 960.0, 0.0]
+#     Primary pull handoff. South edge of entry corridor.
+#     Keeps froglok bok and jin pulls inside the entry bracket without
+#     widening into inner-Sebilis or the chef/armorer social cluster.
+#
+#   pull_handoff_inner: [-820.0, 870.0, 0.0]
+#     Secondary handoff for inner-bracket extension (Level 48-50 group).
+#     Used when the entry spawns are cleared and the group is ready to push
+#     toward the Disco-1 boundary. Requires active driver to manage social chains.
+#
+# 6-WAYPOINT PATROL ROUTE (entry corridor loop):
+# This route covers the six primary spawn points in the Sebilis entry bracket.
+# Puller cycles through all six before returning to pull_handoff_entry for handoff.
+# Estimated cycle time: 3-4 minutes (6x ~20-35 second pulls + transit).
+#
+# Runtime schema gap: patrol_waypoints are not yet loaded from TOML (see issue #1900).
+# Defined here for documentation and future schema expansion.
+#
+# [[patrol_waypoints]]
+# label = "wp1_entry_alcove"
+# coords = [-680.0, 960.0, 0.0]
+# note = "First spawn pocket — froglok bok knights near zone-in alcove"
+#
+# [[patrol_waypoints]]
+# label = "wp2_south_corridor"
+# coords = [-720.0, 900.0, 0.0]
+# note = "South hallway spawn — froglok bok shamans and wizards"
+#
+# [[patrol_waypoints]]
+# label = "wp3_east_branch"
+# coords = [-760.0, 860.0, 0.0]
+# note = "East branch junction — froglok jin shaman mix; watch for roamers"
+#
+# [[patrol_waypoints]]
+# label = "wp4_inner_hall"
+# coords = [-800.0, 880.0, 0.0]
+# note = "Inner hallway — froglok jin wizard spawns; boundary of inner-Sebilis"
+#
+# [[patrol_waypoints]]
+# label = "wp5_west_alcove"
+# coords = [-790.0, 930.0, 0.0]
+# note = "West alcove — secondary froglok bok spawn; occasional pox scarab"
+#
+# [[patrol_waypoints]]
+# label = "wp6_return_corridor"
+# coords = [-730.0, 960.0, 0.0]
+# note = "Return path — check entry corridor for respawns before handoff"
+#
+# PULL RANGE VALUES:
+# pull_radius = 200 — covers entry bracket without reaching inner-Sebilis or
+#   the armorer/chef social cluster. Tuned conservatively for a new group.
+# camp_radius = 30  — tight stack in the med hall alcove.
+# leash_radius = 120 — drop bad pulls before they drag into the zone-in line.
+
+name = "sebilis"
+zone = "sebilis"
+
+#==============================================================================
+# Camp Layout
+#==============================================================================
+
+# Primary safe med spot: entry hallway alcove south of zone-in corridor.
+# Off the main roam path; keeps the 6-box stack away from froglok aggro lanes.
+camp_center = [-750.0, 950.0, 0.0]
+
+# Pull handoff: south edge of entry corridor.
+# Keeps entry-bracket pulls (froglok bok/jin) inside bounds without widening
+# into the inner-Sebilis social cluster (armorer, chef, Disco-1 boundary).
+pull_point = [-680.0, 960.0, 0.0]
+
+#==============================================================================
+# Pull Range Values
+#==============================================================================
+
+# Pull radius: 200 meters from pull_point.
+# Covers: froglok bok knights/shamans/wizards, froglok jin shamans/wizards,
+#   and pox scarabs in the entry corridor.
+# Excludes: inner-Sebilis (armorer, chef, Disco boundary), Trakanon approach.
+pull_radius = 200
+
+# Camp radius: 30 meters from camp_center.
+# Keeps the 6-box stack in the med hall alcove and off the main roam path.
+camp_radius = 30
+
+# Leash radius: 120 meters from camp_center.
+# Short leash to drop bad pulls before the zone-in line or inner-Sebilis
+# social cluster. Prevents chain-pulling cascades.
+leash_radius = 120
+
+#==============================================================================
+# Mana Thresholds
+#==============================================================================
+
+# rest_mana_pct: 65%
+# Stop pulling when mana drops below this threshold. Entry-bracket frogloks
+# can spike damage during multi-pulls; cleric/shaman need recovery buffer.
+rest_mana_pct = 65
+
+# pull_mana_pct: 35%
+# Do not initiate a new pull below this floor. Provides safety margin for
+# mid-pull heals and emergency rotations in the entry corridor.
+pull_mana_pct = 35
+
+#==============================================================================
+# Level Range
+#==============================================================================
+
+# [45, 50]: Entry-bracket Sebilis (zone-in corridor and immediate approach).
+# - 45: Soft minimum; froglok bok knights hit hard for undergeared groups.
+# - 50: Upper bound; transition to Disco-1 route (sebilis_disco camp config).
+# - Variance: Allow +/- 1 level for group composition tolerance.
+level_range = [45, 50]
+
+#==============================================================================
+# Pull Targets: Entry-Bracket Frogloks and Scarabs
+#==============================================================================
+
+pull_mob_names = [
+  "a froglok bok knight",
+  "a froglok bok shaman",
+  "a froglok bok wizard",
+  "a froglok jin shaman",
+  "a froglok jin wizard",
+  "a pox scarab",
+  "a leprous scarab",
+]
+
+#==============================================================================
+# Protected Mobs: Do Not Pull
+#==============================================================================
+
+ignore_mob_names = [
+  "Trakanon",
+  "sebilite protector",
+  "sebilite juggernaut",
+  "myconid spore king",
+  "froglok armorer",
+  "froglok chef",
+  "froglok bartender",
+  "sebilite golem",  # Patrol-only; avoid until group is ready for Disco bracket
+]
+
+#==============================================================================
+# Burn List: Named Rare Spawns
+#==============================================================================
+
+burn_mob_names = [
+  "a necrosis scarab",    # Rare scarab variant; burn on sight
+  "froglok ostiary",      # Named froglok; high-value drop potential
+  "sebilite guardian",    # Named mob; appears in the entry bracket
+]
+
+#==============================================================================
+# Return Behavior
+#==============================================================================
+
+# Prevent return-to-camp while carrying live froglok aggro.
+# Entry corridor is narrow; a returning puller with hot mobs easily wipes
+# the med stack or drags into the zone-in line.
+return_no_aggro = true
+
+#==============================================================================
+# Progression Chain
+#==============================================================================
+
+# Transition to the Disco-1 route once the group is 50+ and ready for the
+# right-wing corridor loop (higher density, harder mobs, better XP).
+next_camp = "sebilis_disco"
+
+# Fall back to Lower Guk Dead Side if the group is undergeared or below 45.
+prev_camp = "lguk_dead_side"
