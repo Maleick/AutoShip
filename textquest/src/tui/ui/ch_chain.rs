@@ -6,7 +6,7 @@
 use crate::tui::{
     cast::CastDisplay,
     theme::Theme,
-    ui::widgets::{cast_state_color, render_cast_bar, truncate_inline},
+    ui::widgets::{render_cast_bar, truncate_inline},
 };
 use ratatui::{
     buffer::Buffer,
