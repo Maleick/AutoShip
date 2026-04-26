@@ -2,11 +2,10 @@ use async_trait::async_trait;
 use regex::Regex;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use std::{
     collections::{HashSet, VecDeque},
-    env,
-    fs,
+    env, fs,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::Duration,
@@ -20,6 +19,7 @@ pub const DEFAULT_ANTHROPIC_ENDPOINT: &str = "https://api.anthropic.com/v1/messa
 pub const DEFAULT_ANTHROPIC_MODEL: &str = "claude-haiku-4-5";
 pub const DEFAULT_LLAMA_ENDPOINT: &str = "http://127.0.0.1:8080/v1/chat/completions";
 pub const DEFAULT_LLAMA_MODEL: &str = "llama-3.1-8b";
+pub const DEFAULT_HTTP_TIMEOUT_SECONDS: u64 = 10;
 pub const DEBRIEF_TOOL_NAME: &str = "emit_debrief";
 pub const DEBRIEF_GBNF: &str = r#"
 root ::= object
@@ -139,7 +139,7 @@ pub struct AnthropicConfig {
     pub max_tokens: u32,
     #[serde(default = "default_true")]
     pub prompt_cache: bool,
-    #[serde(default)]
+    #[serde(default = "default_timeout_seconds")]
     pub timeout_seconds: Option<u64>,
 }
 
@@ -151,7 +151,7 @@ impl Default for AnthropicConfig {
             api_key: None,
             max_tokens: default_anthropic_max_tokens(),
             prompt_cache: true,
-            timeout_seconds: None,
+            timeout_seconds: default_timeout_seconds(),
         }
     }
 }
@@ -166,7 +166,7 @@ pub struct LlamaCppConfig {
     pub max_tokens: u32,
     #[serde(default)]
     pub temperature: f32,
-    #[serde(default)]
+    #[serde(default = "default_timeout_seconds")]
     pub timeout_seconds: Option<u64>,
     #[serde(default)]
     pub parallel_slots: Option<u32>,
@@ -179,7 +179,7 @@ impl Default for LlamaCppConfig {
             model: default_llama_model(),
             max_tokens: default_llama_max_tokens(),
             temperature: 0.0,
-            timeout_seconds: None,
+            timeout_seconds: default_timeout_seconds(),
             parallel_slots: None,
         }
     }
@@ -336,7 +336,12 @@ impl AnthropicBackend {
         })
     }
 
-    fn request_payload(&self, facts: &SessionDebrief, ch: &Character, strict: bool) -> Result<AnthropicRequest, Error> {
+    fn request_payload(
+        &self,
+        facts: &SessionDebrief,
+        ch: &Character,
+        strict: bool,
+    ) -> Result<AnthropicRequest, Error> {
         let prompt = build_prompt(facts, ch, strict)?;
         let system = vec![SystemBlock {
             kind: "text".to_string(),
@@ -386,7 +391,12 @@ impl LlamaCppBackend {
         })
     }
 
-    fn request_payload(&self, facts: &SessionDebrief, ch: &Character, strict: bool) -> Result<LlamaRequest, Error> {
+    fn request_payload(
+        &self,
+        facts: &SessionDebrief,
+        ch: &Character,
+        strict: bool,
+    ) -> Result<LlamaRequest, Error> {
         let prompt = build_prompt(facts, ch, strict)?;
         Ok(LlamaRequest {
             model: self.model.clone(),
@@ -412,8 +422,12 @@ impl LlamaCppBackend {
 impl ConfiguredBackend {
     pub fn from_config(config: LlmConfig) -> Result<Self, Error> {
         match config.backend {
-            BackendSelection::Anthropic => AnthropicBackend::new(config.anthropic).map(Self::Anthropic),
-            BackendSelection::LlamaCpp => LlamaCppBackend::new(config.llama_cpp).map(Self::LlamaCpp),
+            BackendSelection::Anthropic => {
+                AnthropicBackend::new(config.anthropic).map(Self::Anthropic)
+            }
+            BackendSelection::LlamaCpp => {
+                LlamaCppBackend::new(config.llama_cpp).map(Self::LlamaCpp)
+            }
         }
     }
 }
@@ -638,12 +652,7 @@ fn parse_anthropic_response(
     tool_name: &str,
 ) -> Result<DebriefRaw, Error> {
     for block in response.content {
-        if block.kind == "tool_use"
-            && block
-                .name
-                .as_deref()
-                .is_none_or(|name| name == tool_name)
-        {
+        if block.kind == "tool_use" && block.name.as_deref().is_none_or(|name| name == tool_name) {
             if let Some(input) = block.input {
                 return Ok(serde_json::from_value(input)?);
             }
@@ -758,7 +767,12 @@ fn validate_numbers(raw: &DebriefRaw, facts: &SessionDebrief) -> Result<(), Erro
 fn validate_event_ids(raw: &DebriefRaw, facts: &SessionDebrief) -> Result<(), Error> {
     match &raw.highlight_event_id {
         None => Ok(()),
-        Some(event_id) if facts.notable_event_ids.iter().any(|candidate| candidate == event_id) => {
+        Some(event_id)
+            if facts
+                .notable_event_ids
+                .iter()
+                .any(|candidate| candidate == event_id) =>
+        {
             Ok(())
         }
         Some(event_id) => Err(Error::Validation(format!(
@@ -801,7 +815,11 @@ fn number_regex() -> &'static Regex {
 fn canonical_number_token(token: &str) -> String {
     let mut value = token.replace(',', "");
     let lower = value.to_ascii_lowercase();
-    let suffix_len = if lower.ends_with("st") || lower.ends_with("nd") || lower.ends_with("rd") || lower.ends_with("th") {
+    let suffix_len = if lower.ends_with("st")
+        || lower.ends_with("nd")
+        || lower.ends_with("rd")
+        || lower.ends_with("th")
+    {
         2
     } else {
         0
@@ -858,10 +876,7 @@ fn normalize_tool_name(tool: &str) -> Result<NormalizedToolName<'_>, Error> {
         if base != DEBRIEF_TOOL_NAME {
             return Err(Error::UnsupportedBackend(tool.to_string()));
         }
-        return Ok(NormalizedToolName {
-            base,
-            strict: true,
-        });
+        return Ok(NormalizedToolName { base, strict: true });
     }
 
     if tool != DEBRIEF_TOOL_NAME {
@@ -902,6 +917,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_timeout_seconds() -> Option<u64> {
+    Some(DEFAULT_HTTP_TIMEOUT_SECONDS)
+}
+
 fn resolve_anthropic_api_key() -> Option<String> {
     env::var("ANTHROPIC_API_KEY")
         .ok()
@@ -909,10 +928,8 @@ fn resolve_anthropic_api_key() -> Option<String> {
 }
 
 fn build_client(timeout_seconds: Option<u64>) -> Result<Client, Error> {
-    let mut builder = Client::builder();
-    if let Some(timeout_seconds) = timeout_seconds {
-        builder = builder.timeout(Duration::from_secs(timeout_seconds));
-    }
+    let timeout_seconds = timeout_seconds.unwrap_or(DEFAULT_HTTP_TIMEOUT_SECONDS);
+    let builder = Client::builder().timeout(Duration::from_secs(timeout_seconds));
     Ok(builder.build()?)
 }
 
@@ -1002,8 +1019,8 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use wiremock::{
-        matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
     };
 
     fn fixture_character() -> Character {
@@ -1012,7 +1029,10 @@ mod tests {
             level: 60,
             class: "cleric".to_string(),
             voice_profile: "measured, devotional, dry wit".to_string(),
-            speech_style: vec!["short sentences".to_string(), "battlefield calm".to_string()],
+            speech_style: vec![
+                "short sentences".to_string(),
+                "battlefield calm".to_string(),
+            ],
         }
     }
 
@@ -1047,6 +1067,18 @@ mod tests {
                 line: "Good footing on that hallway hold.".to_string(),
             }],
         }
+    }
+
+    #[test]
+    fn backend_config_defaults_set_request_timeout() {
+        assert_eq!(
+            AnthropicConfig::default().timeout_seconds,
+            Some(DEFAULT_HTTP_TIMEOUT_SECONDS)
+        );
+        assert_eq!(
+            LlamaCppConfig::default().timeout_seconds,
+            Some(DEFAULT_HTTP_TIMEOUT_SECONDS)
+        );
     }
 
     #[tokio::test]
@@ -1129,7 +1161,9 @@ mod tests {
         let ch = fixture_character();
         let backend = ScriptedBackend::new(vec![
             Ok(DebriefRaw {
-                narrative: "I kept the pull to 4 mobs and 99 gold while Borin and Mira held the line.".to_string(),
+                narrative:
+                    "I kept the pull to 4 mobs and 99 gold while Borin and Mira held the line."
+                        .to_string(),
                 highlight_event_id: Some("evt-1".to_string()),
                 lessons: vec!["Hold the corner".to_string()],
                 mood_delta: MoodDelta::Improved,
@@ -1139,7 +1173,9 @@ mod tests {
                 }],
             }),
             Ok(DebriefRaw {
-                narrative: "I kept the pull to 4 mobs and 99 gold while Borin and Mira held the line.".to_string(),
+                narrative:
+                    "I kept the pull to 4 mobs and 99 gold while Borin and Mira held the line."
+                        .to_string(),
                 highlight_event_id: Some("evt-1".to_string()),
                 lessons: vec!["Hold the corner".to_string()],
                 mood_delta: MoodDelta::Improved,
