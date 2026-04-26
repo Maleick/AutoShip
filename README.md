@@ -253,6 +253,8 @@ Full milestone spec + evidence rules: [`docs/implementation-roadmap.md`](docs/im
 - **Command reference**: [`docs/wiki/Command-Reference.md`](docs/wiki/Command-Reference.md)
 - **Architecture overview**: [`docs/wiki/Architecture-Overview.md`](docs/wiki/Architecture-Overview.md)
 - **Troubleshooting**: [`docs/wiki/Troubleshooting.md`](docs/wiki/Troubleshooting.md)
+- **Farming & leveling guides**: [`docs/wiki/farming/`](docs/wiki/farming/)
+- **Architecture decisions**: [`docs/adr/`](docs/adr/) · [`docs/architecture/`](docs/architecture/)
 
 ## Requirements
 

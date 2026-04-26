@@ -31,6 +31,17 @@
 - [Window Management and HUD Integration](Window-Management-and-HUD-Integration)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
 
+### Farming & Leveling
+
+- [Plane of Innovation](farming/Plane-of-Innovation)
+- [Leveling Guide (1–65)](farming/prelaunch-leveling-guide)
+- [Leveling 1–30](farming/prelaunch-leveling-1-30)
+- [Leveling 30–60](farming/prelaunch-leveling-30-60)
+- [Leveling 60–65](farming/prelaunch-leveling-60-65)
+- [Charm Leveling](farming/prelaunch-charm-leveling)
+- [DPS Benchmark](farming/prelaunch-dps-benchmark)
+- [Pre-Launch Automation Validation](farming/prelaunch-automation-validation)
+
 ## Development
 
 - [Architecture Overview](Architecture-Overview)
@@ -86,7 +97,6 @@
 - [Sleeper's Tomb Keying](Research-Sleepers-Tomb-Keying)
 - [Syscall Evasion](Research-Syscall-Evasion)
 - [Test Server Leveling Paths](Research-Test-Server-Leveling-Paths)
-- [TUI Map Navmesh Audit](Research-TUI-Map-Navmesh-Audit)
 - [TUI Map Polish](Research-TUI-Map-Polish)
 - [Velious Class Synergy](Research-Velious-Class-Synergy)
 - [VNC](Research-VNC)

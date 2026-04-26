@@ -396,7 +396,7 @@ target = "self"
 
 ## RGMercs Comparison & Design Review
 
-For a detailed analysis of how TextQuest's approach differs from the industry-standard RGMercs (Lua-based) clickies module, see **[CLICKIES_RGMERCS_REVIEW.md](CLICKIES_RGMERCS_REVIEW.md)**.
+For a detailed analysis of how TextQuest's approach differs from the industry-standard RGMercs (Lua-based) clickies module, see **[rgmercs-review.md](rgmercs-review.md)**.
 
 This review includes:
 - Key functions and logic from rgmercs clickies.lua
