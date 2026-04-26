@@ -2,6 +2,8 @@
 
 Guidelines for writing, naming, and maintaining tests across the four workspace crates (`textquest`, `textquest-common`, `textquest-dll`, `textquest-web`). This page consolidates testing conventions, organization patterns, and platform-specific test practices.
 
+> **For comprehensive testing, quality, and polish standards**, see [Testing, Quality & Polish Standards](testing-quality-standards.md). This document covers the tactical conventions; that document covers the strategic quality gates, milestone standards, and acceptance criteria for all issue types.
+
 ---
 
 ## Test Naming Conventions

@@ -1,13 +1,35 @@
-# Result: #2483 — web(config-ui): full WCAG 2.1 AA accessibility audit + keyboard nav
+# Result: #1184 — Standard: Testing, Quality, Polish & Unit Tests
 
-## Updated files
-- `textquest-web/frontend/src/components/SortableList.tsx`
-- `textquest-web/frontend/src/pages/Sessions.tsx`
-- `textquest-web/frontend/src/App.tsx`
+## Status: DONE
+
+## Changes Made
+
+- **File**: `docs/dev/testing-quality-standards.md` (created)
+  - Comprehensive testing, quality, and polish standards document
+  - Covers research, implementation, validation, and documentation issue types
+  - Includes unit test templates, code quality standards, coverage requirements
+  - Defines quality gates for each phase and milestone
+  - Provides developer onboarding workflow
+  - Success metrics and overall measurement criteria
+  - 550+ lines of structured, actionable guidance
+
+- **File**: `docs/dev/testing.md` (updated)
+  - Added cross-reference link to comprehensive standards document
+  - Clarified relationship between tactical conventions and strategic quality gates
+
+## Tests
+
+- **Command**: `python3 scripts/dev-preflight.py`
+- **Result**: PASS (docs-only issue, no code changes, no executable artifacts)
 
 ## Notes
-- Added reorder accessibility guidance to sortable drag handles, including on-focus instructions and list-level keyboard guidance for Space/Arrow key reordering.
-- Added screen-reader context for sessions bulk actions and made command results a polite live region for announcement.
-- Added a global skip link and a `:focus-visible` rule set in the app shell to improve keyboard navigation across pages.
-- Contrast check: magenta (`#cc44ff`) on panel background (`#1a0a2e`) remains compliant at ~5.18:1 (WCAG AA pass).
-- `cargo check` failed due existing unrelated Rust errors in `textquest-dll`/`textquest/nav` unrelated to this issue.
+
+This issue consolidates comprehensive testing and quality standards from the GitHub issue template into published documentation. The new `testing-quality-standards.md` file:
+
+1. Provides a single source of truth for quality expectations across all issue types
+2. Aligns with existing TextQuest testing conventions documented in `testing.md`, `unit-test-template.md`, and `polish-standards.md`
+3. Integrates coverage requirements from `coverage-policy.md`
+4. Establishes clear quality gates tied to development milestones
+5. Includes practical developer onboarding workflow and success metrics
+
+The document is ready for use in PR templates, issue acceptance criteria, and code review checklists.
