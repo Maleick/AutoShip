@@ -596,9 +596,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -638,9 +635,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -671,9 +665,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -705,9 +696,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert!(shaman.should_assist(&ctx));
     }
@@ -744,9 +732,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
     }
@@ -774,9 +759,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert_eq!(shaman.select_target(&ctx), Some(99));
     }
@@ -834,9 +816,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
     }
@@ -880,9 +859,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Turgur's Insects");
@@ -953,9 +929,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Radiant Cure");
@@ -987,9 +960,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         shaman.on_engage(&ctx);
         assert!(!shaman.target_slowed);
@@ -1021,9 +991,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         shaman.on_engage(&ctx);
         assert!(shaman.target_slowed);
@@ -1049,9 +1016,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert!(shaman.select_spell(&ctx).is_none());
     }
@@ -1085,9 +1049,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         shaman.on_engage(&ctx);
@@ -1173,9 +1134,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         shaman.on_cast_outcome(&ctx, 4, CastResult::Success);
@@ -1225,9 +1183,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Kragg's Mending");
@@ -1265,9 +1220,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Cannibalize IV");
@@ -1316,9 +1268,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         assert!(shaman.select_spell(&ctx).is_none());

@@ -652,16 +652,19 @@ fn parse_anthropic_response(
     tool_name: &str,
 ) -> Result<DebriefRaw, Error> {
     for block in response.content {
-        if block.kind == "tool_use" && block.name.as_deref().is_none_or(|name| name == tool_name)
-            && let Some(input) = block.input {
+        if block.kind == "tool_use" && block.name.as_deref().is_none_or(|name| name == tool_name) {
+            if let Some(input) = block.input {
                 return Ok(serde_json::from_value(input)?);
             }
+        }
 
-        if block.kind == "text"
-            && let Some(text) = block.text
-                && let Ok(raw) = serde_json::from_str::<DebriefRaw>(&text) {
+        if block.kind == "text" {
+            if let Some(text) = block.text {
+                if let Ok(raw) = serde_json::from_str::<DebriefRaw>(&text) {
                     return Ok(raw);
                 }
+            }
+        }
     }
 
     Err(Error::MissingField("anthropic tool_use payload"))
@@ -678,10 +681,11 @@ fn parse_llama_response(response: LlamaResponse) -> Result<DebriefRaw, Error> {
         return Ok(serde_json::from_str(&content)?);
     }
 
-    if let Some(tool_calls) = choice.message.tool_calls
-        && let Some(tool_call) = tool_calls.into_iter().next() {
+    if let Some(tool_calls) = choice.message.tool_calls {
+        if let Some(tool_call) = tool_calls.into_iter().next() {
             return Ok(serde_json::from_str(&tool_call.function.arguments)?);
         }
+    }
 
     Err(Error::MissingField("llama response content"))
 }

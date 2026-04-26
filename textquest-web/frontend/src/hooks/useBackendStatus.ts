@@ -11,11 +11,7 @@ export function useBackendStatus(pollMs = 15000): BackendStatus {
       try {
         const res = await fetch("/api/health", { credentials: "include" });
         if (!cancelled) setStatus(res.ok ? "online" : "offline");
-      } catch (err) {
-        // Network failure: keep status visible to operators via console so
-        // intermittent connectivity issues are debuggable. The hook's caller
-        // sees "offline" and can render its own UI.
-        console.warn("[useBackendStatus] /api/health fetch failed:", err);
+      } catch {
         if (!cancelled) setStatus("offline");
       }
     };

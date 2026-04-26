@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn store_and_load_beta_binomial() -> Result<()> {
         let store = PosteriorStore::open_memory()?;
-        let posterior = BetaBinomial::with_prior(10.0, 5.0);
+        let mut posterior = BetaBinomial::with_prior(10.0, 5.0);
 
         store.save_beta_binomial("test_char", "heal_landing", &posterior)?;
         let loaded = store.load_beta_binomial("test_char", "heal_landing")?;

@@ -772,7 +772,15 @@ fn validate_setting_value(
     Ok(())
 }
 
-use crate::error::json_error;
+fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
+    (
+        status,
+        Json(json!({
+            "error": message.into(),
+        })),
+    )
+        .into_response()
+}
 
 fn load_store(path: &Path) -> Result<PersistedCatalogStore, String> {
     if !path.exists() {

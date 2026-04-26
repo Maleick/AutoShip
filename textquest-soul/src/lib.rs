@@ -64,3 +64,4 @@ pub mod heuristics;
 pub mod zone_classifier;
 /// Zone metadata and environment-aware idle constraints.
 pub mod zones;
+pub mod debrief_aggregator;

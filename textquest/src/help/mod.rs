@@ -365,15 +365,15 @@ impl HelpDatabase {
         self.command_index.insert(primary, index);
         for alias in &command.aliases {
             let alias_key = normalize_key(alias);
-            if let std::collections::hash_map::Entry::Vacant(e) = self.command_index.entry(alias_key) {
-                e.insert(index);
-            } else {
+            if self.command_index.contains_key(&alias_key) {
                 warn!(
                     source = %source.display(),
                     alias = %alias,
                     command = %command.name,
                     "help: duplicate command alias ignored"
                 );
+            } else {
+                self.command_index.insert(alias_key, index);
             }
         }
         search::index_command(&mut self.command_search_index, index, &command);

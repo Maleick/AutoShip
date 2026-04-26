@@ -375,6 +375,10 @@ pub struct AppConfig {
     #[cfg(windows)]
     #[serde(default)]
     pub session_recorder: crate::metrics::SessionRecorderConfig,
+
+    /// Self-improvement and suggestion engine configuration.
+    #[serde(default)]
+    pub improve: ImprovementConfig,
 }
 
 /// Kill tracker auto-reporting configuration.

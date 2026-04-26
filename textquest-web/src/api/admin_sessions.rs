@@ -15,7 +15,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use textquest_common::api_types::ErrorResponse;
 
 use crate::AppState;
 
@@ -38,6 +37,12 @@ pub struct SessionLifecycleResponse {
     pub operation: String,
     /// Human-readable status message.
     pub message: String,
+}
+
+/// Error response for failed operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorResponse {
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,7 +79,14 @@ pub struct ConfigOpResponse {
     pub message: String,
 }
 
-use crate::error::json_error_pair as json_error;
+fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        status,
+        Json(ErrorResponse {
+            error: message.into(),
+        }),
+    )
+}
 
 // ─── Session Lifecycle Handlers ────────────────────────────────────────────────
 

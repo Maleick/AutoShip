@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use rusqlite::Connection;
+use std::path::PathBuf;
 
 /// Migration metadata
 #[derive(Debug, Clone)]
@@ -19,12 +20,12 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
         name: "init_schema",
-        sql: include_str!("../../../migrations/sessions/001_init_schema.sql"),
+        sql: include_str!("../../migrations/sessions/001_init_schema.sql"),
     },
     Migration {
         version: 2,
         name: "retention_helpers",
-        sql: include_str!("../../../migrations/sessions/002_retention_helpers.sql"),
+        sql: include_str!("../../migrations/sessions/002_retention_helpers.sql"),
     },
 ];
 
@@ -75,7 +76,7 @@ impl MigrationRunner {
 
     /// Apply all pending migrations
     pub fn apply_pending(&self) -> Result<()> {
-        let _conn = unsafe { &*self.conn };
+        let conn = unsafe { &*self.conn };
         self.ensure_schema_versions_table()?;
 
         let current = self.current_version()?;
@@ -94,10 +95,8 @@ impl MigrationRunner {
     fn apply_migration(&self, migration: &Migration) -> Result<()> {
         let conn = unsafe { &*self.conn };
 
-        // Wrap migration in transaction for atomicity. `unchecked_transaction`
-        // is required because rusqlite's safe `Connection::transaction()` takes
-        // `&mut self`, but we hold `&Connection` here intentionally.
-        let tx = conn.unchecked_transaction()?;
+        // Wrap migration in transaction for atomicity
+        let tx = conn.transaction()?;
 
         // Execute migration SQL
         tx.execute_batch(migration.sql)

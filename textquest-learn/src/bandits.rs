@@ -63,7 +63,7 @@ impl EpsilonGreedyBandit {
         let n_arms = arm_labels.len();
         assert!(n_arms > 0, "must have at least one arm");
         assert!(
-            (0.0..=1.0).contains(&epsilon),
+            epsilon >= 0.0 && epsilon <= 1.0,
             "epsilon must be in [0, 1]"
         );
         Self {

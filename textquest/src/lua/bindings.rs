@@ -2201,7 +2201,7 @@ textquest.execute_command("/stand")
                     is_gm: false,
                 },
             ];
-            state.target = state.spawns.first().cloned();
+            state.target = state.spawns.get(0).cloned();
             state.xtargets = vec![textquest_common::types::SpawnData {
                 spawn_id: 3,
                 name: "XTarget".to_string(),

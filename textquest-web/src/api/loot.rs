@@ -639,8 +639,8 @@ pub async fn put_inventory_utility(
 mod tests {
     use super::*;
     use crate::AppState;
-    
-    
+    use textquest::alerts::AlertStore;
+    use textquest::config::AlertingConfig;
 
     fn test_config_path() -> std::path::PathBuf {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -984,8 +984,74 @@ mod tests {
         std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o555))
             .expect("mark readonly");
 
-        let _path = read_only_dir.join("item-score.toml");
-        let state = crate::test_support::demo_app_state();
+        let path = read_only_dir.join("item-score.toml");
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel(1).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+            tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
+            character_config_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-character-configs.json",
+            ),
+            character_config_write_lock: tokio::sync::Mutex::new(()),
+            chat_log_write_lock: tokio::sync::Mutex::new(()),
+            auto_group_settings: tokio::sync::RwLock::new(
+                textquest_common::auto_group::AutoGroupSettings::default(),
+            ),
+            loot_state: LootState::new_with_item_score_path(path),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(crate::api::PlayerWatchConfig::default()),
+            player_watch_write_lock: tokio::sync::Mutex::new(()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            vendor_watch_state: crate::api::vendor_watch::VendorWatchState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            timestamp_config_write_lock: tokio::sync::Mutex::new(()),
+            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_empty(),
+            alert_store: AlertStore::open_memory().expect("alert store"),
+            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
+            alerting_config_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-alerting.toml",
+            ),
+            auto_group_config_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-auto-group.toml",
+            ),
+            api_token: None,
+            auth_disabled: true, // Tests bypass auth
+            live_session_snapshot_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-live-sessions.json",
+            ),
+            admin_session_snapshot_path: crate::test_support::test_admin_session_snapshot_path(
+                "loot-test-admin-sessions.json",
+            ),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
+            say_detection: Some(Arc::new(
+                crate::api::say_detection::SayDetectionState::new_demo(),
+            )),
+            inventory_utility_parity: tokio::sync::RwLock::new(
+                textquest_common::inventory_utility::InventoryUtilityConfig::default(),
+            ),
+            inventory_utility_parity_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-inventory-utility.json",
+            ),
+            inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
+            session_controls: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            auto_group_state: crate::api::auto_group::AutoGroupState::new_demo(),
+            extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
+                std::env::temp_dir().join(format!(
+                    "textquest-loot-test-extension-catalog-{}.json",
+                    uuid::Uuid::new_v4()
+                )),
+            ),
+            session_logs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            session_control_state: crate::api::session_control::SessionControlState::new(),
+        });
 
         let original = get_item_score(State(state.clone())).await.0;
         let mut payload = ItemScoreConfigPayload {

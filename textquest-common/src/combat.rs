@@ -607,7 +607,7 @@ pub fn summarize_debuff_effects(spell_ids: impl IntoIterator<Item = i32>) -> Deb
         }
         if summary
             .top_priority
-            .is_none_or(|current| effect.priority < current.priority)
+            .map_or(true, |current| effect.priority < current.priority)
         {
             summary.top_priority = Some(effect);
         }
@@ -777,8 +777,6 @@ pub enum ConditionExpr {
     TargetLevelBelow(u8),
     /// Player has a piercing weapon equipped in their primary slot.
     PiercerEquipped,
-    /// Player currently has a stealth effect active.
-    PlayerIsStealthed,
 }
 
 /// Positional data for the player relative to their current target.
@@ -796,8 +794,6 @@ pub struct PositionalContext {
     pub piercer_equipped: bool,
     /// Level of the current target (0 = unknown/no target).
     pub target_level: u8,
-    /// Whether the player currently has a stealth effect active.
-    pub is_stealthed: bool,
 }
 
 /// An emergency reaction rule that fires when conditions are met.
@@ -1301,9 +1297,7 @@ pub enum BurnState {
 
 /// EQ expansion/era for ability versioning — ensures abilities resolve on TLP servers.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[derive(Default)]
 pub enum EQExpansion {
-    #[default]
     Classic,
     Kunark,
     Velious,
@@ -1332,6 +1326,11 @@ pub enum EQExpansion {
     NoV,
 }
 
+impl Default for EQExpansion {
+    fn default() -> Self {
+        Self::Classic
+    }
+}
 
 // ── Ability Resolution (AbilitySets) ────────────────────────────────────────
 

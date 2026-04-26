@@ -157,17 +157,20 @@ impl Default for AutoCampConfig {
 /// Which player zone transitions Paranoid should report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[derive(Default)]
 pub enum ParanoidFilter {
     /// Alert on any PC zoning in or out.
     All,
     /// Alert only on strangers (not on the trust list).
-    #[default]
     Strangers,
     /// Alert only on trusted friends.
     Friends,
 }
 
+impl Default for ParanoidFilter {
+    fn default() -> Self {
+        Self::Strangers
+    }
+}
 
 /// Configuration for MQ2Paranoid — alert when PCs zone in/out.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

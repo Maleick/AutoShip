@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
-    io::{Cursor, Read, Write},
+    io::{self, Cursor, Read, Write},
     path::{Component, Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -54,9 +54,7 @@ const STREAM_ORDER: [&str; 5] = [
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[derive(Default)]
 pub enum ReplayTier {
-    #[default]
     Hot,
     Warm,
     Cold,
@@ -77,6 +75,11 @@ impl ReplayTier {
     }
 }
 
+impl Default for ReplayTier {
+    fn default() -> Self {
+        Self::Hot
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReplayMeta {
@@ -258,31 +261,31 @@ pub fn write_bundle(dir: impl AsRef<Path>, bundle: &mut ReplayBundle) -> Result<
     bundle.update_hashes();
 
     write_stream(
-        dir.join(GAME_STATE_FILE),
+        &dir.join(GAME_STATE_FILE),
         &bundle.streams.game_state,
         bundle.meta.tier.zstd_level(),
         compression_dictionary,
     )?;
     write_stream(
-        dir.join(EVENTS_FILE),
+        &dir.join(EVENTS_FILE),
         &bundle.streams.events,
         bundle.meta.tier.zstd_level(),
         compression_dictionary,
     )?;
     write_stream(
-        dir.join(OPERATOR_FILE),
+        &dir.join(OPERATOR_FILE),
         &bundle.streams.operator,
         bundle.meta.tier.zstd_level(),
         compression_dictionary,
     )?;
     write_stream(
-        dir.join(ORCHESTRATOR_FILE),
+        &dir.join(ORCHESTRATOR_FILE),
         &bundle.streams.orchestrator,
         bundle.meta.tier.zstd_level(),
         compression_dictionary,
     )?;
     write_stream(
-        dir.join(TUI_CAST_FILE),
+        &dir.join(TUI_CAST_FILE),
         &bundle.streams.tui_cast,
         bundle.meta.tier.zstd_level(),
         compression_dictionary,
@@ -609,8 +612,7 @@ pub fn import_tqreplay(
 
         let entry_path = entry
             .path()
-            .context("failed to read replay export entry path")?
-            .into_owned();
+            .context("failed to read replay export entry path")?;
         if entry_path.is_absolute()
             || entry_path
                 .components()
@@ -770,10 +772,11 @@ fn ndjson_second(line: &str) -> Option<i64> {
         if let Ok(second) = text.parse::<i64>() {
             return Some(second);
         }
-        if let Some((seconds, _fraction)) = text.split_once('.')
-            && let Ok(second) = seconds.parse::<i64>() {
+        if let Some((seconds, _fraction)) = text.split_once('.') {
+            if let Ok(second) = seconds.parse::<i64>() {
                 return Some(second);
             }
+        }
     }
     None
 }
@@ -903,7 +906,6 @@ mod tests {
         let meta = compact_bundle(&bundle_dir).expect("compact");
         assert_eq!(meta.tier, ReplayTier::Cold);
         let loaded = load_bundle(&bundle_dir).expect("load compacted bundle");
-        use std::io::BufRead;
         assert!(loaded.bundle.streams.game_state.lines().count() <= 3);
     }
 

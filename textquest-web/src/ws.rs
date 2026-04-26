@@ -49,11 +49,11 @@ impl DashboardStreamOptions {
         let stream_enabled = query
             .stream
             .as_deref()
-            .is_some_and(matches_dashboard_stream);
+            .is_some_and(|value| matches_dashboard_stream(value));
         let dashboard_enabled = query
             .dashboard
             .as_deref()
-            .is_some_and(matches_dashboard_toggle);
+            .is_some_and(|value| matches_dashboard_toggle(value));
 
         Self {
             enabled: stream_enabled || dashboard_enabled,

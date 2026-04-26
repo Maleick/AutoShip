@@ -589,7 +589,7 @@ fn is_scan_active() -> bool {
 
 fn shadow_scan_enabled() -> bool {
     runtime_offsets_enabled()
-        && std::env::var("TEXTQUEST_SCAN_OFFSETS").is_ok_and(|v: String| v == "1")
+        && std::env::var("TEXTQUEST_SCAN_OFFSETS").map_or(false, |v: String| v == "1")
 }
 
 fn current_exe_dir() -> Option<PathBuf> {

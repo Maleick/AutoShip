@@ -74,10 +74,8 @@ impl<W: Write> ShadowLog<W> {
 
 /// Shadow-mode or live execution policy.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
 pub enum PolicyMode {
     /// Default: bandit pick is logged but rule pick executes.
-    #[default]
     Shadow,
     /// Promoted by L-7 canary gate.  Bandit pick executes.
     Live { canary_token: String },
@@ -92,6 +90,11 @@ impl PolicyMode {
     }
 }
 
+impl Default for PolicyMode {
+    fn default() -> Self {
+        PolicyMode::Shadow
+    }
+}
 
 #[cfg(test)]
 mod tests {

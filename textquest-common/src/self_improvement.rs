@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn test_heuristic_engine_creation() {
         let engine = HeuristicEngine::new();
-        assert!(!engine.rules.is_empty());
+        assert!(engine.rules.len() > 0);
     }
 
     #[test]

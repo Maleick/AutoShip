@@ -48,7 +48,6 @@ fn tick_loads_window_title_formats_from_disk() {
             reward_automation: RewardAutomationConfig::default(),
             tribute_preferences: TributePreferences::default(),
             tribute_status: TributeStatus::default(),
-            improve_auto_promote: Default::default(),
         },
     );
     fs::write(

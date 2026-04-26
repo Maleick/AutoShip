@@ -5,7 +5,6 @@ import {
   ChecklistItem,
   ViewMode,
   LogEvent,
-  PersonalBest,
 } from "./types";
 import {
   computeCampFingerprint,
@@ -30,7 +29,7 @@ interface SessionDetailProps {
   checklistItems?: ChecklistItem[];
   logEvents?: LogEvent[];
   highlights?: HighlightMoment[];
-  personalBests?: PersonalBest[];
+  personalBests?: any[]; // Array of PersonalBest
   onBack?: () => void;
 }
 

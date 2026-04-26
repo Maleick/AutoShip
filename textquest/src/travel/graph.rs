@@ -663,7 +663,7 @@ mod tests {
             zone_points.push(point(
                 &format!("z{index}"),
                 "LiveEra",
-                index,
+                index as i32,
                 0,
                 0,
             ));

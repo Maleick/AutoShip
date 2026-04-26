@@ -265,6 +265,82 @@ SME-reported detection systems (byte count, memshift, memcheck 1-4) remain `SME-
 
 **Main loop no-touch zone refinement (2026-04-21 — #2186):** The entry point of `__ProcessGameEvents` (`0x14028E0F0`) is confirmed safe for HWBP hooking — TextQuest already uses DR0 there with no code modification. The loop body interior remains a no-touch zone for code modification until the chunked decompile (#2186 §6) is completed on Frostreaver to locate the memshift check and enumerate all 40+ counter decrement sites. The "inline byte count checks" originally reported by the SME are the message counter heartbeat system (opcode `0xbb29`, 500 ms cadence), not static code-section byte comparisons; however, server-initiated memcheck (`0x4f27`) can still detect any `.text` modification, so the no-touch classification for standard detour hooking stands. See `docs/research/C3-game-loop-touchpoints.md` for the full per-region assessment.
 
+## C4 Spike: Counter/Integrity Global Callsite Cross-Reference Map (Issue #3405 — 2026-04-26)
+
+This section records the Ghidra cross-reference sweep for the four symbols: `OUTBOUND_MSG_COUNTER`, `INBOUND_MSG_COUNTER`, `FILE_INTEGRITY_DISPATCHER`, and `SERVER_MEMCHECK_HANDLER`. Source: Ghidra MCP analysis (2026-04-03), consolidated from prior spike work (#2187). Extended analysis: `docs/research/C4-integrity-callsite-xref.md`.
+
+### Symbol Address Table
+
+| Symbol | Address | Type | Binary offset |
+|---|---|---|---|
+| `OUTBOUND_MSG_COUNTER` | `0x140F60FC8` | Global `i32` data | `0xF60FC8` |
+| `INBOUND_MSG_COUNTER` | `0x140F60FC4` | Global `i32` data | `0xF60FC4` |
+| `FILE_INTEGRITY_DISPATCHER` | `0x1405648C0` | Function | `0x5648C0` |
+| `SERVER_MEMCHECK_HANDLER` | `0x1400B5720` | Function | `0xB5720` |
+
+### Callsite Cross-Reference Table
+
+| Symbol | Callsite Address | Containing Function | Direction | Operation | Notes |
+|---|---|---|---|---|---|
+| `OUTBOUND_MSG_COUNTER` | 40+ sites in main loop body | `__ProcessGameEvents` (`0x14028E0F0`) | Write (dec) | `dec [0x140F60FC8]` before each `NET_SEND` | One decrement per outbound packet |
+| `OUTBOUND_MSG_COUNTER` | `0x1401A4650` | `FUN_1401A4650` (heartbeat) | Write (refill) | `+= 0x37` every 500 ms; negates before `0xbb29` send | Heartbeat refill |
+| `OUTBOUND_MSG_COUNTER` | `0x1401A4320` | `FUN_1401A4320` (heartbeat send stub) | Read | Reads negated value for `0xbb29` payload | Called by heartbeat |
+| `OUTBOUND_MSG_COUNTER` | **UNKNOWN** | Unknown (reset site) | Write (zero/init) | Counter reset — sites unconfirmed | **RISK: unexpected write sites — full Ghidra write-xref required** |
+| `INBOUND_MSG_COUNTER` | WorldAuth handler chain | `WORLD_AUTHENTICATE` (`0x1402C9C80`) callee chain | Write (dec) | `dec [0x140F60FC4]` per inbound auth msg | Fewer writers than outbound |
+| `INBOUND_MSG_COUNTER` | `0x1401A4650` | `FUN_1401A4650` (heartbeat) | Write (refill) | `+= 0x55` every 500 ms; negates before send | Paired with outbound refill |
+| `INBOUND_MSG_COUNTER` | **UNKNOWN** | Unknown (reset site) | Write (zero/init) | Counter reset — sites unconfirmed | **RISK: unexpected write sites** |
+| `FILE_INTEGRITY_DISPATCHER` | `0x1402C9C80` | `WORLD_AUTHENTICATE` | Call | Dispatches 3 serial file hash checks per session | Single caller confirmed |
+| `FILE_INTEGRITY_DISPATCHER` | Sub-check 1x (inline) | Inline in dispatcher | Internal call | `eqgame.exe` self-hash → opcode `0x8bdc` → `NET_SEND` | Uses LFG PRNG (`FUN_14025ABD0`) |
+| `FILE_INTEGRITY_DISPATCHER` | Sub-check 1sa-a (inline) | Inline in dispatcher | Internal call | `Resources/BaseData.txt` → opcode `0xe91d` → `NET_SEND` | Uses LFG PRNG |
+| `FILE_INTEGRITY_DISPATCHER` | Sub-check 1sa-b (inline) | Inline in dispatcher | Internal call | `Resources/SkillCaps.txt` → opcode `0x9562` → `NET_SEND` | Uses LFG PRNG |
+| `SERVER_MEMCHECK_HANDLER` | Inbound opcode dispatcher | **UNKNOWN** (inbound dispatch chain) | Call | Routes opcode `0x4f27` → handler | Dispatcher address unknown — single caller expected |
+| `SERVER_MEMCHECK_HANDLER` | `0x1400B5720` entry | Self | Exec | Copies 0x100-byte blocks, hashes, returns via `NET_SEND` | FNV-1a variant; any `.text` byte-patch detectable |
+
+### Unexpected Write Sites — Risk Flags
+
+| Symbol | Risk Level | Details |
+|---|---|---|
+| `OUTBOUND_MSG_COUNTER` reset sites | **HIGH** | Unknown zero/init writers outside heartbeat refill and per-packet decrement. Any code resetting to 0 mid-session causes server-detectable drift. Requires full write-xref sweep in Ghidra on `0x140F60FC8`. |
+| `INBOUND_MSG_COUNTER` reset sites | **MEDIUM** | Same concern; fewer handlers involved but unknown reset sites. Sweep `0x140F60FC4`. |
+| `FILE_INTEGRITY_DISPATCHER` extra callers | **LOW** | Only `WORLD_AUTHENTICATE` confirmed. If a periodic re-check caller exists, passthrough hook must handle it. Confirm single-caller status via Ghidra xref. |
+| `SERVER_MEMCHECK_HANDLER` inbound dispatcher | **MEDIUM** | Dispatcher address unknown. If dispatcher routes additional opcodes through this handler, HWBP on DR3 still covers all execution paths but argument layout must be validated per variant. |
+
+### Call Graph Summary
+
+```
+WORLD_AUTHENTICATE (0x1402C9C80)
+  └─→ FILE_INTEGRITY_DISPATCHER (0x1405648C0)
+        ├─→ eqgame.exe self-hash [opcode 0x8bdc] → NET_SEND (0x140563330)
+        ├─→ BaseData.txt hash   [opcode 0xe91d] → NET_SEND
+        └─→ SkillCaps.txt hash  [opcode 0x9562] → NET_SEND
+
+Inbound opcode dispatcher (address TBD)
+  └─→ SERVER_MEMCHECK_HANDLER (0x1400B5720) [opcode 0x4f27]
+        └─→ NET_SEND [hashed region reply]
+
+__ProcessGameEvents (0x14028E0F0) — 40+ opcode handlers
+  ├─→ dec OUTBOUND_MSG_COUNTER (0x140F60FC8) → NET_SEND [per outbound]
+  ├─→ dec INBOUND_MSG_COUNTER  (0x140F60FC4) [per inbound auth msg]
+  └─→ FUN_1401A4650 (every 500 ms)
+        ├─→ OUTBOUND_MSG_COUNTER += 0x37 then negate
+        ├─→ INBOUND_MSG_COUNTER  += 0x55 then negate
+        └─→ FUN_1401A4320 → NET_SEND [opcode 0xbb29]
+```
+
+### Evidence Status
+
+| Finding | Confidence | Source |
+|---|---|---|
+| `OUTBOUND_MSG_COUNTER` address `0x140F60FC8` | Live-validated | Ghidra MCP, 2026-04-03 |
+| `INBOUND_MSG_COUNTER` address `0x140F60FC4` | Live-validated | Ghidra MCP, 2026-04-03 |
+| `FILE_INTEGRITY_DISPATCHER` address and 3 sub-opcodes | Live-validated | Ghidra MCP, 2026-04-03 |
+| `SERVER_MEMCHECK_HANDLER` address and opcode `0x4f27` | Live-validated | Ghidra MCP, 2026-04-03 |
+| 40+ counter decrement sites in main loop | SME-reported | Ghidra analysis, 2026-04-03; full xref pending |
+| Counter reset/zero sites | **UNKNOWN** | Needs Ghidra full write-xref of `0x140F60FC8` and `0x140F60FC4` |
+| Inbound opcode dispatcher address | **UNKNOWN** | Needs Ghidra xref of `SERVER_MEMCHECK_HANDLER` callers |
+| `0xd799` handler address (checksum-mismatch disconnect) | **UNKNOWN** | Needs string-reference xref on disconnect message |
+| LFG PRNG `FUN_14025ABD0` and state `DAT_140E8D148` | Live-validated | Ghidra decompile, 2026-04-03 |
+
 ## Near-Term `M5` Hardening Focus
 
 Current roadmap work should focus on:

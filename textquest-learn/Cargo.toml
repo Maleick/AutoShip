@@ -12,11 +12,6 @@ path = "src/lib.rs"
 name = "textquest-learn"
 path = "src/main.rs"
 
-[[bin]]
-name = "textquest-learn-bc"
-path = "src/bin/main.rs"
-required-features = ["full"]
-
 [dependencies]
 anyhow.workspace = true
 serde = { version = "1.0", features = ["derive"] }
@@ -26,17 +21,10 @@ thiserror = "2"
 bincode = { version = "2", features = ["serde"] }
 rand = "0.9"
 siphasher = "1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-clap = { version = "4.5", features = ["derive"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-ndarray = "0.16"
-rusqlite = { version = "0.32", features = ["bundled"] }
 
 [dev-dependencies]
 tempfile = "3.8"
 
 [features]
-default = []
 runtime-only = []
-full = []
+

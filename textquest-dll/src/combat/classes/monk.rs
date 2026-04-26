@@ -337,9 +337,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         }
     }
 
@@ -363,9 +360,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: Some(positional),
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         }
     }
 
@@ -406,9 +400,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert!(monk.should_assist(&ctx));
     }

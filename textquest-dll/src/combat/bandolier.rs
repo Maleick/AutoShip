@@ -182,14 +182,10 @@ impl BandolierManager {
         if self.active_set.as_deref() == Some(set_name) {
             return None;
         }
-        // Skip cooldown gate on the very first swap; otherwise enforce
-        // MIN_SWAP_INTERVAL_TICKS since the last successful swap.
-        if self.last_swap_tick > 0
-            && current_tick.saturating_sub(self.last_swap_tick) < MIN_SWAP_INTERVAL_TICKS
-        {
+        if current_tick.saturating_sub(self.last_swap_tick) < MIN_SWAP_INTERVAL_TICKS {
             return None;
         }
-        self.last_swap_tick = current_tick.max(1);
+        self.last_swap_tick = current_tick;
         Some(format!(
             "/bandolier activate {}",
             Self::quote_for_eq(set_name)
@@ -214,13 +210,11 @@ impl BandolierManager {
                 if self.active_set.as_deref() == Some(&target) {
                     return None;
                 }
-                // Respect cooldown (first swap allowed immediately).
-                if self.last_swap_tick > 0
-                    && current_tick.saturating_sub(self.last_swap_tick) < MIN_SWAP_INTERVAL_TICKS
-                {
+                // Respect cooldown.
+                if current_tick.saturating_sub(self.last_swap_tick) < MIN_SWAP_INTERVAL_TICKS {
                     return None;
                 }
-                self.last_swap_tick = current_tick.max(1);
+                self.last_swap_tick = current_tick;
                 return Some(target);
             }
         }

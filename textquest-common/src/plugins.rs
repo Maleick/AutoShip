@@ -269,13 +269,14 @@ impl PluginRegistry {
         if !metadata.manifest.force_unload.is_empty() {
             let mut failed: Vec<String> = Vec::new();
             for conflict in &metadata.manifest.force_unload.clone() {
-                if let Some(registered) = self.plugins.get_mut(conflict.as_str())
-                    && registered.enabled {
+                if let Some(registered) = self.plugins.get_mut(conflict.as_str()) {
+                    if registered.enabled {
                         match registered.plugin.on_unload() {
                             Ok(()) => registered.enabled = false,
                             Err(_) => failed.push(conflict.clone()),
                         }
                     }
+                }
             }
             if !failed.is_empty() {
                 return Err(PluginError::ConflictingPlugin {

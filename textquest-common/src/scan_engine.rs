@@ -12,6 +12,10 @@ use crate::{
     scanner::Pattern,
 };
 
+// ---------------------------------------------------------------------------
+// Result types
+// ---------------------------------------------------------------------------
+
 /// Result of scanning a single entry.
 #[derive(Debug, Clone)]
 pub struct ScanResult {
@@ -65,6 +69,10 @@ pub struct ModuleImage<'a> {
     /// Full module bytes starting at offset 0.
     pub data: &'a [u8],
 }
+
+// ---------------------------------------------------------------------------
+// Scanning
+// ---------------------------------------------------------------------------
 
 /// Check if a pattern string is a placeholder stub (all `CC` bytes).
 ///
@@ -304,6 +312,10 @@ fn resolve_displacement(
     Some(signed as u64)
 }
 
+// ---------------------------------------------------------------------------
+// EQ version detection
+// ---------------------------------------------------------------------------
+
 /// Expected EQ client date that our compiled offsets target.
 ///
 /// If the running client reports a different date, offsets are likely stale.
@@ -424,6 +436,10 @@ pub fn check_version(data: &[u8]) -> (Option<String>, bool) {
         None => (None, false),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Database merging
+// ---------------------------------------------------------------------------
 
 /// Merge scan results into an `OffsetDatabase`, overwriting matching keys in
 /// the map matching the scanned module and offset category.

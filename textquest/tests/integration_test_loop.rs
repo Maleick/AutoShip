@@ -19,7 +19,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use textquest::testing::{
     runner::{TestLoopResult, spawn_runners},
-    scenario::{BoxScenarioFuture, ScenarioResult, TestScenario},
+    scenario::{BoxScenarioFuture, MetricValue, ScenarioResult, TestScenario},
 };
 use textquest_common::login::AccountInfo;
 use tokio::sync::watch;

@@ -557,7 +557,7 @@ pub fn rule_route_waypoints(
 
     let cull: Vec<String> = traversals
         .iter()
-        .filter(|&(wp, &count)| {
+        .filter(|&(ref wp, &count)| {
             count >= 10 && spawn_detections.get(wp.as_str()).copied().unwrap_or(0) == 0
         })
         .map(|(wp, _)| wp.clone())

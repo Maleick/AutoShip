@@ -1,8 +1,6 @@
-#![cfg(feature = "full")]
-
 use textquest_learn::{
     bookmarks::BookmarkStore, ledger::ExperienceLedger, quality_gates::QualityGates,
-    onnx_export::OnnxExporter, FlaggedSegmentDataset, policy::PolicyMetadata, training::BehaviorCloningTrainer,
+    onnx_export::OnnxExporter, FlaggedSegmentDataset, PolicyMetadata, training::BehaviorCloningTrainer,
 };
 use tempfile::TempDir;
 

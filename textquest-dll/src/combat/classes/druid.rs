@@ -498,9 +498,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert!(druid.should_assist(&ctx));
     }
@@ -558,9 +555,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
@@ -594,9 +588,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(druid.select_target(&ctx), Some(10));
@@ -651,9 +642,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         assert_eq!(druid.select_spell(&ctx).unwrap().name, "Radiant Cure");
@@ -706,9 +694,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
@@ -767,9 +752,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
@@ -850,9 +832,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
@@ -905,9 +884,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();

@@ -387,7 +387,6 @@ impl VoiceCommandConfig {
 /// One operator-defined phrase in the 30-phrase grammar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[derive(Default)]
 pub struct VoiceOperatorPhrase {
     /// The exact phrase to match after transcript normalization.
     pub phrase: String,
@@ -397,6 +396,15 @@ pub struct VoiceOperatorPhrase {
     pub label: Option<String>,
 }
 
+impl Default for VoiceOperatorPhrase {
+    fn default() -> Self {
+        Self {
+            phrase: String::new(),
+            side_effecting: false,
+            label: None,
+        }
+    }
+}
 
 /// Built-in voice command recognized from a Whisper transcript.
 #[derive(Debug, Clone, PartialEq, Eq)]

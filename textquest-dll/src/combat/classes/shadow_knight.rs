@@ -255,9 +255,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         }
     }
 
@@ -362,9 +359,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Lifetap"); // lifetap priority at low HP
@@ -428,9 +422,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Darkness Snare"); // snare on fleeing mob
@@ -471,9 +462,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         let spell = sk.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Nuke");
@@ -498,9 +486,6 @@ mod tests {
             target_is_mezzed: false,
             extended_targets: None,
             positional: None,
-            burn_state: textquest_common::combat::BurnState::Ready,
-            burnnow_triggered: false,
-            burn_cooldown_ticks: 0,
         };
         assert!(sk.select_spell(&ctx).is_none());
     }

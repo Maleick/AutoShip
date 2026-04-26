@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-pub use textquest_common::api_types::ErrorResponse;
 pub use textquest_common::protocol::{
     ConfigCopyRequest, ConfigCopyResult, ConfigCopyStatus, ConfigCopySubset,
 };
@@ -10,6 +9,12 @@ pub use textquest_common::protocol::{
 pub struct HealthResponse {
     pub status: String,
     pub version: String,
+}
+
+/// Error response from API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorResponse {
+    pub error: String,
 }
 
 /// Session information returned by GET /api/sessions

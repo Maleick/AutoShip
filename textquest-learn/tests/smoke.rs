@@ -1,15 +1,20 @@
-//! Smoke test: verify core public types compile and link.
+//! Smoke test: verify all L-N modules compile and export marker traits.
 
 use textquest_learn::{
-    bandit::runtime::BanditRuntime,
-    bandit::shadow::PolicyMode,
-    policy::{Policy, PolicyMetadata},
+    Advisor, Bandit, BehaviorCloner, Canary, Ledger, OfflineRL, ParamSearch, Policy, RewardFn,
 };
 
 #[test]
-fn public_types_link() {
-    let _: Option<BanditRuntime> = None;
-    let _ = PolicyMode::Shadow;
-    let _: Option<PolicyMetadata> = None;
-    let _: Option<Box<dyn Policy>> = None;
+fn all_modules_compile() {
+    // Simply importing the traits proves they exist and are public.
+    // Each module has its own `#[cfg(test)]` smoke test for trait impls.
+    let _ = std::marker::PhantomData::<dyn Ledger>;
+    let _ = std::marker::PhantomData::<dyn RewardFn>;
+    let _ = std::marker::PhantomData::<dyn ParamSearch>;
+    let _ = std::marker::PhantomData::<dyn Bandit>;
+    let _ = std::marker::PhantomData::<dyn BehaviorCloner>;
+    let _ = std::marker::PhantomData::<dyn OfflineRL>;
+    let _ = std::marker::PhantomData::<dyn Canary>;
+    let _ = std::marker::PhantomData::<dyn Policy>;
+    let _ = std::marker::PhantomData::<dyn Advisor>;
 }

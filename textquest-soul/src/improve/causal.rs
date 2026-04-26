@@ -117,11 +117,12 @@ impl CausalGraph {
         let parent_id: u64 = u64::MAX;
 
         for ev in &mut events {
-            if explained.iter().any(|k| same_kind(k, &ev.kind))
-                && ev.severity >= Severity::Average {
+            if explained.iter().any(|k| same_kind(k, &ev.kind)) {
+                if ev.severity >= Severity::Average {
                     ev.severity = Severity::Minor;
                     ev.caused_by = Some(parent_id);
                 }
+            }
         }
 
         events

@@ -2280,8 +2280,6 @@ mod tests {
                 ActionType::Item(item_name.to_string()),
             )],
             current_step: 0,
-            burn_duration_ticks: None,
-            burn_cooldown_duration_ticks: None,
         }
     }
 
@@ -2312,8 +2310,6 @@ mod tests {
                 cooldown_ticks,
             )],
             current_step: 0,
-        burn_duration_ticks: None,
-        burn_cooldown_duration_ticks: None,
         }
     }
 
@@ -2343,8 +2339,6 @@ mod tests {
                 shared_cooldown_key: None,
             }],
             current_step: 0,
-        burn_duration_ticks: None,
-        burn_cooldown_duration_ticks: None,
         }
     }
 
@@ -2828,8 +2822,6 @@ mod tests {
                 rotation::entry("PrecisionLine", ActionType::Disc("PrecisionLine".into())),
             ],
             current_step: 0,
-            burn_duration_ticks: None,
-            burn_cooldown_duration_ticks: None,
         }]);
         c.resolved_abilities = std::collections::HashMap::from([
             (
@@ -2891,8 +2883,6 @@ mod tests {
                 ActionType::Disc("KickFocus".into()),
             )],
             current_step: 0,
-            burn_duration_ticks: None,
-            burn_cooldown_duration_ticks: None,
         }]);
         c.resolved_abilities.insert(
             "KickFocus".into(),
@@ -2933,8 +2923,6 @@ mod tests {
                 ActionType::Disc("KickFocus".into()),
             )],
             current_step: 0,
-            burn_duration_ticks: None,
-            burn_cooldown_duration_ticks: None,
         }]);
         c.resolved_abilities.insert(
             "KickFocus".into(),
@@ -2979,8 +2967,6 @@ mod tests {
                 ActionType::Disc("PrecisionStrikes".into()),
             )],
             current_step: 0,
-            burn_duration_ticks: None,
-            burn_cooldown_duration_ticks: None,
         }]);
         c.resolved_abilities.insert(
             "PrecisionStrikes".into(),
@@ -3026,8 +3012,6 @@ mod tests {
                 textquest_common::combat::ConditionExpr::HpBelow(50.0),
             )],
             current_step: 0,
-            burn_duration_ticks: None,
-            burn_cooldown_duration_ticks: None,
         }]);
 
         let player = player_with_hp_end(400, 1000, 900, 1000);
@@ -3407,8 +3391,6 @@ mod tests {
                 shared_cooldown_key: None,
             }],
             current_step: 0,
-            burn_duration_ticks: None,
-            burn_cooldown_duration_ticks: None,
         }]);
         c.resolved_abilities.insert(
             "BurnDisc".into(),
