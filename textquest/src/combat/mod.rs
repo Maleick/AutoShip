@@ -31,3 +31,5 @@ pub mod spell_optimizer;
 pub mod state;
 /// Worst-hurt group/pet scanner for heal targeting — MQ2WorstHurt parity.
 pub mod worst_hurt;
+/// MezTracker — AE vs ST mez decision engine with concurrent-cap enforcement.
+pub mod mez_tracker;
