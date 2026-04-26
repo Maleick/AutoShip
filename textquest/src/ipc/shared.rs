@@ -60,6 +60,7 @@ impl LegacySharedStateFrame {
             spawn_epoch: self.spawn_epoch,
             actual_version: self.actual_version,
             is_zone_changing: false,
+            scanner_candidates: Vec::new(),
         }
     }
 }
@@ -173,6 +174,18 @@ impl SharedStateReader {
     pub fn read_nav_state(&mut self) -> Option<SharedNavSnapshot> {
         let frame = self.read_frame()?;
         Some(nav_snapshot_from_frame(frame))
+    }
+
+    /// Read the latest MA target scanner candidates from the shared-memory
+    /// frame.  Returns an empty `Vec` when no data is available or the DLL has
+    /// not yet produced a scan result.
+    #[must_use]
+    pub fn read_scanner_candidates(
+        &mut self,
+    ) -> Vec<textquest_common::types::ScannerCandidate> {
+        self.read_frame()
+            .map(|f| f.scanner_candidates)
+            .unwrap_or_default()
     }
 
     #[must_use]
@@ -356,6 +369,7 @@ mod tests {
             spawn_epoch: epoch,
             actual_version: None,
             is_zone_changing: false,
+            scanner_candidates: Vec::new(),
         }
     }
 

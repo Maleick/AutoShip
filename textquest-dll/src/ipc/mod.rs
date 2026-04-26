@@ -687,6 +687,7 @@ mod tests {
                 spawn_epoch: 0,
                 actual_version: None,
                 is_zone_changing: false,
+                scanner_candidates: Vec::new(),
             };
             publish_state(&frame); // must not panic
         }
