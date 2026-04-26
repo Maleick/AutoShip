@@ -27,7 +27,9 @@ pub use paramsearch::ParamSearch;
 pub use bandits::Bandit;
 pub use bc::BehaviorCloner;
 pub use offline::OfflineRL;
-pub use canary::Canary;
+pub use canary::{
+    CanaryConfig, CanaryEvaluator, GatingDecision, MetricField, ReplayMetrics, RegressionBudget,
+};
 pub use policy::Policy;
 pub use advisor::Advisor;
 
