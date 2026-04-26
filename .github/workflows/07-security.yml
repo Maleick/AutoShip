@@ -1,0 +1,35 @@
+name: Security Audit
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run cargo-audit
+        run: cargo audit
+
+      - name: Check for outdated dependencies
+        run: cargo outdated --root-dir --exit-code 1
+        continue-on-error: true
+
+      - name: Comment if vulnerabilities found
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🔒 Security audit found issues. Review `cargo audit` output above.'
+            })

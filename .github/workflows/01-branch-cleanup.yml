@@ -1,0 +1,27 @@
+name: Auto-Cleanup Branch on Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete head branch if merged
+        uses: dawidd6/action-delete-branch@v3
+        if: github.event.pull_request.merged == true
+        with:
+          branches: ${{ github.event.pull_request.head.ref }}
+
+      - name: Notify if branch deletion failed
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ Branch deletion failed. Please clean up manually: `git branch -d {{ branch }}`'
+            })

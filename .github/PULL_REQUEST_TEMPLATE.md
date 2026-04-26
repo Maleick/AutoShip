@@ -1,41 +1,41 @@
 ## Summary
+Brief description of changes
 
-<!-- Clear, concise summary of the changes -->
+## Type of Change
+- [ ] Feature
+- [ ] Bug fix
+- [ ] Documentation
+- [ ] Performance improvement
+- [ ] Refactoring
 
-## Related Issues
+## Related Issue
+Closes #ISSUE_NUMBER
 
-- Closes #
-- Related to #
+## Changes Made
+- [ ] Change 1
+- [ ] Change 2
+- [ ] Change 3
 
-## Scope
+## Testing
+- [ ] Unit tests added (80%+ coverage)
+- [ ] Integration tests pass
+- [ ] `cargo fmt` passes
+- [ ] `cargo clippy` clean (no warnings)
+- [ ] `cargo test` passes
+- [ ] Performance acceptable (< 6% overhead)
 
-- What was changed?
-- What was NOT changed?
+## Documentation
+- [ ] Doc comments added/updated
+- [ ] README updated if needed
+- [ ] Examples added if applicable
 
-## Design Decisions
+## Pre-Merge Checklist
+- [ ] Branch follows naming: `feature/123-description`
+- [ ] No merge commits (squash or rebase)
+- [ ] All tests passing
+- [ ] Code coverage >= 80%
+- [ ] Ready for auto-delete on merge
+- [ ] All conversations resolved
 
-<!-- Why was it built this way? Mention key patterns or algorithms used. -->
-
-## Testing Results
-
-- [ ] Unit tests added/updated (Coverage: %)
-- [ ] Integration tests passed
-- [ ] Performance benchmarks (if applicable)
-- [ ] Coverage verified with `python3 scripts/coverage-report.py` (new code ≥80%, modified code ≥70%)
-
-## Wiki Updates
-
-- [ ] `docs/wiki/` updated if behavior or operator workflow changed (required for all source changes)
-
-## Polish Checklist
-
-- [ ] Feature implemented and verified
-- [ ] No `unwrap()` or `panic!()` without justification
-- [ ] No clippy warnings
-- [ ] Formatted with `rustfmt`
-- [ ] Documentation updated (in-code and/or `docs/`)
-- [ ] Commit history is clean and follows conventional commits
-
-## Evidence
-
-<!-- Links to screenshots, logs, or other evidence of verification -->
+## Notes
+Any additional context or notes for reviewers
