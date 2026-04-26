@@ -153,13 +153,128 @@ export default function App() {
         Skip to main content
       </a>
       <div className="min-h-screen bg-void text-neriak-text flex flex-col">
-      {/* ─── Top bar ──────────────────────────────────────────── */}
-      <header className="flex items-center gap-6 px-5 py-3 border-b border-neriak-dim bg-void">
-        <div className="flex items-baseline gap-3">
-          <span className="font-[Cinzel,serif] text-xl tracking-[0.2em] text-neriak-magenta">
-            TEXTQUEST
-          </span>
-          <span className="font-mono text-[10px] text-neriak-dim">{VERSION}</span>
+        {/* ─── Top bar ──────────────────────────────────────────── */}
+        <header className="flex items-center gap-6 px-5 py-3 border-b border-neriak-dim bg-void">
+          <div className="flex items-baseline gap-3">
+            <span className="font-[Cinzel,serif] text-xl tracking-[0.2em] text-neriak-magenta">
+              TEXTQUEST
+            </span>
+            <span className="font-mono text-[10px] text-neriak-dim">{VERSION}</span>
+          </div>
+          <nav className="flex items-center gap-1 font-mono text-[11px] text-neriak-muted uppercase tracking-[0.18em]">
+            <span>operator</span>
+            <span className="text-neriak-dim">/</span>
+            <span className="text-neriak-text">{activeLabel}</span>
+          </nav>
+          <div className="ml-auto flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border font-mono text-[10px] uppercase tracking-[0.15em] ${
+                connected
+                  ? "border-state-ok/40 text-state-ok bg-state-ok/5"
+                  : "border-state-danger/40 text-state-danger bg-state-danger/5"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  connected
+                    ? "bg-state-ok shadow-[0_0_6px_var(--color-state-ok)]"
+                    : "bg-state-danger"
+                }`}
+              />
+              {connected ? "connected" : "offline"}
+              <span className="text-neriak-muted normal-case tracking-normal ml-1">
+                {serverName}
+              </span>
+            </span>
+            <button
+              onClick={() => setHuntMode((h) => !h)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border font-mono text-[10px] uppercase tracking-[0.18em] ${
+                huntMode
+                  ? "border-neriak-magenta text-neriak-magenta bg-neriak-magenta/10 shadow-[0_0_12px_-4px_var(--color-neriak-magenta)]"
+                  : "border-neriak-dim text-neriak-muted"
+              }`}
+            >
+              <Zap className="w-3 h-3" strokeWidth={2} />
+              hunt
+            </button>
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-neriak-dim hover:border-neriak-magenta hover:text-neriak-magenta text-neriak-muted font-mono text-[10px] uppercase tracking-[0.15em]"
+            >
+              <Command className="w-3 h-3" strokeWidth={2} />
+              ⌘K palette
+            </button>
+            <button
+              onClick={() => setPrivacy((p) => !p)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border font-mono text-[10px] uppercase tracking-[0.15em] ${
+                privacy
+                  ? "border-state-warn text-state-warn bg-state-warn/5"
+                  : "border-neriak-dim text-neriak-muted"
+              }`}
+            >
+              {privacy ? (
+                <EyeOff className="w-3 h-3" strokeWidth={2} />
+              ) : (
+                <Eye className="w-3 h-3" strokeWidth={2} />
+              )}
+              {privacy ? "hidden" : "visible"}
+            </button>
+            <ThemeToggle />
+          </div>
+        </header>
+
+        {!connected && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2 px-5 py-1.5 bg-state-warn/5 border-b border-state-warn/30 font-mono text-[10px] text-state-warn uppercase tracking-[0.2em]"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-state-warn animate-pulse" />
+            backend offline · showing mock data
+            <span className="ml-auto text-neriak-dim normal-case tracking-normal">
+              retrying every 15s
+            </span>
+          </div>
+        )}
+
+        {/* ─── Body (sidebar + main) ────────────────────────────── */}
+        <div className="flex flex-1 min-h-0">
+          <aside className="w-52 border-r border-neriak-dim bg-void flex flex-col">
+            <nav className="flex-1 p-2 space-y-0.5">
+              {NAV.map(({ id, label, icon: Icon }) => {
+                const active = tab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setTab(id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-sm font-mono text-xs uppercase tracking-[0.18em] transition-colors ${
+                      active
+                        ? "bg-elevated text-neriak-magenta border-l-2 border-neriak-magenta"
+                        : "text-neriak-muted hover:bg-panel hover:text-neriak-text border-l-2 border-transparent"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" strokeWidth={1.75} />
+                    {label}
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+
+          <main
+            id="main-content"
+            className={`flex-1 overflow-y-auto ${privacy ? "blur-sm pointer-events-none" : ""}`}
+          >
+            {tab === "dashboard" && <Dashboard />}
+            {tab === "sessions" && <Sessions />}
+            {tab === "replay" && <Replay />}
+            {tab === "groups" && <Groups />}
+            {tab === "improvement" && <Improvement />}
+            {tab === "loot" && <Loot />}
+            {tab === "economy" && <Economy />}
+            {tab === "characters" && <Characters />}
+            {tab === "credentials" && <Credentials />}
+          </main>
         </div>
         <nav className="flex items-center gap-1 font-mono text-[11px] text-neriak-muted uppercase tracking-[0.18em]">
           <span>operator</span>
