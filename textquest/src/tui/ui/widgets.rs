@@ -81,7 +81,8 @@ pub fn line_width(line: &Line<'_>) -> usize {
 /// Color is determined by the label type: magenta for HUNT, cyan for PALETTE, etc.
 #[must_use]
 pub fn status_pill(label: &str, t: &Theme) -> Vec<Span<'static>> {
-    let fg_color = match label {
+    let uppercase = label.to_uppercase();
+    let fg_color = match uppercase.as_str() {
         "HUNT" => Color::Magenta,
         "CAMP" => Color::Cyan,
         "PALETTE" | "⌘K PALETTE" => Color::Cyan,
@@ -89,12 +90,9 @@ pub fn status_pill(label: &str, t: &Theme) -> Vec<Span<'static>> {
         _ => t.text_muted,
     };
 
-    let uppercase = label.to_uppercase();
     vec![Span::styled(
         format!(" {} ", uppercase),
-        Style::default()
-            .fg(fg_color)
-            .add_modifier(Modifier::BOLD),
+        Style::default().fg(fg_color).add_modifier(Modifier::BOLD),
     )]
 }
 
@@ -2506,6 +2504,22 @@ mod tests {
         assert!(rendered.contains("Complete Heal"));
         assert!(rendered.contains("2.5s/7.5s"));
         assert_eq!(gauge_width(&rendered), Some(14));
+    }
+
+    #[test]
+    fn status_pill_mode_colors_are_case_insensitive() {
+        let t = dark_modern();
+        let camp_pill = status_pill("Camp", &t);
+        let hunt_pill = status_pill("Hunt", &t);
+
+        assert_eq!(
+            camp_pill[0].style.as_ref().and_then(|style| style.fg),
+            Some(Color::Cyan)
+        );
+        assert_eq!(
+            hunt_pill[0].style.as_ref().and_then(|style| style.fg),
+            Some(Color::Magenta)
+        );
     }
 
     #[test]
