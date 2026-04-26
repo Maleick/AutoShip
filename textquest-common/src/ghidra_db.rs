@@ -9,7 +9,7 @@ use std::{fs::File, io::Read, path::Path};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -122,10 +122,38 @@ pub struct ImportEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpcodeEntry {
+    #[serde(deserialize_with = "deserialize_opcode_code")]
     pub code: u64,
     pub handler_addr: Option<u64>,
     pub direction: Option<String>,
     pub description: Option<String>,
+}
+
+fn deserialize_opcode_code<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum CodeValue {
+        Number(u64),
+        Text(String),
+    }
+
+    match CodeValue::deserialize(deserializer)? {
+        CodeValue::Number(value) => Ok(value),
+        CodeValue::Text(text) => {
+            let trimmed = text.trim();
+            if let Some(hex) = trimmed
+                .strip_prefix("0x")
+                .or_else(|| trimmed.strip_prefix("0X"))
+            {
+                u64::from_str_radix(hex, 16).map_err(de::Error::custom)
+            } else {
+                trimmed.parse::<u64>().map_err(de::Error::custom)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -448,14 +476,11 @@ impl GhidraDatabase {
     /// Returns an empty map if the database has no opcodes.
     pub fn get_opcode_map(&self) -> Result<std::collections::HashMap<u16, String>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT code, description FROM opcodes WHERE description IS NOT NULL ORDER BY code"
+            "SELECT code, description FROM opcodes WHERE description IS NOT NULL ORDER BY code",
         )?;
         let mut map = std::collections::HashMap::new();
         let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)? as u16,
-                row.get::<_, String>(1)?,
-            ))
+            Ok((row.get::<_, i64>(0)? as u16, row.get::<_, String>(1)?))
         })?;
         for row in rows {
             let (code, description) = row?;
@@ -781,6 +806,24 @@ mod tests {
         let json = r#"[
             {"code": 66, "direction": "inbound", "description": "OP_ZoneEntry"},
             {"code": 128, "direction": "outbound", "description": "OP_ClientUpdate"}
+        ]"#;
+        std::fs::write(&path, json).unwrap();
+
+        let count = db.import_opcodes_from_file(&path).unwrap();
+        assert_eq!(count, 2);
+
+        let stats = db.stats().unwrap();
+        assert_eq!(stats.opcodes, 2);
+    }
+
+    #[test]
+    fn import_opcodes_from_file_hex_string_codes() {
+        let (db, _dir) = temp_db();
+        let json_dir = tempfile::tempdir().unwrap();
+        let path = json_dir.path().join("opcodes.json");
+        let json = r#"[
+            {"code": "0x0042", "direction": "inbound", "description": "OP_ZoneEntry"},
+            {"code": "0x0080", "direction": "outbound", "description": "OP_ClientUpdate"}
         ]"#;
         std::fs::write(&path, json).unwrap();
 
