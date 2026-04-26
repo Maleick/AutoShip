@@ -714,7 +714,7 @@ impl<T> IndexedQueue<T> {
 // ─── Zone Graph (zone-to-zone pathfinding) ───
 
 /// A connection from one zone to another.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZoneConnection {
     /// Destination zone ID.
     pub dest_zone_id: u16,
@@ -722,56 +722,6 @@ pub struct ZoneConnection {
     pub transfer_type: u8,
     /// Whether this connection is disabled (impassable).
     pub disabled: bool,
-    /// Minimum character level required to use this connection (0 = no requirement).
-    #[serde(default)]
-    pub min_level: u8,
-    /// Faction ID required to use this connection (None = no requirement).
-    #[serde(default)]
-    pub faction_required: Option<u32>,
-    /// Quest ID that must be completed to use this connection (None = no requirement).
-    #[serde(default)]
-    pub quest_required: Option<u32>,
-}
-
-impl ZoneConnection {
-    /// Returns `true` if a character meeting `prereqs` is allowed to traverse this connection.
-    ///
-    /// A connection is blocked when:
-    /// - `disabled` is set, OR
-    /// - the character's level is below `min_level`, OR
-    /// - `faction_required` is set and the character does not have that faction, OR
-    /// - `quest_required` is set and the character has not completed that quest.
-    #[must_use]
-    pub fn is_passable_for(&self, prereqs: &CharacterPrerequisites) -> bool {
-        if self.disabled {
-            return false;
-        }
-        if self.min_level > 0 && prereqs.level < self.min_level {
-            return false;
-        }
-        if let Some(faction) = self.faction_required {
-            if !prereqs.factions.contains(&faction) {
-                return false;
-            }
-        }
-        if let Some(quest) = self.quest_required {
-            if !prereqs.completed_quests.contains(&quest) {
-                return false;
-            }
-        }
-        true
-    }
-}
-
-/// Character attributes used to evaluate zone transition prerequisites.
-#[derive(Debug, Clone, Default)]
-pub struct CharacterPrerequisites {
-    /// Character's current level.
-    pub level: u8,
-    /// Set of faction IDs the character currently has access to.
-    pub factions: std::collections::HashSet<u32>,
-    /// Set of quest IDs the character has completed.
-    pub completed_quests: std::collections::HashSet<u32>,
 }
 
 /// A single zone node with its connections.
@@ -797,7 +747,7 @@ pub struct ZoneGraph {
 }
 
 impl ZoneGraph {
-    /// BFS shortest path from one zone to another, ignoring all prerequisites.
+    /// BFS shortest path from one zone to another.
     /// Returns the sequence of zone IDs to traverse (including start and end),
     /// or `None` if no path exists.
     #[must_use]
@@ -843,65 +793,8 @@ impl ZoneGraph {
         }
         None
     }
-
-
-    /// BFS shortest path from one zone to another, filtering edges by character prerequisites.
-    ///
-    /// Connections that require a higher level, a specific faction, or a completed quest are
-    /// excluded when the character does not meet those prerequisites.  This is the preferred
-    /// entry point for in-game pathfinding.
-    ///
-    /// Returns the sequence of zone IDs to traverse (including start and end),
-    /// or `None` if no reachable path exists for this character.
-    #[must_use]
-    pub fn find_path_for_character(
-        &self,
-        from_zone_id: u16,
-        to_zone_id: u16,
-        prereqs: &CharacterPrerequisites,
-    ) -> Option<Vec<u16>> {
-        use std::collections::{HashMap, VecDeque};
-
-        if from_zone_id == to_zone_id {
-            return Some(vec![from_zone_id]);
-        }
-        if !self.zones.contains_key(&from_zone_id) || !self.zones.contains_key(&to_zone_id) {
-            return None;
-        }
-
-        let mut visited: HashMap<u16, u16> = HashMap::new(); // child -> parent
-        let mut queue = VecDeque::new();
-        queue.push_back(from_zone_id);
-        visited.insert(from_zone_id, from_zone_id);
-
-        while let Some(current) = queue.pop_front() {
-            if let Some(node) = self.zones.get(&current) {
-                for conn in &node.connections {
-                    if !conn.is_passable_for(prereqs) {
-                        continue;
-                    }
-                    if visited.contains_key(&conn.dest_zone_id) {
-                        continue;
-                    }
-                    visited.insert(conn.dest_zone_id, current);
-                    if conn.dest_zone_id == to_zone_id {
-                        // Reconstruct path
-                        let mut path = vec![to_zone_id];
-                        let mut step = to_zone_id;
-                        while step != from_zone_id {
-                            step = visited[&step];
-                            path.push(step);
-                        }
-                        path.reverse();
-                        return Some(path);
-                    }
-                    queue.push_back(conn.dest_zone_id);
-                }
-            }
-        }
-        None
-    }
 }
+
 /// A named camp position for a specific role.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CampSpot {
@@ -1784,13 +1677,11 @@ mod tests {
                         dest_zone_id: 2,
                         transfer_type: 0,
                         disabled: false,
-                        ..Default::default()
                     },
                     ZoneConnection {
                         dest_zone_id: 4,
                         transfer_type: 1,
                         disabled: false,
-                        ..Default::default()
                     },
                 ],
             },
@@ -1806,7 +1697,6 @@ mod tests {
                     dest_zone_id: 3,
                     transfer_type: 0,
                     disabled: false,
-                    ..Default::default()
                 }],
             },
         );
@@ -1831,7 +1721,6 @@ mod tests {
                     dest_zone_id: 3,
                     transfer_type: 0,
                     disabled: false,
-                    ..Default::default()
                 }],
             },
         );
@@ -1889,7 +1778,6 @@ mod tests {
                     dest_zone_id: 2,
                     transfer_type: 0,
                     disabled: true,
-                    ..Default::default()
                 }],
             },
         );
@@ -2071,13 +1959,11 @@ mod tests {
                         dest_zone_id: 2,
                         transfer_type: 0,
                         disabled: false,
-                        ..Default::default()
                     },
                     ZoneConnection {
                         dest_zone_id: 3,
                         transfer_type: 0,
                         disabled: false,
-                        ..Default::default()
                     },
                 ],
             },
@@ -2103,7 +1989,6 @@ mod tests {
                     dest_zone_id: 4,
                     transfer_type: 0,
                     disabled: false,
-                    ..Default::default()
                 }],
             },
         );
@@ -2118,7 +2003,6 @@ mod tests {
                     dest_zone_id: 2,
                     transfer_type: 0,
                     disabled: false,
-                    ..Default::default()
                 }],
             },
         );
@@ -2143,13 +2027,11 @@ mod tests {
                         dest_zone_id: 2,
                         transfer_type: 0,
                         disabled: true,
-                        ..Default::default()
                     },
                     ZoneConnection {
                         dest_zone_id: 3,
                         transfer_type: 0,
                         disabled: false,
-                        ..Default::default()
                     },
                 ],
             },
@@ -2175,7 +2057,6 @@ mod tests {
                     dest_zone_id: 2,
                     transfer_type: 0,
                     disabled: false,
-                    ..Default::default()
                 }],
             },
         );
@@ -2196,202 +2077,6 @@ mod tests {
         assert_eq!(restored.zones.len(), g.zones.len());
         // Verify path still works
         assert_eq!(restored.find_path(1, 3).unwrap().len(), 3);
-    }
-
-    // ─── ZoneConnection prerequisite tests (#3348) ───────────────────────────
-
-    /// Build a minimal 2-zone graph where the A→B connection has a level gate.
-    fn make_gated_graph(min_level: u8) -> ZoneGraph {
-        let mut g = ZoneGraph::default();
-        g.zones.insert(
-            1,
-            ZoneNode {
-                zone_id: 1,
-                name: "A".into(),
-                min_level: 0,
-                max_level: 0,
-                connections: vec![ZoneConnection {
-                    dest_zone_id: 2,
-                    transfer_type: 0,
-                    disabled: false,
-                    min_level,
-                    ..Default::default()
-                }],
-            },
-        );
-        g.zones.insert(
-            2,
-            ZoneNode {
-                zone_id: 2,
-                name: "B".into(),
-                min_level: 0,
-                max_level: 0,
-                connections: vec![],
-            },
-        );
-        g
-    }
-
-    #[test]
-    fn zone_connection_passable_no_prereqs() {
-        let conn = ZoneConnection {
-            dest_zone_id: 2,
-            transfer_type: 0,
-            disabled: false,
-            ..Default::default()
-        };
-        let prereqs = CharacterPrerequisites { level: 1, ..Default::default() };
-        assert!(conn.is_passable_for(&prereqs));
-    }
-
-    #[test]
-    fn zone_connection_blocked_when_disabled() {
-        let conn = ZoneConnection {
-            dest_zone_id: 2,
-            transfer_type: 0,
-            disabled: true,
-            ..Default::default()
-        };
-        let prereqs = CharacterPrerequisites { level: 60, ..Default::default() };
-        assert!(!conn.is_passable_for(&prereqs));
-    }
-
-    #[test]
-    fn zone_connection_blocked_by_level_requirement() {
-        let conn = ZoneConnection {
-            dest_zone_id: 2,
-            transfer_type: 0,
-            disabled: false,
-            min_level: 20,
-            ..Default::default()
-        };
-        let under_level = CharacterPrerequisites { level: 15, ..Default::default() };
-        let at_level = CharacterPrerequisites { level: 20, ..Default::default() };
-        assert!(!conn.is_passable_for(&under_level), "under-level should be blocked");
-        assert!(conn.is_passable_for(&at_level), "at-level should pass");
-    }
-
-    #[test]
-    fn zone_connection_blocked_by_missing_faction() {
-        let conn = ZoneConnection {
-            dest_zone_id: 2,
-            transfer_type: 0,
-            disabled: false,
-            faction_required: Some(42),
-            ..Default::default()
-        };
-        let no_faction = CharacterPrerequisites { level: 60, ..Default::default() };
-        let mut with_faction = CharacterPrerequisites { level: 60, ..Default::default() };
-        with_faction.factions.insert(42);
-
-        assert!(!conn.is_passable_for(&no_faction), "missing faction should be blocked");
-        assert!(conn.is_passable_for(&with_faction), "correct faction should pass");
-    }
-
-    #[test]
-    fn zone_connection_blocked_by_missing_quest() {
-        let conn = ZoneConnection {
-            dest_zone_id: 2,
-            transfer_type: 0,
-            disabled: false,
-            quest_required: Some(99),
-            ..Default::default()
-        };
-        let no_quest = CharacterPrerequisites { level: 60, ..Default::default() };
-        let mut with_quest = CharacterPrerequisites { level: 60, ..Default::default() };
-        with_quest.completed_quests.insert(99);
-
-        assert!(!conn.is_passable_for(&no_quest), "missing quest should be blocked");
-        assert!(conn.is_passable_for(&with_quest), "completed quest should pass");
-    }
-
-    #[test]
-    fn find_path_for_character_excludes_under_level_edge() {
-        // A→B requires level 20; character is level 10 → no path
-        let g = make_gated_graph(20);
-        let under = CharacterPrerequisites { level: 10, ..Default::default() };
-        assert!(
-            g.find_path_for_character(1, 2, &under).is_none(),
-            "under-level character should not find path through gated edge"
-        );
-    }
-
-    #[test]
-    fn find_path_for_character_allows_sufficient_level() {
-        // A→B requires level 20; character is level 20 → path found
-        let g = make_gated_graph(20);
-        let at_level = CharacterPrerequisites { level: 20, ..Default::default() };
-        assert_eq!(
-            g.find_path_for_character(1, 2, &at_level),
-            Some(vec![1, 2]),
-            "character meeting level requirement should find path"
-        );
-    }
-
-    #[test]
-    fn find_path_for_character_routes_around_gated_edge() {
-        // A→B gated (level 30), A→C→B open; character level 10 routes via C
-        let mut g = ZoneGraph::default();
-        g.zones.insert(
-            1,
-            ZoneNode {
-                zone_id: 1,
-                name: "A".into(),
-                min_level: 0,
-                max_level: 0,
-                connections: vec![
-                    ZoneConnection {
-                        dest_zone_id: 2,
-                        transfer_type: 0,
-                        disabled: false,
-                        min_level: 30,
-                        ..Default::default()
-                    },
-                    ZoneConnection {
-                        dest_zone_id: 3,
-                        transfer_type: 0,
-                        disabled: false,
-                        ..Default::default()
-                    },
-                ],
-            },
-        );
-        g.zones.insert(
-            2,
-            ZoneNode {
-                zone_id: 2,
-                name: "B".into(),
-                min_level: 0,
-                max_level: 0,
-                connections: vec![],
-            },
-        );
-        g.zones.insert(
-            3,
-            ZoneNode {
-                zone_id: 3,
-                name: "C".into(),
-                min_level: 0,
-                max_level: 0,
-                connections: vec![ZoneConnection {
-                    dest_zone_id: 2,
-                    transfer_type: 0,
-                    disabled: false,
-                    ..Default::default()
-                }],
-            },
-        );
-
-        let low_char = CharacterPrerequisites { level: 10, ..Default::default() };
-        let path = g.find_path_for_character(1, 2, &low_char);
-        assert_eq!(path, Some(vec![1, 3, 2]), "should route around level-gated edge");
-    }
-
-    #[test]
-    fn find_path_for_character_same_zone_always_succeeds() {
-        let g = make_gated_graph(60);
-        let low = CharacterPrerequisites { level: 1, ..Default::default() };
-        assert_eq!(g.find_path_for_character(1, 1, &low), Some(vec![1]));
     }
 
     // ─── StickConfig / StickDistance tests ─────────────────────────────────

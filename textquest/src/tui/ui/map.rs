@@ -3832,6 +3832,21 @@ fn draw_camp_overlay(
     }
 }
 
+/// Draw camp location overlays: delegates to `draw_camp_overlay` for the active camp.
+///
+/// Called from the map render pipeline to render the camp radius circle, pull radius
+/// circle, and center markers when a camp is loaded. The singular `draw_camp_overlay`
+/// renders the actual geometry; this wrapper exists as the named call-site for the pipeline.
+fn draw_camp_overlays(
+    app: &App,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: u16,
+    h: u16,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    draw_camp_overlay(app, to_grid, w, h, grid);
+}
+
 fn draw_radius_overlays(
     app: &App,
     to_grid: &impl Fn(f32, f32) -> (i32, i32),

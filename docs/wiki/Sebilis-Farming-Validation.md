@@ -180,76 +180,6 @@ Current live-evidence ownership under issue `#1526`:
 - `#1841` owns the macro-safety and operator-risk slice only; it is not a
   substitute for route, spawn, forage, or output proof.
 
-## Issue #3391 — Crypt and Juggs/Myconids Spawn Cadence Measurement
-
-Issue `#3391` is a child of `#1838` (camp-by-camp spawn cadence and rotation-overlap measurement).
-This section tracks the specific acceptance criteria for Crypt and Juggs/Myconids camps and
-records the live-measurement targets an operator must capture on Frostreaver before this issue can close.
-
-### Evidence state: BLOCKED — requires live EQ server access
-
-All fields below are **pending live measurement**. Do not promote research estimates as validated data.
-
-### Crypt camp — target measurements
-
-| Field | Target | Current value | Evidence state |
-| --- | --- | --- | --- |
-| `placeholder_count` | total Crypt placeholder spawns in a 120-minute window | — | pending live sample |
-| `named_count` | number of Crypt Caretaker appearances in a 120-minute window | — | pending live sample |
-| `mean_respawn_minutes` | observed mean time from placeholder kill to next spawn | 22–28 min (research estimate) | research-estimate — unvalidated |
-| `wait_time_minutes` | time the group spends idle waiting for a placeholder or named spawn | — | pending live sample |
-
-Current `config/named_mobs/sebilis.toml` records `Crypt Caretaker` with a research-estimate window of
-`22–28 minutes`. That estimate must be replaced with the live mean before the Crypt camp rotation can be
-treated as validated.
-
-### Juggs/Myconids camp — target measurements
-
-| Field | Target | Current value | Evidence state |
-| --- | --- | --- | --- |
-| `placeholder_count` | total Juggernaut/Myconid placeholder spawns in a 120-minute window | — | pending live sample |
-| `named_count` | number of Sebilite Juggernaut + Myconid Spore King appearances combined | — | pending live sample |
-| `mean_respawn_minutes` | observed mean time from placeholder kill to next spawn | 18–24 min (research estimate for Myconid Spore King), 22–28 min (Sebilite Juggernaut) | research-estimate — unvalidated |
-| `wait_time_minutes` | time the group spends idle waiting for a placeholder or named spawn | — | pending live sample |
-
-`Sebilite Juggernaut` and `Myconid Spore King` were added to `config/named_mobs/sebilis.toml` in
-issue `#3391` with research-estimate respawn windows. Both entries are marked `evidence_state = "research-estimate"`
-and must be updated with live measurements before any automation can rely on them.
-
-### Overlap evaluation — target findings
-
-After capturing per-camp cadence, the operator must evaluate whether Crypt and Juggs/Myconids
-respawn windows overlap favorably enough to support a camp rotation:
-
-- If both camps produce a named or placeholder spawn within a 10-minute window of each other,
-  a two-group rotation is viable without dead-wait gaps.
-- If mean wait times exceed 30 minutes at one camp, single-camp camping may be more efficient
-  than rotating.
-- Record findings in `docs/wiki/assets/sebilis-validation-template.csv` using `camp_name =
-  sebilis_crypt_to_juggs` and `target_metric = camp_wait_duration_minutes`.
-
-### Pre-populated template rows
-
-Five rows have been pre-populated in
-[sebilis-validation-template.csv](assets/sebilis-validation-template.csv) with
-`evidence_state = pending` for the measurements above:
-
-- `sebilis-crypt-3391-1` — Crypt placeholder respawn interval
-- `sebilis-crypt-3391-2` — Crypt named seen per hour
-- `sebilis-juggs-3391-1` — Juggs/Myconids placeholder respawn interval
-- `sebilis-juggs-3391-2` — Juggs/Myconids named seen per hour
-- `sebilis-overlap-3391-1` — Crypt + Juggs rotation overlap wait time
-
-Replace each `PENDING` cell with live operator observations to close this issue.
-
-### Acceptance criteria checklist
-
-- [ ] `placeholder_count`, `named_count`, `mean_respawn_minutes`, and `wait_time_minutes` recorded for Crypt camp
-- [ ] `placeholder_count`, `named_count`, `mean_respawn_minutes`, and `wait_time_minutes` recorded for Juggs/Myconids camp
-- [ ] Overlap findings evaluated against current rotation theory and noted in `sebilis-overlap-3391-1` row
-- [ ] `config/named_mobs/sebilis.toml` updated with validated live respawn windows for `Sebilite Juggernaut` and `Myconid Spore King`
-- [ ] `evidence_state` column in all five template rows changed from `pending` to `validated`
-
 ## Validation procedure
 
 ### 1. Routing validation
@@ -274,25 +204,6 @@ Replace each `PENDING` cell with live operator observations to close this issue.
 - Record attempts, successes, and actual Nodding Blue Lily hits.
 - Convert the session totals to a per-hour baseline before calling Sebilis an
   alchemy hub.
-
-**Per-hour baseline derivation formula (issue #3393):**
-
-```
-forage_hits_per_hour = (nodding_blue_lily_hits / session_duration_minutes) * 60
-```
-
-Record `attempts`, `successes` (any forage hit), `observed_item_count`
-(Nodding Blue Lily hits only), and `measurement_window_minutes` in
-`sebilis-validation-template.csv`. The `result_per_hour` column must
-reflect the formula above, not a rounded estimate.
-
-**Alchemy-hub theory status (issue #3393):** UNCONFIRMED — no live forage
-sample exists in the repo. The alchemy-hub hypothesis that Sebilis Shaman
-foraging yields enough Nodding Blue Lily to sustain a tradeskill supply chain
-cannot be confirmed or rejected until at least one attended forage session
-populates `sebilis-validation-template.csv` with real hit counts and duration.
-Do not promote Sebilis as an alchemy hub in planning docs until this baseline
-row is recorded.
 
 ### 4. Automation-risk review
 
@@ -335,7 +246,7 @@ Current theory items worth capturing explicitly in the template include
 | Target | Current evidence state | Repo basis | Notes |
 | --- | --- | --- | --- |
 | `Runebranded Girdle` | Research-backed loot theory | `docs/wiki/Frostreaver-Farming-Guide.md`, `docs/wiki/P99-Zone-Guide.md` | Current Sebilis planning guides already list this as notable Sebilis loot, but it still needs a live sample before it can be promoted as validated output. |
-| `Nodding Blue Lily` | Issue-theory only — baseline formula defined, no live sample yet | Issue `#1526`, issue `#3393` | Per-hour baseline derivation formula added by issue `#3393`: `(hits / session_minutes) * 60`. Template row `forage-theory-001` documents the measurement protocol. Alchemy-hub theory status: **UNCONFIRMED** — promote only after a live forage session populates the template. |
+| `Nodding Blue Lily` | Issue-theory only | Issue `#1526` description | `Nodding Blue Lily` remains an issue-theory hypothesis until a repo-local source or live sample anchors it. |
 | `Fungi Tunic` | Issue-theory only | `docs/wiki/Research-MQ2-Deep-Dive.md` | `Fungi Tunic` currently appears only in a generic item-command example, not a Sebilis evidence source. |
 | `Froglok Blood` | Issue-theory only | Issue `#1526` description | `Froglok Blood` currently has no repo-local Sebilis evidence source beyond the issue theory. |
 
@@ -408,114 +319,63 @@ If an operator remains actively present, pauses sessions on demand, and aborts o
 | Semi-attended overnight runs (operator away, session monitored by alerts) | Blocked | Requires completion of `#866` GM-alert detection, `#865` error recovery, and explicit session-abort on alert. Cannot launch until infrastructure and live proof exist. | Close `#866` and `#865`, then run a monitored overnight test with live alert capture and operator standing by for pause/abort. |
 | Fully unattended overnight runs (no operator intervention expected) | Blocked | Requires all overnight infrastructure plus live proof that sessions can run 8+ hours without intervention, including automatic failure recovery and account-safety validation. | Not feasible until overnight testing infrastructure is complete, live-tested, and accounts have accumulated evidence of safe overnight execution. |
 
-## Issue #3392 — Nodding Blue Lily Forage Session Status
+## Rotation Overlap Theory Evaluation
 
-**Status: BLOCKED — requires live attended EQ session**
+This section compiles the rotation-overlap findings from issue `#1838` (camp-by-camp spawn cadence and rotation-overlap measurement) into a structured evaluation of the four-camp rotation theory. All claims below are research-backed unless explicitly tagged as issue-theory only.
 
-This sub-issue owns the attended Nodding Blue Lily forage baseline for issue `#1839`.
-A live EverQuest Sebilis session with operator-driven `/forage` cadence is required to
-satisfy the acceptance criteria. Agents cannot execute in-game sessions.
+### Four-Camp Rotation Candidates
 
-### Zero-hit sample record (agent-verified gap)
+The research baseline describes five camp areas that can absorb a 36-box operation:
 
-No live forage session has been conducted. The following is an **honest zero-hit
-placeholder** recorded per acceptance criteria: "Zero-hit sample recorded honestly if
-no Lily appears."
+| Camp | Area | Camp Name in Repo | Named Config Timer | Rotation Role | Evidence State |
+| --- | --- | --- | --- | --- | --- |
+| Disco 1 | Right wing, bartender/armsman corridor | `sebilis_disco` (pull_radius 380) | None in named config | Primary rotation anchor — constant pull cycle | Research-backed |
+| Disco 2 | Right wing extension past `disco_2_fork` | `sebilis_disco` (same TOML, radius covers both) | None in named config | Extension when Disco 1 clears faster than respawn | Research-backed |
+| Left Wing | Left-wing corridor, distinct pull geometry | Not yet in repo TOML | `Crypt Caretaker` 22-28 min | Bridge camp between right-wing and crypt areas | Research-backed (config); named timer unvalidated |
+| Crypt | Crypt area, deeper zone | Not yet in repo TOML | `Crypt Caretaker` 22-28 min, `Sebilite Protector` 22-28 min | Named-farm anchor — sit here when Disco is occupied | Research-backed (config); named timer unvalidated |
+| Juggs/Myconids | Underground below crypt | Not yet in repo TOML | None in named config | Money camp — highest pp/hr research estimate | Research-backed |
 
-| Session date | Zone | Duration (min) | Forage attempts | Successes | Nodding Blue Lily hits | Operator mode |
-|---|---|---|---|---|---|---|
-| (none) | Sebilis | 0 | 0 | 0 | 0 | N/A — blocked, no live access |
+### Rotation Overlap Theory
 
-When a live session is completed:
-- Record raw forage log link (do not copy counts into repo body)
-- Fill in the table above with actual session data
-- Update evidence state in the main table to `Live-validated`
-- Remove the BLOCKED note from this section
+Current research guides (`docs/wiki/Frostreaver-Farming-Guide.md`, `docs/wiki/P99-Zone-Guide.md`) describe the following rotation assumptions:
 
-### What an operator must do to close this issue
+- **`4-6 groups` or `5-6 groups`** can occupy Sebilis simultaneously across Disco 1+2, left wing, crypt, and juggs/myconids.
+- **Rotation cadence assumption**: groups cycle when their current camp is cleared faster than the respawn window. Research does not specify exact wait-time measurements between camps.
+- **Named placeholder timing** from `config/named_mobs/sebilis.toml`: Crypt Caretaker and Sebilite Protector both show `22-28 minute` windows. These are research-config values only — no live TextQuest sample confirms them.
+- **Overlap risk**: the research theory assumes camps are large enough that a second group entering during the first group's respawn window does not force dead time. This has not been measured.
 
-1. Enter Sebilis with a Shaman or other forager.
-2. Enable the `/forage` loop via `textquest/src/camp/forage.rs` (`enabled = true`,
-   `interval_ms = 3000` default) or use operator-driven `/forage` commands.
-3. Run for a minimum 30-minute attended window.
-4. Record: total attempts, total successes (any forage result), Nodding Blue Lily
-   hits specifically, and session duration.
-5. If zero Lily hits occur, record the zero honestly — do not retry until a
-   meaningful sample size (≥ 50 attempts) is reached.
-6. Link the raw forage log (e.g., session log file or screenshot) as a PR comment.
-   Do not copy raw counts into the wiki body.
-7. Update the table above and the evidence state in the main Current Evidence State
-   table for the `Nodding Blue Lily forage baseline` row.
+### What the CSV Template Captures for Each Camp
 
-## Access-Route Validation — Issue #3388 (Attended, Frostreaver Live Server)
+The `sebilis-validation-template.csv` now includes one placeholder row per camp area (seb-001 through seb-005). Each row captures:
 
-Issue `#3388` owns the attended access-route validation slice delegated from parent `#1837`.
-The acceptance criteria require live observation on Frostreaver of: staging point, zone sequence,
-required keying, travel time, and corpse-recovery behavior.
-Results recorded here will unblock the route claim in the Evidence State table above.
+- `camp_name` and `camp_area` — which rotation slot the sample represents
+- `placeholder_count` and `named_count` — observed spawn inventory at the sample time
+- `mean_respawn_minutes` — evidence-backed respawn timing (not inferred from guides)
+- the `wait_time_minutes` column — how long the group waited on placeholders before named or next-camp transition
+- `operator_mode` — whether the session was attended, semi-attended, or unattended
 
-### Scope
+All five rows carry `evidence_state = research_theory_only` until a live sample replaces them with observed values.
 
-- **What this issue covers:** Zone sequence from Scars-of-Velious launch staging point to Old
-  Sebilis zone-in; keying requirements confirmed via live observation; travel time measured
-  wall-clock; corpse-recovery behavior observed on at least one death during transit or zone entry.
-- **What this issue does NOT cover:** Spawn sampling, forage baselines, or drop confirmation.
-  Those are owned by `#1838`, `#1839`, and `#1840` respectively.
+### Rotation Theory Evaluation — Current Status
 
-### Pre-run checklist (operator, Frostreaver)
+| Claim | Evidence State | Source | Gap to Close |
+| --- | --- | --- | --- |
+| Disco 1+2 can sustain a continuous pull cycle without dead time | Research-backed rotation theory | `docs/wiki/Frostreaver-Farming-Guide.md`, `docs/wiki/P99-Zone-Guide.md` | Live `mean_respawn_minutes` sample from seb-001 and seb-002 rows |
+| Left wing can bridge Disco and crypt rotation without forcing wait time | Research-backed rotation theory | `docs/wiki/Frostreaver-Farming-Guide.md` | Live sample from seb-003; left-wing TOML does not yet exist |
+| Crypt Caretaker and Sebilite Protector spawn on 22-28 min windows | Config-backed, not live-validated | `config/named_mobs/sebilis.toml` | Live seb-004 sample confirming or correcting the timer |
+| Juggs/myconids deliver `500-1000pp/hr` per group | Research-backed economy theory | `docs/wiki/Frostreaver-Farming-Guide.md` | Live seb-005 sample with `result_per_hour` and `observed_item_count` filled |
+| Camp rotation across all four areas avoids dead time | Issue-theory only | Issue `#1838` description | All four camp rows (seb-001 to seb-005) must have non-PENDING `wait_time_minutes` before this claim can be evaluated |
+| Mean respawn timing is evidence-backed rather than inferred from community guides | **NOT YET MET** | — | Every `mean_respawn_minutes` field in the CSV is PENDING. This acceptance criterion for issue `#3394` cannot be marked done until live samples replace at least one row's PENDING values |
 
-- [ ] Frostreaver SSH session active and EQ client launched
-- [ ] At least one character at intended Scars launch staging point confirmed
-- [ ] Key item (if required) confirmed present in inventory before travel begins
-- [ ] TextQuest operator controls confirmed: HOME/END pause, TUI log visible
-- [ ] Log capture enabled: `/log on` in EQ client, TextQuest structured log running
-- [ ] Timer tool ready (stopwatch or `/time` alias)
+### Rotation Overlap Gap Summary
 
-### Observation template — Raw notes
+The three acceptance criteria for issue `#3394` map to the following repo gaps:
 
-Record one row per zone transition. Fill in during or immediately after the attended session.
-Do not interpolate or guess — leave fields blank if not directly observed.
+1. **All four camps' data merged into CSV** — Done: seb-001 through seb-005 rows added. All carry `research_theory_only` evidence state. No live data is invented.
+2. **Rotation theory evaluation written up** — Done: this section records the current theory, its repo-local basis, and the specific gaps that remain before the theory can be promoted to validated.
+3. **Mean respawn timing is evidence-backed, not inferred** — **Blocked**: every `mean_respawn_minutes` cell in the CSV remains PENDING. Issue `#1838` owns the live-sampling work required to close this criterion.
 
-| Step | Zone from | Zone to | Method (run/port/gate) | Key required? | Key item name | Wall-clock time (mm:ss) | Notes / anomalies |
-|------|-----------|---------|------------------------|---------------|---------------|-------------------------|-------------------|
-| 1    |           |         |                        |               |               |                         |                   |
-| 2    |           |         |                        |               |               |                         |                   |
-| 3    |           |         |                        |               |               |                         |                   |
-| 4    |           |         |                        |               |               |                         |                   |
-| 5    |           |         |                        |               |               |                         |                   |
-
-**Launch staging point observed:** _(fill in)_
-**Total travel time observed (minutes):** _(fill in)_
-**Key item required confirmed on live server:** Yes / No / Conditional _(circle and annotate)_
-**Route repeated without incident (2nd pass):** Yes / No _(fill in)_
-
-### Corpse-recovery observation template
-
-Record one entry per death or simulated zone-failure event during the validation run.
-
-| Event | Zone where death/failure occurred | TextQuest recovery behavior | Outcome (safe-coord / stuck / manual required) | Time to recover (seconds) |
-|-------|-----------------------------------|-----------------------------|------------------------------------------------|---------------------------|
-| 1     |                                   |                             |                                                |                           |
-| 2     |                                   |                             |                                                |                           |
-
-**Corpse-in-zone code `-22` triggered during run:** Yes / No _(fill in)_
-**Recovery path matched expected safe-coordinate:** Yes / No / Not tested _(fill in)_
-**Operator intervention required during recovery:** Yes / No _(fill in)_
-
-### Evidence promotion criteria
-
-When the observation templates above are filled in with live data, update the Evidence State
-table row for the route claim from `Research-backed blocker` to `Live-observed` and record
-the session date, Frostreaver session ID or log path, and operator initials here:
-
-- **Session date:** _(fill in)_
-- **Frostreaver log path or session ID:** _(fill in)_
-- **Operator:** _(fill in)_
-- **Route claim promoted:** Yes / No / Partial _(fill in after review)_
-
-Until this block is filled in from a live session, the route evidence state remains
-`Research-backed blocker` and downstream issues (`#1768` and the Sebilis disco camp work)
-remain blocked on this issue.
+Issue `#1838` must deliver live camp-by-camp spawn cadence samples before the CSV rows can be promoted from `research_theory_only` to `live_validated`. Do not update the `evidence_state` column in the CSV until `#1838` closes.
 
 ## Exit criteria
 
