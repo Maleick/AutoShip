@@ -8,6 +8,8 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 use std::path::Path;
 
+pub mod migrations;
+
 // ─── Modifiers Bitmask ────────────────────────────────────────────────────────
 
 /// 12-bit damage modifier mask matching EQLogParser spec.
@@ -83,8 +85,17 @@ impl SessionsDb {
         let conn = Connection::open(path).context("Failed to open sessions database")?;
         conn.execute_batch("PRAGMA journal_mode=WAL;")
             .context("Failed to set WAL mode")?;
+
         let db = SessionsDb { conn };
-        db.init_schema().context("Failed to initialize schema")?;
+
+        // Apply migrations instead of inline schema
+        let runner = migrations::MigrationRunner::new(&db.conn)
+            .context("Failed to create migration runner")?;
+        runner.apply_pending()
+            .context("Failed to apply pending migrations")?;
+        runner.verify_schema()
+            .context("Failed to verify schema after migrations")?;
+
         Ok(db)
     }
 
