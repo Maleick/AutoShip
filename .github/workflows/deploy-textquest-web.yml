@@ -96,7 +96,7 @@ jobs:
               PREVIOUS_IMAGE="$(docker inspect "${CONTAINER}" --format '{{.Config.Image}}')"
             fi
 
-            docker login "${REGISTRY}" --username "${DEPLOY_REGISTRY_USERNAME}" --password "${DEPLOY_REGISTRY_TOKEN}"
+            printf "%s\n" "${DEPLOY_REGISTRY_TOKEN}" | docker login "${REGISTRY}" --username "${DEPLOY_REGISTRY_USERNAME}" --password-stdin
             docker pull "${IMAGE}"
 
             run_container() {
