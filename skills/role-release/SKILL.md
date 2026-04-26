@@ -59,4 +59,4 @@ cat VERSION
 
 ## Model
 
-Uses `openai/gpt-5.5` (orchestration capable).
+Uses the configured release-capable role model from `.autoship/model-routing.json`.

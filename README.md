@@ -28,10 +28,10 @@ AutoShip is the OpenCode plugin for solo maintainers who want their GitHub issue
 
 ```text
 ┌──────────────────────────────────────────┐
-│  ISSUE PLANNING        GPT-5.5           │
+│  ISSUE PLANNING        CONFIGURED ROLE   │
 │  MODEL SELECTION       LIVE OPENCODE     │
 │  WORKER DISPATCH       15 ACTIVE MAX     │
-│  REVIEW                GPT-5.5           │
+│  REVIEW                CONFIGURED ROLE   │
 │  PR CREATION           CONVENTIONAL      │
 └──────────────────────────────────────────┘
 ```
@@ -93,7 +93,7 @@ OpenCode is the only supported worker runtime. AutoShip discovers current model 
 opencode models
 ```
 
-Setup defaults to ranked free models from the current OpenCode inventory. Operators can explicitly select a comma-separated model list with `AUTOSHIP_MODELS`.
+Setup defaults to ranked free worker models from the current OpenCode inventory. On first run, the setup wizard asks which models to use for the orchestrator and reviewer roles; these can be the same model or different models. Operators can explicitly select a comma-separated worker model list with `AUTOSHIP_MODELS`.
 
 The selected routing is saved to `.autoship/model-routing.json`. Edit that file manually to tune model eligibility, strength, or task types. Setup preserves manual edits by default; use `AUTOSHIP_REFRESH_MODELS=1 bash hooks/opencode/setup.sh` to regenerate from the current OpenCode inventory.
 
@@ -101,18 +101,22 @@ The selected routing is saved to `.autoship/model-routing.json`. Edit that file 
 
 - Max active workers: `15`
 - Queue ordering: lowest issue number first
-- Model routing: ranked free OpenCode models first
-- Planner/coordinator/orchestrator/reviewer: `openai/gpt-5.5`
-- Worker selection: best configured model per task, with free, Spark, Go-provider, and other selected models eligible when available
+- Model routing: ranked free OpenCode models first, with deterministic rotation across compatible workers
+- Role selection: best available role model from `opencode models`, preferring free models first, then OpenCode Go models; paid Zen/OpenRouter Kimi models require explicit selection
+- Free detection: `:free`/`-free` IDs and bundled free Zen models such as `opencode/big-pickle` and `opencode/gpt-5-nano`
+- Go routing: `opencode-go/*` models are included as low-cost subscription fallback models, not free models
+- Orchestrator/reviewer: prompted during first-run setup and configurable independently
+- Worker selection: free-first compatible model per task, with selected fallbacks eligible when configured
+- Complex fallback: if no sufficiently strong compatible worker is available, AutoShip uses the configured orchestrator model as an advisor
 
 ## How It Works
 
 ```mermaid
 flowchart LR
-    A[GitHub issues<br/>agent:ready] --> B[GPT-5.5 planner]
+    A[GitHub issues<br/>agent:ready] --> B[configured planner]
     B --> C[Model selector]
-    C --> D[OpenCode worker<br/>free / Spark / Go / selected]
-    D --> E[GPT-5.5 reviewer]
+    C --> D[OpenCode worker<br/>free-first rotated pool]
+    D --> E[configured reviewer]
     E -->|pass| F[Pull request]
     E -->|fail| C
 ```

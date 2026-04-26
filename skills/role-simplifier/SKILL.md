@@ -59,4 +59,4 @@ git add -A && git commit -m 'refactor: simplify <area> (#<number>)'
 
 ## Model
 
-Uses `openai/gpt-5.5` (strong reasoning).
+Uses the configured simplifier-capable role model from `.autoship/model-routing.json`.

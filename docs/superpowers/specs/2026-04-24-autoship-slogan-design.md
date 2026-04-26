@@ -26,7 +26,7 @@ Supporting line:
 
 - GitHub repository About description: use a concise version of the slogan and OpenCode positioning.
 - `README.md`: replace the current hero slogan and opening description with the primary message.
-- `assets/autoship-banner.svg`: make the slogan readable in the main graphic and keep OpenCode/GPT-5.5/15-worker details as secondary copy.
+- `assets/autoship-banner.svg`: make the slogan readable in the main graphic and keep OpenCode/free-first routing/15-worker details as secondary copy.
 - `docs/assets/autoship-banner.svg`: keep the Pages-published graphic in sync with the root asset.
 - `docs/index.html`: update page title, meta description, Open Graph text, hero alt text, hero copy, and stale worker/merge claims.
 - `wiki/Home.md`: add the slogan above the core behavior list and keep technical details below it.
@@ -35,7 +35,7 @@ Supporting line:
 
 - Replace stale “10 default active workers” page copy with `15`.
 - Avoid saying AutoShip merges PRs in the main marketing promise unless a specific section explains operator-controlled merge behavior.
-- Preserve OpenCode-only messaging and GPT-5.5 reviewer/planner details.
+- Preserve OpenCode-only messaging and configurable reviewer/planner role details.
 
 ## Acceptance Criteria
 

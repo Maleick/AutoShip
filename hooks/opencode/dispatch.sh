@@ -140,6 +140,7 @@ $BODY
 - Work only in this worktree: $FULL_WORKSPACE_PATH
 - Implement the issue per its acceptance criteria.
 - Run relevant project checks before finishing.
+- Do not repeat the same failing command. If a command fails, read the error, change approach, and try a simpler supported command or inspect the relevant file directly.
 - Commit changes on branch autoship/issue-$ISSUE_NUM.
 - Write AUTOSHIP_RESULT.md in the worktree.
 - Write COMPLETE, BLOCKED, or STUCK to $FULL_WORKSPACE_PATH/status.

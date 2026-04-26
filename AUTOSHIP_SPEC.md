@@ -7,12 +7,14 @@ AutoShip is an autonomous GitHub issue → pull request pipeline. It reads open 
 ## Runtime Model
 
 - OpenCode is the only supported worker runtime.
-- `openai/gpt-5.5` is the default planner, coordinator, orchestrator, and reviewer model.
+- Role models come from the live `opencode models` inventory and project-local `.autoship/model-routing.json`.
+- Setup prefers capable free or OpenCode Go Kimi/Kimmy/Ling 2.6-family role models when available and prompts for orchestrator/reviewer on first run.
 - `openai/gpt-5.5-fast` is rejected.
 - Worker models come from the live `opencode models` inventory.
 - Free models are selected by default.
 - Operator-selected models, including Spark and Go-provider models, are allowed when present in the live inventory.
-- Worker selection scores task compatibility, cost class, configured strength, and previous success/failure history.
+- Worker selection scores task compatibility, cost class, configured strength, previous success/failure history, and deterministic issue-number rotation across compatible workers.
+- Complex tasks without a sufficiently strong compatible worker use the configured orchestrator model as an advisor fallback.
 
 ## Concurrency
 
@@ -28,4 +30,4 @@ AutoShip is an autonomous GitHub issue → pull request pipeline. It reads open 
 
 ## Verification
 
-Completed work must be independently reviewed before PR creation. The reviewer role uses the configured OpenCode reviewer model, defaulting to `openai/gpt-5.5`.
+Completed work must be independently reviewed before PR creation. The reviewer role uses the configured OpenCode reviewer model from `.autoship/model-routing.json`.

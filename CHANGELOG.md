@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.9
+
+- Rotate compatible free worker models deterministically by issue number so parallel dispatches do not overload one free provider.
+- Classify bundled free Zen models as free even when model IDs do not include a `free` suffix, and include `opencode-go/*` models as low-cost subscription fallbacks.
+- Prefer capable free or OpenCode Go Kimi/Kimmy/Ling 2.6-family role models from live OpenCode inventory instead of assuming `openai/gpt-5.5`.
+- Prompt for orchestrator and reviewer models during first-run setup, with separate CLI/env overrides for each role.
+- Route complex tasks without a strong compatible worker to the configured orchestrator model as an advisor fallback.
+- Add worker prompt guardrails against repeating the same failing command loop.
+- Refresh README, docs, wiki, commands, skills, and agent guidance for free-first OpenCode-only routing.
+
 ## v2.0.8
 
 - Refresh worker monitoring from `status.sh` so dead worker PIDs are marked stuck during normal status checks.

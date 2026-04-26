@@ -63,7 +63,7 @@ Run the OpenCode reviewer hook:
 bash hooks/opencode/reviewer.sh <issue-key> <worktree-path> <result-path> <test-command>
 ```
 
-The reviewer role model is read from `.autoship/model-routing.json` and defaults to `openai/gpt-5.5`.
+The reviewer role model is read from `.autoship/model-routing.json`; first-run setup prompts for it.
 
 ---
 

@@ -61,4 +61,4 @@ Write review to `.autoship/workspaces/<issue-key>/REVIEW.md`:
 
 ## Model
 
-Uses `openai/gpt-5.5` (strong reasoning).
+Uses the configured reviewer role model from `.autoship/model-routing.json`.

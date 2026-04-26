@@ -8,11 +8,11 @@ CONFIG_FILE="$AUTOSHIP_DIR/config.json"
 MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-15}"
 SELECTED_MODELS="${AUTOSHIP_MODELS:-}"
 REFRESH_MODELS="${AUTOSHIP_REFRESH_MODELS:-0}"
-PLANNER_MODEL="${AUTOSHIP_PLANNER_MODEL:-openai/gpt-5.5}"
-COORDINATOR_MODEL="${AUTOSHIP_COORDINATOR_MODEL:-$PLANNER_MODEL}"
-ORCHESTRATOR_MODEL="${AUTOSHIP_ORCHESTRATOR_MODEL:-$PLANNER_MODEL}"
-REVIEWER_MODEL="${AUTOSHIP_REVIEWER_MODEL:-$PLANNER_MODEL}"
-LEAD_MODEL="${AUTOSHIP_LEAD_MODEL:-$PLANNER_MODEL}"
+PLANNER_MODEL="${AUTOSHIP_PLANNER_MODEL:-}"
+COORDINATOR_MODEL="${AUTOSHIP_COORDINATOR_MODEL:-}"
+ORCHESTRATOR_MODEL="${AUTOSHIP_ORCHESTRATOR_MODEL:-}"
+REVIEWER_MODEL="${AUTOSHIP_REVIEWER_MODEL:-}"
+LEAD_MODEL="${AUTOSHIP_LEAD_MODEL:-}"
 LABELS="${AUTOSHIP_LABELS:-agent:ready}"
 
 NO_TUI=0
@@ -31,7 +31,9 @@ OPTIONS:
   --max-agents N        Set max concurrent agents (default: 15)
   --labels LABEL,...   Comma-separated labels to monitor (default: agent:ready)
   --refresh-models     Force refresh model inventory from OpenCode
-  --planner-model MODEL Set planner/coordinator/orchestrator/reviewer/lead model (default: openai/gpt-5.5)
+  --planner-model MODEL Set planner/coordinator/orchestrator/reviewer/lead model (default: best available role model)
+  --orchestrator-model MODEL Set orchestrator model separately (default: planner model)
+  --reviewer-model MODEL Set reviewer model separately (default: planner model)
   --lead-model MODEL   Set lead model separately (default: same as planner)
   --worker-models MODELS Comma-separated worker models (default: auto-detect free)
   -h, --help           Show this help message
@@ -50,7 +52,9 @@ ENVIRONMENT VARIABLES:
   AUTOSHIP_MAX_AGENTS       Max concurrent agents
   AUTOSHIP_MODELS          Comma-separated worker models
   AUTOSHIP_REFRESH_MODELS  Set to 1 to force refresh
-  AUTOSHIP_PLANNER_MODEL   Planner model (default: openai/gpt-5.5)
+  AUTOSHIP_PLANNER_MODEL   Planner model (default: best available role model)
+  AUTOSHIP_ORCHESTRATOR_MODEL Orchestrator model (default: planner model)
+  AUTOSHIP_REVIEWER_MODEL  Reviewer model (default: planner model)
   AUTOSHIP_LEAD_MODEL    Lead model (default: same as planner)
   AUTOSHIP_LABELS          Comma-separated labels (default: agent:ready)
   GH_TOKEN                 GitHub token (for gh auth)
@@ -108,6 +112,24 @@ parse_args() {
         [[ $# -ge 2 ]] || { echo "Error: --lead-model requires a value" >&2; usage 2; }
         LEAD_MODEL="$2"
         shift 2
+        ;;
+      --orchestrator-model)
+        [[ $# -ge 2 ]] || { echo "Error: --orchestrator-model requires a value" >&2; usage 2; }
+        ORCHESTRATOR_MODEL="$2"
+        shift 2
+        ;;
+      --orchestrator-model=*)
+        ORCHESTRATOR_MODEL="${1#*=}"
+        shift
+        ;;
+      --reviewer-model)
+        [[ $# -ge 2 ]] || { echo "Error: --reviewer-model requires a value" >&2; usage 2; }
+        REVIEWER_MODEL="$2"
+        shift 2
+        ;;
+      --reviewer-model=*)
+        REVIEWER_MODEL="${1#*=}"
+        shift
         ;;
       --lead-model=*)
         LEAD_MODEL="${1#*=}"
@@ -210,14 +232,46 @@ if [[ -z "$available_model_ids" ]]; then
   exit 1
 fi
 
+DEFAULT_ROLE_MODEL=$(default_role_model "$available_model_ids")
+PLANNER_MODEL="${PLANNER_MODEL:-$DEFAULT_ROLE_MODEL}"
+COORDINATOR_MODEL="${COORDINATOR_MODEL:-$PLANNER_MODEL}"
+ORCHESTRATOR_MODEL="${ORCHESTRATOR_MODEL:-$PLANNER_MODEL}"
+REVIEWER_MODEL="${REVIEWER_MODEL:-$PLANNER_MODEL}"
+LEAD_MODEL="${LEAD_MODEL:-$PLANNER_MODEL}"
+
+choose_role_model() {
+  local role_name="$1"
+  local current_model="$2"
+  local selected=""
+  echo "" >&2
+  echo "Available OpenCode models for $role_name:" >&2
+  printf '%s\n' "$available_model_ids" | nl -w1 -s'. ' >&2
+  printf 'Choose %s model [%s]: ' "$role_name" "$current_model" >&2
+  IFS= read -r selected || selected=""
+  selected="${selected#${selected%%[![:space:]]*}}"
+  selected="${selected%${selected##*[![:space:]]}}"
+  if [[ -z "$selected" ]]; then
+    printf '%s\n' "$current_model"
+  elif [[ "$selected" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$available_model_ids" | sed -n "${selected}p"
+  else
+    printf '%s\n' "$selected"
+  fi
+}
+
+if [[ "$NO_TUI" -eq 0 && ! -f "$ROUTING_FILE" ]]; then
+  ORCHESTRATOR_MODEL=$(choose_role_model "orchestrator" "$ORCHESTRATOR_MODEL")
+  REVIEWER_MODEL=$(choose_role_model "reviewer" "$REVIEWER_MODEL")
+fi
+
 if [[ -z "$SELECTED_MODELS" ]]; then
-  SELECTED_MODELS=$(default_free_models "$available_model_ids")
+  SELECTED_MODELS=$(default_worker_models "$available_model_ids")
 fi
 
 reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL"
 
 if [[ -z "$SELECTED_MODELS" ]]; then
-  echo "Error: no free OpenCode models found. Set AUTOSHIP_MODELS to choose models explicitly." >&2
+  echo "Error: no free or OpenCode Go models found. Set AUTOSHIP_MODELS to choose models explicitly." >&2
   exit 1
 fi
 
@@ -280,9 +334,16 @@ def task_types(model: str) -> list[str]:
 
 entries = []
 for model in models:
+    lower = model.lower()
+    if ":free" in lower or "free" in lower or model in ["opencode/big-pickle", "opencode/gpt-5-nano"]:
+        cost = "free"
+    elif lower.startswith("opencode-go/"):
+        cost = "go"
+    else:
+        cost = "selected"
     entries.append({
         "id": model,
-        "cost": "free" if (":free" in model.lower() or "free" in model.lower()) else "selected",
+        "cost": cost,
         "strength": strength(model),
         "max_task_types": task_types(model),
     })

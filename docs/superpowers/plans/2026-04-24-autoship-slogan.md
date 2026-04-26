@@ -76,7 +76,7 @@ Replace the secondary and tertiary text lines with:
 
 ```xml
 <text x="74" y="166" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="32" font-weight="800" fill="#cbd5e1">Turn backlog into reviewed PRs.</text>
-<text x="76" y="220" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" fill="#fbbf24">OpenCode plans • 15 workers ship • GPT-5.5 verifies</text>
+<text x="76" y="220" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" fill="#fbbf24">OpenCode plans • 15 workers ship • configured review verifies</text>
 ```
 
 - [ ] **Step 3: Sync Pages banner**

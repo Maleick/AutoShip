@@ -39,11 +39,11 @@ The `model-routing.json` file defines role assignments and worker pools:
 ```json
 {
   "roles": {
-    "planner": "openai/gpt-5.5",
-    "coordinator": "openai/gpt-5.5",
-    "orchestrator": "openai/gpt-5.5",
-    "reviewer": "openai/gpt-5.5",
-    "lead": "openai/gpt-5.5"
+    "planner": "opencode-go/kimi-k2.6",
+    "coordinator": "opencode-go/kimi-k2.6",
+    "orchestrator": "opencode-go/kimi-k2.6",
+    "reviewer": "opencode-go/kimi-k2.6",
+    "lead": "opencode-go/kimi-k2.6"
   },
   "pools": {
     "default": {
@@ -77,21 +77,23 @@ The `model-routing.json` file defines role assignments and worker pools:
 
 ### Frontier Roles
 
-The frontier roles perform planning, coordination, orchestration, review, and lead decisions. They default to `openai/gpt-5.5` because those steps require global judgment across issues and workspaces.
+The frontier roles perform planning, coordination, orchestration, review, and lead decisions. They are selected from the live `opencode models` inventory instead of being pinned to one provider. Setup prefers capable free or OpenCode Go role models when available, especially Kimi/Kimmy/Ling 2.6-family models.
 
 | Role | Purpose | Default |
 | --- | --- | --- |
-| `planner` | Plans issue work and acceptance criteria | `openai/gpt-5.5` |
-| `coordinator` | Coordinates multi-agent workflows | `openai/gpt-5.5` |
-| `orchestrator` | Orchestrates issue-to-PR pipeline | `openai/gpt-5.5` |
-| `reviewer` | Reviews completed work before PR creation | `openai/gpt-5.5` |
-| `lead` | Makes dispatch, concurrency, and escalation decisions | `openai/gpt-5.5` |
+| `planner` | Plans issue work and acceptance criteria | Best available role model |
+| `coordinator` | Coordinates multi-agent workflows | Planner model |
+| `orchestrator` | Orchestrates issue-to-PR pipeline | Prompted on first run |
+| `reviewer` | Reviews completed work before PR creation | Prompted on first run |
+| `lead` | Makes dispatch, concurrency, and escalation decisions | Planner model |
 
-Set all frontier roles together with `AUTOSHIP_PLANNER_MODEL` or `--planner-model`. Set only the lead role with `AUTOSHIP_LEAD_MODEL` or `--lead-model`.
+Set all frontier roles together with `AUTOSHIP_PLANNER_MODEL` or `--planner-model`. Set orchestrator and reviewer separately with `AUTOSHIP_ORCHESTRATOR_MODEL` / `--orchestrator-model` and `AUTOSHIP_REVIEWER_MODEL` / `--reviewer-model`. Set only the lead role with `AUTOSHIP_LEAD_MODEL` or `--lead-model`.
 
 ### Worker Pools
 
-Worker pools allow routing to specialized model groups. Setup defaults to live OpenCode models flagged free, then the selector scores compatible workers by cost class, configured strength, and `model-history.json` success/failure history.
+Worker pools allow routing to specialized model groups. Setup defaults to live OpenCode models detected as free, including `:free`/`-free` IDs and bundled free Zen models such as `opencode/big-pickle` and `opencode/gpt-5-nano`. OpenCode Go models (`opencode-go/*`) are included as low-cost subscription fallback models, not free models. The selector scores compatible workers by cost class, configured strength, and `model-history.json` success/failure history. Dispatch uses deterministic issue-number rotation across the compatible sorted pool so concurrent workers do not all select the same strongest free model.
+
+Complex tasks require a strong compatible worker. If the available pool is too weak for a complex task, AutoShip selects the configured orchestrator model as an advisor fallback.
 
 - `default` - General task pool
 - `frontend` - Frontend/UI work
