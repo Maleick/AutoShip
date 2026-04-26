@@ -85,5 +85,6 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         ),
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
+        session_logs_owner: tokio::sync::RwLock::new(HashMap::new()),
     })
 }

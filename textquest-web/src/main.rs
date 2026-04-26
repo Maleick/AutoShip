@@ -164,6 +164,8 @@ pub struct AppState {
     pub session_control_state: Arc<api::session_control::SessionControlState>,
     /// In-memory session logs keyed by session_id for the admin log tail API.
     pub session_logs: tokio::sync::RwLock<HashMap<u32, Vec<String>>>,
+    /// Ownership mapping: session_id -> user_id (string identifier) for access control.
+    pub session_logs_owner: tokio::sync::RwLock<HashMap<u32, String>>,
     /// Self-improvement suggestions state — events, metrics, and operator feedback.
     pub self_improvement_state: Arc<api::self_improvement::SelfImprovementState>,
     /// In-memory suggestion state for the suggestion engine.
@@ -537,6 +539,7 @@ fn build_state() -> Arc<AppState> {
         ),
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
+        session_logs_owner: tokio::sync::RwLock::new(HashMap::new()),
         self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
         suggestion_state: api::suggestions::SuggestionState::new(),
         config_change_history: tokio::sync::RwLock::new(Vec::new()),
@@ -626,6 +629,7 @@ pub(crate) fn test_app_state() -> AppState {
         ),
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
+        session_logs_owner: tokio::sync::RwLock::new(HashMap::new()),
         self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
         suggestion_state: api::suggestions::SuggestionState::new(),
         config_change_history: tokio::sync::RwLock::new(Vec::new()),
