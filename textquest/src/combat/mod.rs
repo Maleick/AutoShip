@@ -29,6 +29,8 @@ pub mod spell_db;
 pub mod spell_optimizer;
 /// Combatant state machine primitives.
 pub mod state;
+/// MA target scanner with safe-targeting predicate — skips mobs training other groups.
+pub mod target_scanner;
 /// Worst-hurt group/pet scanner for heal targeting — MQ2WorstHurt parity.
 pub mod worst_hurt;
 /// MezTracker — AE vs ST mez decision engine with concurrent-cap enforcement.

@@ -505,6 +505,7 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             is_gm: false,
+            combat_target_id: None,
         }
     }
 

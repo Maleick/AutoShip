@@ -218,6 +218,12 @@ pub struct SpawnData {
     pub stand_state: u8,
     /// Whether this spawn is flagged as a GM (Game Master).
     pub is_gm: bool,
+    /// Spawn ID of this spawn's current combat target, if any.
+    ///
+    /// Used by the safe-targeting predicate to skip mobs that are fighting
+    /// a character outside the group/raid (prevents training other groups).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub combat_target_id: Option<u32>,
 }
 
 impl SpawnData {
@@ -471,6 +477,7 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             is_gm: false,
+            combat_target_id: None,
         }
     }
 

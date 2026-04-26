@@ -1461,6 +1461,7 @@ fn load_demo_data(app: &mut App) {
             heading,
             spawn_id: i as u32 + 1,
             is_gm: false,
+            combat_target_id: None,
             race_id,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),

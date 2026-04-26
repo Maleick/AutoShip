@@ -1607,6 +1607,7 @@ mod tests {
                     speed_run: 0.0,
                     stand_state: 0,
                     is_gm: false,
+            combat_target_id: None,
                 },
                 target_spawn_id: Some(9001),
                 nearby_spawns: vec![textquest_common::types::SpawnData {
@@ -1630,6 +1631,7 @@ mod tests {
                     speed_run: 0.0,
                     stand_state: 0,
                     is_gm: false,
+            combat_target_id: None,
                 }],
             }],
         };

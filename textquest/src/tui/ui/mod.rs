@@ -2038,6 +2038,7 @@ mod tests {
             endurance_current: 4_000,
             endurance_max: 5_000,
             is_gm: false,
+            combat_target_id: None,
             race_id: 1,
             buff_slots: vec![BuffSlot {
                 spell_id: 0xFFFF,
@@ -2072,6 +2073,7 @@ mod tests {
             endurance_current: 0,
             endurance_max: 0,
             is_gm: false,
+            combat_target_id: None,
             race_id: 1,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),

@@ -565,6 +565,7 @@ impl From<PlayerSnapshot> for SpawnData {
             speed_run: snap.speed_run,
             stand_state: snap.stand_state,
             is_gm: false,
+            combat_target_id: None,
         }
     }
 }
@@ -593,6 +594,7 @@ impl From<SpawnSnapshot> for SpawnData {
             speed_run: snap.speed_run,
             stand_state: snap.stand_state,
             is_gm: false,
+            combat_target_id: None,
         }
     }
 }
