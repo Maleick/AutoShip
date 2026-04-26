@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import {
   closestCenter,
   DndContext,
@@ -20,10 +20,12 @@ import { GripVertical } from "lucide-react";
 
 interface SortableItemProps {
   id: string;
+  position: number;
+  total: number;
   children: (args: { handle: ReactNode; dragging: boolean }) => ReactNode;
 }
 
-export function SortableItem({ id, children }: SortableItemProps) {
+export function SortableItem({ id, children, position, total }: SortableItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
   });
@@ -35,12 +37,13 @@ export function SortableItem({ id, children }: SortableItemProps) {
   };
 
   const instructionsId = `sortable-instructions-${id}`;
+  const positionLabel = total > 1 ? `, position ${position} of ${total}` : "";
   const handle = (
     <>
       <button
         ref={undefined}
         type="button"
-        aria-label="Drag to reorder"
+        aria-label={`Drag to reorder item${positionLabel}. Press Space to lift. Use Arrow Up/Arrow Down to move, then press Space again to place.`}
         aria-describedby={instructionsId}
         {...attributes}
         {...listeners}
@@ -49,7 +52,8 @@ export function SortableItem({ id, children }: SortableItemProps) {
         <GripVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
       </button>
       <span id={instructionsId} className="sr-only">
-        Use Space to pick up, Arrow keys to move, Space to drop, Escape to cancel
+        Use Tab to move focus. Use Space to lift an item into keyboard move mode, then use Arrow
+        Up/Down to reorder and Space to place it. Press Escape to cancel a drag.
       </span>
     </>
   );
@@ -72,6 +76,8 @@ export function SortableList<T extends { id: string }>({
   onReorder,
   children,
 }: SortableListProps<T>) {
+  const listId = useId();
+  const instructionsId = `${listId}-instructions`;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -89,9 +95,13 @@ export function SortableList<T extends { id: string }>({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-1">
+        <div className="space-y-1" aria-describedby={instructionsId} role="list">
+          <span id={instructionsId} className="sr-only">
+            Use Tab to move focus into this list. When focused on a drag handle, press Space to
+            pick up and then Arrow Up/Arrow Down to reorder items.
+          </span>
           {items.map((item, i) => (
-            <SortableItem key={item.id} id={item.id}>
+            <SortableItem key={item.id} id={item.id} position={i + 1} total={items.length}>
               {() => <>{children(item, i)}</>}
             </SortableItem>
           ))}

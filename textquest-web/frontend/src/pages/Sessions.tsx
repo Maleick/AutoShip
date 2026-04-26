@@ -180,15 +180,23 @@ export function Sessions() {
         )}
 
         {selected.size > 0 && (
+          <div className="sr-only" id="sessions-bulk-actions-help">
+            Bulk action controls apply to {selected.size} selected sessions.
+          </div>
+        )}
+
+        {selected.size > 0 && (
           <div
             role="status"
             aria-live="polite"
+            aria-atomic="true"
             className="flex items-center gap-3 border border-neriak-magenta/50 bg-panel rounded-sm px-3 py-2 font-mono text-xs"
           >
             <span className="text-neriak-magenta">{selected.size} selected</span>
             <button
               onClick={() => bulk("pause")}
               aria-label={`Pause ${selected.size} selected sessions`}
+              aria-describedby="sessions-bulk-actions-help"
               className="flex items-center gap-1 text-state-warn hover:text-state-warn/80"
             >
               <Pause className="w-3.5 h-3.5" strokeWidth={1.75} /> pause all
@@ -196,6 +204,7 @@ export function Sessions() {
             <button
               onClick={() => bulk("resume")}
               aria-label={`Resume ${selected.size} selected sessions`}
+              aria-describedby="sessions-bulk-actions-help"
               className="flex items-center gap-1 text-state-ok hover:text-state-ok/80"
             >
               <Play className="w-3.5 h-3.5" strokeWidth={1.75} /> resume all
@@ -203,6 +212,7 @@ export function Sessions() {
             <button
               onClick={() => setSelected(new Set())}
               aria-label={`Clear selection of ${selected.size} sessions`}
+              aria-describedby="sessions-bulk-actions-help"
               className="ml-auto text-neriak-muted hover:text-neriak-text"
             >
               clear
@@ -375,7 +385,13 @@ export function Sessions() {
             </button>
           </div>
           {cmdLog.length > 0 && (
-            <div className="max-h-40 overflow-y-auto border-t border-neriak-dim p-2 space-y-1 font-mono text-[11px]">
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              aria-label="Command responses"
+              className="max-h-40 overflow-y-auto border-t border-neriak-dim p-2 space-y-1 font-mono text-[11px]"
+            >
               {cmdLog.map((r, i) => (
                 <div key={i} className="flex items-start gap-2">
                   <span className={r.accepted ? "text-state-ok" : "text-state-danger"}>

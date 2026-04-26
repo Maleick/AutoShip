@@ -114,7 +114,45 @@ export default function App() {
   const activeLabel = NAV.find((n) => n.id === tab)?.label ?? "";
 
   return (
-    <div className="min-h-screen bg-void text-neriak-text flex flex-col">
+    <>
+      <style>{`
+        .skip-link {
+          position: absolute;
+          left: 0.5rem;
+          top: -3rem;
+          z-index: 60;
+          background: var(--color-neriak-magenta);
+          color: var(--color-void);
+          padding: 0.45rem 0.75rem;
+          border-radius: 0 0 4px 4px;
+          text-decoration: none;
+          font: 600 0.75rem var(--font-mono);
+          transition: transform 120ms ease;
+          transform: translateY(-0.25rem);
+        }
+
+        .skip-link:focus-visible {
+          top: 0.5rem;
+          transform: translateY(0);
+        }
+
+        :where(
+          a,
+          button,
+          [role=\"button\"],
+          input,
+          select,
+          textarea,
+          [tabindex]:not([tabindex=\"-1\"])
+        ):focus-visible {
+          outline: 2px solid var(--color-neriak-cyan);
+          outline-offset: 2px;
+        }
+      `}</style>
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+      <div className="min-h-screen bg-void text-neriak-text flex flex-col">
       {/* ─── Top bar ──────────────────────────────────────────── */}
       <header className="flex items-center gap-6 px-5 py-3 border-b border-neriak-dim bg-void">
         <div className="flex items-baseline gap-3">
@@ -218,7 +256,10 @@ export default function App() {
           </nav>
         </aside>
 
-        <main className={`flex-1 overflow-y-auto ${privacy ? "blur-sm pointer-events-none" : ""}`}>
+        <main
+          id="main-content"
+          className={`flex-1 overflow-y-auto ${privacy ? "blur-sm pointer-events-none" : ""}`}
+        >
           {tab === "dashboard" && <Dashboard />}
           {tab === "sessions" && <Sessions />}
           {tab === "replay" && <Replay />}
@@ -254,6 +295,7 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         actions={paletteActions}
       />
-    </div>
+      </div>
+    </>
   );
 }
