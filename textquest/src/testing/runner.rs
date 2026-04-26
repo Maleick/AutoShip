@@ -5,10 +5,11 @@
 //! separate tokio task and returns the [`JoinHandle`]s for lifecycle management.
 
 use std::{
-    fs,
-    io,
+    fs::{self, OpenOptions},
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::Arc,
+    time::SystemTime,
     time::{Duration, Instant},
 };
 
@@ -103,7 +104,8 @@ impl TestLoopRunner {
         output_dir: impl AsRef<Path>,
         shutdown_rx: watch::Receiver<bool>,
     ) -> Self {
-        let recovery = RecoveryRuntimeState::load_or_default(task_id, scenarios.len(), output_dir.as_ref());
+        let recovery =
+            RecoveryRuntimeState::load_or_default(task_id, scenarios.len(), output_dir.as_ref());
         Self {
             account,
             task_id,
@@ -226,7 +228,9 @@ impl TestLoopRunner {
             }
 
             let remaining = duration.saturating_sub(run_start.elapsed());
-            let timeout_budget = remaining.min(Duration::from_secs(SCENARIO_HARD_TIMEOUT_SECS)).max(Duration::from_millis(1));
+            let timeout_budget = remaining
+                .min(Duration::from_secs(SCENARIO_HARD_TIMEOUT_SECS))
+                .max(Duration::from_millis(1));
 
             let outcome = time::timeout(timeout_budget, scenario.run(remaining)).await;
             match outcome {
@@ -252,9 +256,9 @@ impl TestLoopRunner {
                             "login failure detected, retrying with exponential backoff"
                         );
                         if run_start.elapsed() + backoff >= duration {
-                            result.errors.push(
-                                "login_retry_exhausted_after_timeout".to_string(),
-                            );
+                            result
+                                .errors
+                                .push("login_retry_exhausted_after_timeout".to_string());
                             return result;
                         }
                         time::sleep(backoff).await;
@@ -316,7 +320,7 @@ struct RecoveryRuntimeState {
 impl RecoveryRuntimeState {
     fn load_or_default(task_id: usize, total_scenarios: usize, output_dir: &Path) -> Self {
         let checkpoint_path = output_dir.join(format!("{CHECKPOINT_FILE_PREFIX}-{task_id}.json"));
-        let starting_index = fs::read_to_string(&checkpoint_path)
+        let starting_index = read_checkpoint_if_regular_file(&checkpoint_path)
             .ok()
             .and_then(|raw| serde_json::from_str::<RecoveryCheckpoint>(&raw).ok())
             .filter(|checkpoint| {
@@ -382,7 +386,8 @@ impl RecoveryRuntimeState {
     }
 
     fn login_backoff_remaining(&self, now: Instant) -> Option<Duration> {
-        self.login_backoff_until.and_then(|deadline| deadline.checked_duration_since(now))
+        self.login_backoff_until
+            .and_then(|deadline| deadline.checked_duration_since(now))
     }
 
     fn on_timeout(&mut self) {
@@ -395,7 +400,10 @@ impl RecoveryRuntimeState {
         now: Instant,
     ) -> ScenarioResult {
         if let Some(sample) = self.current_memory_sample(now) {
-            result = result.with_metric("process_memory_bytes", MetricValue::Gauge(sample.bytes as f64));
+            result = result.with_metric(
+                "process_memory_bytes",
+                MetricValue::Gauge(sample.bytes as f64),
+            );
             result = result.with_metric(
                 "memory_growth_per_hour",
                 MetricValue::Gauge(sample.growth_rate_per_hour),
@@ -422,10 +430,7 @@ impl RecoveryRuntimeState {
         let elapsed = now.duration_since(self.start_time).as_secs_f64();
         let base = self
             .memory_bytes_base
-            .get_or_insert_with(|| {
-                self.memory_last_bytes
-                    .unwrap_or(bytes)
-            });
+            .get_or_insert_with(|| self.memory_last_bytes.unwrap_or(bytes));
 
         self.memory_last_sample = Some(now);
         self.memory_last_bytes = Some(bytes);
@@ -452,11 +457,15 @@ impl RecoveryRuntimeState {
         })
     }
 
-    fn save_checkpoint(&self, total_scenarios: usize, next_scenario_index: usize) -> io::Result<()> {
+    fn save_checkpoint(
+        &self,
+        total_scenarios: usize,
+        next_scenario_index: usize,
+    ) -> io::Result<()> {
         let checkpoint_path = &self.checkpoint_path;
-        let parent = checkpoint_path.parent().ok_or_else(|| {
-            io::Error::other("checkpoint path has no parent directory")
-        })?;
+        let parent = checkpoint_path
+            .parent()
+            .ok_or_else(|| io::Error::other("checkpoint path has no parent directory"))?;
         fs::create_dir_all(parent)?;
         let checkpoint = RecoveryCheckpoint {
             task_id: self.task_id,
@@ -466,7 +475,7 @@ impl RecoveryRuntimeState {
         let payload = serde_json::to_string_pretty(&checkpoint).map_err(|error| {
             io::Error::other(format!("failed to serialise recovery checkpoint: {error}"))
         })?;
-        fs::write(checkpoint_path, payload)?;
+        atomic_write_checkpoint(checkpoint_path, payload.as_bytes())?;
         Ok(())
     }
 
@@ -475,6 +484,44 @@ impl RecoveryRuntimeState {
             let _ = fs::remove_file(&self.checkpoint_path);
         }
     }
+}
+
+fn read_checkpoint_if_regular_file(path: &Path) -> io::Result<String> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_file() {
+        return Err(io::Error::other("checkpoint path must be a regular file"));
+    }
+    fs::read_to_string(path)
+}
+
+fn atomic_write_checkpoint(path: &Path, payload: &[u8]) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("checkpoint path has no parent directory"))?;
+    let temp_path = parent.join(format!(
+        ".{CHECKPOINT_FILE_PREFIX}.tmp-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+
+    let mut temp_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)?;
+    temp_file.write_all(payload)?;
+    temp_file.sync_all()?;
+    drop(temp_file);
+
+    fs::rename(&temp_path, path).or_else(|_| {
+        if path.exists() {
+            fs::remove_file(path)?;
+        }
+        fs::rename(&temp_path, path)
+    })?;
+    Ok(())
 }
 
 fn current_process_rss_bytes() -> Option<u64> {
@@ -765,8 +812,9 @@ mod tests {
             state.on_failure(now);
         }
         assert!(state.is_circuit_open(Instant::now() + Duration::from_millis(1)));
-        assert!(!state
-            .is_circuit_open(Instant::now() + Duration::from_secs(CIRCUIT_BREAKER_COOLDOWN_SECS + 1)));
+        assert!(!state.is_circuit_open(
+            Instant::now() + Duration::from_secs(CIRCUIT_BREAKER_COOLDOWN_SECS + 1)
+        ));
     }
 
     #[test]
@@ -783,6 +831,25 @@ mod tests {
 
         let state = RecoveryRuntimeState::load_or_default(0, 5, dir.path());
         assert_eq!(state.starting_index, 3);
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_checkpoint_loader_ignores_symlink() -> io::Result<()> {
+        use std::os::unix::fs::symlink;
+
+        let dir = tmp_dir();
+        let target = dir.path().join("target.json");
+        std::fs::write(
+            &target,
+            "{\"task_id\":0,\"total_scenarios\":5,\"next_scenario_index\":4}",
+        )?;
+        let checkpoint = dir.path().join(format!("{CHECKPOINT_FILE_PREFIX}-0.json"));
+        symlink(&target, &checkpoint)?;
+
+        let state = RecoveryRuntimeState::load_or_default(0, 5, dir.path());
+        assert_eq!(state.starting_index, 0);
         Ok(())
     }
 }
