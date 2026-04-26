@@ -217,8 +217,11 @@ Current live-evidence ownership under issue `#1526`:
 ## Checked-in sampling template
 
 Use [sebilis-validation-template.csv](assets/sebilis-validation-template.csv)
-for live sampling. It is intentionally blank so the repo does not invent spawn,
-route, or forage numbers that were never observed.
+for live sampling. The template now carries a research-baseline route row
+(`route-baseline-001`) that records the expected access route from repo and
+community sources. That row uses `evidence_state = research-backed` and must
+not be promoted to a validated claim until issue `#1837` closes with live
+travel-time and corpse-recovery proof.
 
 The checked-in template now includes explicit columns for
 `launch_staging_point`, `required_keying`, `travel_time_minutes`,
@@ -226,6 +229,23 @@ The checked-in template now includes explicit columns for
 `wait_time_minutes`, and `operator_mode` so the eventual spreadsheet can
 capture routing access, spawn cadence, camp overlap, and attended versus
 unattended posture without inventing values ahead of live testing.
+
+### Access-route fields (issue #3390)
+
+The `launch_staging_point`, `zone_path`, `required_keying`, and
+`travel_time_minutes` columns in the template are seeded with the
+research-baseline route:
+
+| Field | Research-baseline value | Status |
+| --- | --- | --- |
+| `launch_staging_point` | `Overthere` | Research-backed — Scars-of-Velious TLP launch city; not live-confirmed |
+| `zone_path` | `Overthere -> Field of Bone -> Sebilis` | Research-backed — standard Kunark entry path; not live-confirmed |
+| `required_keying` | `Trakanon Idol (Key to Sebilis quest)` | Research-backed — P99 zone page says `Requires key`; not live-confirmed |
+| `travel_time_minutes` | *(blank — populate on first live run)* | Blocked on issue `#1837` live access run |
+
+Do not treat these as confirmed values. Issue `#1837` owns the live route
+proof. When that run completes, copy the confirmed values into the template
+row and update `evidence_state` from `research-backed` to `live-confirmed`.
 
 Record theorized Sebilis outputs as hypotheses only until a live sample observes them.
 Current theory items worth capturing explicitly in the template include
