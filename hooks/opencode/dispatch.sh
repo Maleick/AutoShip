@@ -28,6 +28,7 @@ STATE_FILE="$AUTOSHIP_DIR/state.json"
 ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
+ROUTING_LOG=""
 
 max_agents=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$STATE_FILE" 2>/dev/null || true)
 if [[ -z "$max_agents" && -f "$AUTOSHIP_DIR/config.json" ]]; then
@@ -63,15 +64,9 @@ resolve_model() {
     return 0
   fi
   if [[ -f "$ROUTING_FILE" ]]; then
-    local routing_log
-    routing_log=$(bash "$SCRIPT_DIR/select-model.sh" --log "$task_type" "$issue_num" 2>/dev/null || echo "")
+    ROUTING_LOG=$(bash "$SCRIPT_DIR/select-model.sh" --log "$task_type" "$issue_num" 2>/dev/null || echo "")
     local selected_model
     selected_model=$(bash "$SCRIPT_DIR/select-model.sh" "$task_type" "$issue_num" 2>/dev/null || echo "")
-    if [[ -n "$routing_log" ]]; then
-      mkdir -p "$WORKSPACE_PATH"
-      log_file="$WORKSPACE_PATH/routing-log.txt"
-      printf '%s\n' "$routing_log" > "$log_file"
-    fi
     printf '%s\n' "$selected_model"
     return 0
   fi
@@ -112,6 +107,9 @@ fi
 
 FULL_WORKSPACE_PATH=$(bash "$SCRIPT_DIR/create-worktree.sh" "$ISSUE_KEY" "autoship/issue-${ISSUE_NUM}")
 mkdir -p "$WORKSPACE_PATH"
+if [[ -n "$ROUTING_LOG" ]]; then
+  printf '%s\n' "$ROUTING_LOG" > "$WORKSPACE_PATH/routing-log.txt"
+fi
 date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE_PATH/started_at"
 printf 'QUEUED\n' > "$WORKSPACE_PATH/status"
 printf '%s\n' "$MODEL" > "$WORKSPACE_PATH/model"
