@@ -74,7 +74,8 @@ To apply these settings consistently in GitHub:
 
 1. Open **Actions → Branch protection and merge hygiene**.
 2. Click **Run workflow**.
-3. Use the default `branch=master` unless policy changes to another protected branch.
+3. Ensure the triggering user is a repository **admin** (non-admin runs are blocked by workflow guardrails).
+4. Use the default `branch=master` unless policy changes to another protected branch.
 
 That workflow applies:
 

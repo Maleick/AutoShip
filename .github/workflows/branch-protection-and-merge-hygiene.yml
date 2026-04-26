@@ -13,9 +13,21 @@ jobs:
     name: Configure branch protection + merge defaults
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       administration: write
     steps:
+      - name: Guardrail: only repository admins may run this workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          permission="$(gh api repos/${REPO}/collaborators/${ACTOR}/permission --jq '.permission')"
+          if [[ "${permission}" != "admin" ]]; then
+            echo "::error::Only repository admins can run this workflow. '${ACTOR}' has '${permission}' permission."
+            exit 1
+          fi
+
       - name: Configure branch protection for the target branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
