@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.9
+
+- Add AutoShip audit, dashboard, retry, cancel, clean, and apply workflows for issue-to-PR orchestration operations.
+- Add safety guardrails for GitHub API retries, protected label classification, diff size limits, prompt sanitization, acceptance criteria extraction, worktree checksums, quota pauses, and anti-flake retries.
+- Harden CI and verification behavior for monitor polling, setup without GitHub auth, package diagnostics, and no-check PR merge blocking.
+
 ## v2.0.8
 
 - Refresh worker monitoring from `status.sh` so dead worker PIDs are marked stuck during normal status checks.
