@@ -33,6 +33,7 @@ impl ConfigShareBlob {
     /// # Errors
     /// Returns an error if JSON serialization fails.
     pub fn encode(&self) -> Result<String> {
+        validate_module_name(&self.module).context("invalid module name for share export")?;
         let json = serde_json::to_vec(self).context("serialize config blob")?;
         Ok(format!("{}:{}", self.module, B64.encode(&json)))
     }
@@ -46,9 +47,11 @@ impl ConfigShareBlob {
         let (prefix, b64) = share_string
             .split_once(':')
             .context("share string must be '<module>:<base64>'")?;
+        validate_module_name(prefix).context("invalid module prefix")?;
 
         let bytes = B64.decode(b64).context("base64 decode")?;
         let blob: Self = serde_json::from_slice(&bytes).context("JSON decode")?;
+        validate_module_name(&blob.module).context("invalid module in payload")?;
 
         if blob.module != prefix {
             bail!(
@@ -60,6 +63,21 @@ impl ConfigShareBlob {
 
         Ok(blob)
     }
+}
+
+fn validate_module_name(module: &str) -> Result<()> {
+    if module.is_empty() {
+        bail!("module name is empty");
+    }
+
+    if !module
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        bail!("invalid module name: {module:?}");
+    }
+
+    Ok(())
 }
 
 /// Export a TOML file as a share string.
@@ -191,5 +209,27 @@ mod tests {
     #[test]
     fn decode_rejects_garbage() {
         assert!(ConfigShareBlob::decode("not_valid").is_err());
+    }
+
+    #[test]
+    fn decode_rejects_path_traversal_module() {
+        let blob = ConfigShareBlob {
+            module: "../../evil".into(),
+            payload: serde_json::json!({}),
+        };
+        let json = serde_json::to_vec(&blob).unwrap();
+        let share = format!("../../evil:{}", B64.encode(json));
+        assert!(ConfigShareBlob::decode(&share).is_err());
+    }
+
+    #[test]
+    fn decode_rejects_absolute_path_module() {
+        let blob = ConfigShareBlob {
+            module: "/tmp/evil".into(),
+            payload: serde_json::json!({}),
+        };
+        let json = serde_json::to_vec(&blob).unwrap();
+        let share = format!("/tmp/evil:{}", B64.encode(json));
+        assert!(ConfigShareBlob::decode(&share).is_err());
     }
 }
