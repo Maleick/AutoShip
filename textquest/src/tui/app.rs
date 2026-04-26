@@ -46,12 +46,12 @@ use anyhow::Context;
 use ratatui::style::Color;
 use textquest_soul::coordinator::SoulCoordinator;
 
-static GM_SYNC_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
-    reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .expect("GM sync HTTP client init failed")
-});
+static GM_SYNC_CLIENT: LazyLock<Result<reqwest::blocking::Client, reqwest::Error>> =
+    LazyLock::new(|| {
+        reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+    });
 static HELP_DATABASE: LazyLock<HelpDatabase> = LazyLock::new(HelpDatabase::load_default);
 
 const GM_SYNC_QUEUE_CAPACITY: usize = 16;
@@ -79,7 +79,14 @@ fn spawn_gm_sync_worker() -> (mpsc::SyncSender<GmSyncPayload>, thread::JoinHandl
 
 fn gm_sync_worker_loop(rx: mpsc::Receiver<GmSyncPayload>) {
     for payload in rx {
-        match GM_SYNC_CLIENT.post(&payload.url).json(&payload.body).send() {
+        let client = match &*GM_SYNC_CLIENT {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::debug!(%e, "Failed to initialize GM sync HTTP client");
+                continue;
+            }
+        };
+        match client.post(&payload.url).json(&payload.body).send() {
             Ok(resp) if resp.status().is_success() => {
                 tracing::debug!("GM state synced to web dashboard");
             }
