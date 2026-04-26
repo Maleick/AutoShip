@@ -1,0 +1,241 @@
+#==============================================================================
+# Howling Stones (Charasis) Camp Configuration
+#==============================================================================
+# Issue: #3387 — Define Howling Stones safe spots, pull points, and 6-waypoint route
+# Parent: #1781 — Higher-risk navigation testing required
+#
+# Zone Context:
+# - Howling Stones (also known as Charasis) is a Kunark-era dungeon in the
+#   Overthere zone, accessible via a key from the Estate of Unrest or via the
+#   entrance at approximately (-1330, -3095) in the Overthere.
+# - The dungeon has two wings (east and west), multiple levels, and heavy undead
+#   mob density. Rooms connect via narrow corridors with sharp geometry that
+#   causes frequent pathing issues for multibox groups.
+# - Higher-risk navigation notes apply: corridors are narrow, Z-axis changes
+#   are frequent, and mobs have high aggro radius with see-invis capability.
+# - This is a HIGHER-RISK navigation camp. Pulling errors can cascade quickly
+#   due to room-to-room social links and poor puller geometry on stairwells.
+#
+# Navigation Hazards:
+# - Narrow stairwell geometry causes multibox stack compression failures.
+# - Several rooms have multiple simultaneous roamers with overlapping aggro.
+# - The west wing has a split-level structure; leash behavior on Z-changes
+#   must be validated live before unattended operation.
+# - East wing approach from zone entrance crosses open area with wanderers.
+#
+# Access Requirements:
+# - Level 50+ (soft minimum for east wing); 53+ recommended for west wing.
+# - Charasis key (dropped by various Kunark mobs or purchased via bazaar).
+# - Levitation is beneficial for crossing the entrance pit area safely.
+#
+# References:
+# - Route waypoints, restriction sectors, and multibox geometry notes are
+#   documented in detail in comments below (schema gap: runtime does not yet
+#   load waypoints from TOML; see issue #1900 for planned schema expansion).
+# - Project 1999 Howling Stones maps used as coordinate baseline.
+# - EverQuest coordinate system: XY horizontal, Z vertical.
+
+name = "howling-stones"
+zone = "charasis"
+
+#==============================================================================
+# Camp Layout
+#==============================================================================
+
+# Primary camp anchor: east-wing entry corridor, first safe alcove past the
+# entrance hallway (waypoint: hs_safe_alcove_east). This position keeps the
+# 6-box stack out of roamer paths and provides line-of-sight to the east-wing
+# pull corridor without exposing the med stack to zone-entrance wanderers.
+# Confidence: Derived from P1999 Howling Stones map geometry and community
+# hunting guides for the east-wing undead farming bracket.
+camp_center = [200.0, -150.0, -10.0]
+
+# Pull handoff: east-wing corridor intersection (waypoint: hs_pull_handoff).
+# This point allows FD/kiting pulls to reset toward camp without widening
+# into the stairwell geometry that leads to the lower west wing.
+# NOTE: Higher-risk geometry — validate live before unattended operation.
+pull_point = [240.0, -110.0, -10.0]
+
+# Pull radius covers east-wing rooms 1-3 without reaching the stairwell to
+# the lower levels or the corridor linking to the west wing's banshee rooms.
+# Tuned conservatively for higher-risk navigation testing baseline.
+pull_radius = 160
+
+# Tight camp radius: narrow corridor geometry requires the med stack to stay
+# compressed. Widening risks exposing the rear of the stack to roamers.
+camp_radius = 25
+
+# Short leash radius: drops bad pulls before they reach the stairwell or
+# the east-wing/west-wing junction. Higher-risk dungeon requires aggressive
+# leash to prevent cascade into banshee or golem rooms.
+leash_radius = 120
+
+#==============================================================================
+# Mana Thresholds
+#==============================================================================
+
+# Rest until healer reaches 72% mana. Undead mobs in Howling Stones have
+# higher spike damage than outdoor Kunark content; CH chains and dispel
+# effects from casters require the cleric to maintain meaningful reserves.
+rest_mana_pct = 72
+
+# Do not pull below 45% mana. Howling Stones mobs frequently require
+# emergency heal bursts due to dispel and AoE spell effects from caster types.
+# This floor prevents mid-pull healer OOM in higher-risk rooms.
+pull_mana_pct = 45
+
+#==============================================================================
+# Level Range
+#==============================================================================
+
+# East-wing undead bracket: 50-56. West-wing extension raises the bracket
+# to 58 but requires active driver validation of stairwell pathing.
+level_range = [50, 56]
+
+#==============================================================================
+# Pull Targets: East-Wing Undead Trash
+#==============================================================================
+# Core pull targets for the east-wing undead farming loop. These mobs form
+# consistent spawn cycles and are safely contained within the east-wing
+# corridor geometry defined by the 6-waypoint route below.
+
+pull_mob_names = [
+  "a charasis skeleton",
+  "a charasis specter",
+  "a rotting skeleton",
+  "a decaying skeleton",
+  "a restless skeleton",
+  "a dark bone skeleton",
+  "a grave keeper",
+  "a mummy",
+  "a decrepit mummy",
+  "a mummy guardian",
+  "a haunt",
+]
+
+#==============================================================================
+# Protected Mobs: Do Not Pull
+#==============================================================================
+# Named mobs, zone bosses, and higher-risk targets outside the east-wing
+# corridor scope. Many have see-invis, summons, or social links that extend
+# far beyond the safe pull radius.
+
+ignore_mob_names = [
+  "Drusella Sathir",          # Zone named; CH-capable; hard-stop; requires full prep
+  "a Charasis banshee",       # West-wing only; AoE scream; outside east-wing scope
+  "a stone golem",            # Lower-level; pathing through stairwell geometry
+  "a charasis golem",         # Heavy hit; see-invis; lower west-wing territory
+  "a death knight",           # Level 55+; summons; west-wing hard border
+  "an undead knight",         # Summons; exceeds east-wing safe pull radius
+  "a revenant",               # Caster/dispeller; west-wing only in scope
+  "a zelnithak",              # Rare named; requires active driver and full CH
+  "the undying priest",       # Named; outside east-wing scope; dispel-heavy
+]
+
+#==============================================================================
+# Burn List: Named Rare Spawns (Harvest on Sight)
+#==============================================================================
+# Named mobs that appear within the east-wing corridor pull zone. Burn on
+# sight but do not extend the pull route to chase them into adjacent rooms.
+
+burn_mob_names = [
+  "Keeper of Souls",          # East-wing rare; loot-worthy; do not chase beyond pull_radius
+  "Wraith of Shisssar",       # East-wing corridor named; rare spawn near room 2
+]
+
+#==============================================================================
+# Return Behavior
+#==============================================================================
+
+# Prevent return-to-camp while aggro is active. Howling Stones corridor
+# geometry creates severe pathing failures when a returning puller with live
+# mobs enters the med alcove — cascade into zone entrance wanderers is
+# documented as the primary wipe vector for this camp.
+return_no_aggro = true
+
+#==============================================================================
+# Progression Chain
+#==============================================================================
+
+# Previous camp: Sebilis Disco (same Kunark tier, lower risk).
+prev_camp = "sebilis_disco"
+
+# Next camp: Velketor's Labyrinth Frenzy (higher tier, Velious expansion).
+next_camp = "velketors_labyrinth_frenzy"
+
+#==============================================================================
+# 6-WAYPOINT ROUTE: East-Wing Primary Farming Loop
+#==============================================================================
+# Route name: hs_east_wing_primary
+# Purpose: 6-box undead farming loop through rooms 1-3 of the east wing.
+# Risk level: HIGHER — narrow corridors, Z-changes, social-link rooms.
+# Validated: NO — baseline coordinates from P1999 map; live validation required
+#             before enabling unattended operation.
+#
+# SAFETY NOTES:
+# - Do not extend past waypoint 6 (WP6) without active driver.
+# - WP3 to WP4 crosses a stairwell step (+4 Z change); monitor for stack
+#   compression and mob pathing anomalies on first live runs.
+# - If a pull goes wrong at WP4 or WP5, the puller should FD or return to
+#   WP1 (camp anchor) and let leash_radius reset the mobs naturally.
+# - West-wing junction at WP5 is a hard boundary — NEVER cross it without
+#   an active driver and confirmed clear on the banshee room.
+#
+# WAYPOINT TABLE:
+#
+#  WP  | Label                  | Coordinates (X, Y, Z)    | Notes
+# -----+------------------------+--------------------------+-----------------------------
+#  WP1 | hs_safe_alcove_east    | (200.0, -150.0, -10.0)   | Camp anchor / med spot
+#  WP2 | hs_east_corridor_start | (240.0, -110.0, -10.0)   | Pull handoff; room 1 entry
+#  WP3 | hs_room1_center        | (290.0,  -80.0, -10.0)   | Room 1 sweep center
+#  WP4 | hs_stairwell_top       | (320.0,  -50.0,  -6.0)   | Stairwell step; Z change
+#  WP5 | hs_room2_center        | (350.0,  -25.0,  -6.0)   | Room 2 sweep; junction hard stop
+#  WP6 | hs_room3_pull_corner   | (310.0,  -60.0,  -6.0)   | Room 3 pull corner; return
+# -----+------------------------+--------------------------+-----------------------------
+#
+# ROUTE EXECUTION:
+#  Camp (WP1) → Pull handoff (WP2) → Room 1 sweep (WP3)
+#  → Stairwell top (WP4) → Room 2 sweep (WP5)
+#  → Room 3 pull corner (WP6) → Return to pull handoff (WP2) → Camp (WP1)
+#
+# Loop: WP1 → WP2 → WP3 → WP4 → WP5 → WP6 → WP2 → WP1
+# The return leg skips WP3-WP5 to reduce re-aggro risk on return.
+#
+# Runtime waypoints array (schema gap — not parsed by current runtime;
+# documented here for future schema expansion per issue #1900):
+#
+# [[waypoints]]
+# label = "hs_safe_alcove_east"
+# coords = [200.0, -150.0, -10.0]
+# role = "camp"
+# safety_note = "Primary med spot; zone-entrance wanderers stay outside this alcove"
+#
+# [[waypoints]]
+# label = "hs_east_corridor_start"
+# coords = [240.0, -110.0, -10.0]
+# role = "pull_handoff"
+# safety_note = "Pull handoff; FD reset point; room 1 entry boundary"
+#
+# [[waypoints]]
+# label = "hs_room1_center"
+# coords = [290.0, -80.0, -10.0]
+# role = "sweep"
+# safety_note = "Room 1 sweep center; ~4 undead spawns; safe geometry"
+#
+# [[waypoints]]
+# label = "hs_stairwell_top"
+# coords = [320.0, -50.0, -6.0]
+# role = "transit"
+# safety_note = "Z change +4; monitor stack compression; single file required"
+#
+# [[waypoints]]
+# label = "hs_room2_center"
+# coords = [350.0, -25.0, -6.0]
+# role = "sweep"
+# safety_note = "Room 2 sweep; west-wing junction HARD STOP; do not cross"
+#
+# [[waypoints]]
+# label = "hs_room3_pull_corner"
+# coords = [310.0, -60.0, -6.0]
+# role = "return"
+# safety_note = "Room 3 pull corner; return leg; resets to WP2 pull handoff"
