@@ -16,6 +16,7 @@ use crate::hooks::hwbp::{self, HwbpInstallOutcome, HwbpSlot, MAX_SLOTS};
 
 const MAX_TRACES: usize = MAX_SLOTS;
 const TRACE_RING_CAPACITY: usize = 4096;
+const MAX_TRACE_DUMP_RECORDS: u64 = 1024;
 const NO_SLOT: usize = usize::MAX;
 
 const FLAG_ARGS: u32 = 1 << 0;
@@ -210,18 +211,28 @@ pub fn dump() -> (Vec<TraceRecord>, u64) {
     let end = EVENT_SEQUENCE.load(Ordering::Acquire);
     let previous = DUMP_CURSOR.swap(end, Ordering::AcqRel).min(end);
     let capacity = TRACE_RING_CAPACITY as u64;
-    let dropped = end.saturating_sub(previous).saturating_sub(capacity);
-    let start = if dropped > 0 {
+    let ring_overflow_dropped = end.saturating_sub(previous).saturating_sub(capacity);
+    let start = if ring_overflow_dropped > 0 {
         end.saturating_sub(capacity)
     } else {
         previous
+    };
+    let available = end.saturating_sub(start);
+    let dump_cap = MAX_TRACE_DUMP_RECORDS.min(capacity);
+    let dump_trimmed_dropped = available.saturating_sub(dump_cap);
+    let dropped = ring_overflow_dropped.saturating_add(dump_trimmed_dropped);
+    let effective_start = if dump_trimmed_dropped > 0 {
+        end.saturating_sub(dump_cap)
+    } else {
+        start
     };
     if dropped > 0 {
         TOTAL_DROPPED_EVENTS.fetch_add(dropped, Ordering::Relaxed);
     }
 
-    let mut records = Vec::with_capacity(end.saturating_sub(start).min(capacity) as usize);
-    for sequence in (start + 1)..=end {
+    let mut records =
+        Vec::with_capacity(end.saturating_sub(effective_start).min(dump_cap) as usize);
+    for sequence in (effective_start + 1)..=end {
         if let Some(raw) = read_ring_record(sequence) {
             let name = trace_name(raw.trace_index);
             let args = if raw.flags & FLAG_ARGS != 0 {
@@ -533,5 +544,37 @@ mod tests {
         let (records, dropped) = dump();
         assert_eq!(dropped, 0);
         assert!(records.is_empty());
+    }
+
+    #[test]
+    fn dump_caps_records_and_counts_trimmed_events_as_dropped() {
+        reset_for_test();
+        configure_trace_for_test(0, "target@0x5000", 0x5000);
+
+        let total = MAX_TRACE_DUMP_RECORDS as usize + 17;
+        for i in 0..total {
+            record_hit(
+                0,
+                HitSample {
+                    address: 0x5000,
+                    timestamp_ticks: i as u64,
+                    thread_id: 7,
+                    args: [1, 2, 3, 4],
+                    stack_pointer: 0x9000,
+                    return_address: 0x6000,
+                },
+                true,
+                true,
+            );
+        }
+
+        let (records, dropped) = dump();
+        assert_eq!(records.len(), MAX_TRACE_DUMP_RECORDS as usize);
+        assert_eq!(dropped, 17);
+        assert_eq!(records[0].sequence, 18);
+        assert_eq!(
+            records.last().map(|record| record.sequence),
+            Some(total as u64)
+        );
     }
 }
