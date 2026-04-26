@@ -120,6 +120,71 @@ TextQuest.
 - Recovery route always reverses the branch you entered. Do not cut across the
   pond, juggernaut hallway, or protector branch when returning to camp.
 
+## Spawn Area Coverage Map
+
+Reverse-engineered from the waypoint lattice above and the P99 Old Sebilis zone
+page. Each spawn area is defined by a bounding polygon expressed as min/max
+coordinate ranges (XY only; Z is effectively 0 for the right-wing flat floors).
+Use these bounds for zone-tracker coverage assertions (parent issue `#1768`).
+
+Evidence source for all areas: derived from named-mob anchor coordinates
+listed in the waypoint lattice above, cross-referenced against the P99 Old
+Sebilis zone page NPC lists. Confidence column follows the same scale as the
+waypoint table: **Exact** = directly from a named-mob page, **Derived** = inferred
+from two or more Exact anchors with no conflicting data, **Estimated** =
+extrapolated from zone geometry with no anchor NPC on that wall.
+
+| Spawn Area ID | Common Name | X min | X max | Y min | Y max | Waypoints Enclosed | Confidence | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `SEBA-01` | Bar Room cluster | -800 | -680 | 540 | 720 | `bar_room` (-742,658), `armory_door` (-692,537), `pull_handoff_corner` (-810,620) | Derived | Bartender + armorer spawn cluster; right-wing entry. |
+| `SEBA-02` | Armsman bedroom | -960 | -820 | 580 | 730 | `armsman_bedroom` (-896,647), `safe_med_hall` (-850,700) | Derived | Armsman named and surrounding right-wing trash. Med stack overlaps north edge. |
+| `SEBA-03` | Froggy room | -900 | -780 | 840 | 980 | `froggy_room` (-844,901) | Exact | North-most right-wing named room; single anchor, bounded conservatively. |
+| `SEBA-04` | ABC corridor (chef/repairer) | -1200 | -1040 | 690 | 850 | `abc_stairs` (-1010,710), `chef_room` (-1120,768), `repairer_room` (-1130,784) | Derived | Three anchors tightly clustered; treated as one spawn area for coverage. |
+| `SEBA-05` | Scarab entry | -640 | -520 | 200 | 370 | `scarab_entry` (-576,280) | Exact | Necrosis scarab room at east edge of right wing; pull-list mobs only. |
+| `SEBA-06` | Guardian approach | -960 | -800 | 70 | 220 | `guardian_approach` (-888,133) | Exact | Sebilite guardian branch; optional crypt extension start. |
+| `SEBA-07` | Crypt corridor | -1320 | -980 | 70 | 220 | `crypt_split` (-1045,158), `crypt_west_cube` (-1248,135) | Derived | Two anchors; caretaker cube range. Do not extend west past -1320. |
+| `SEBA-08` | Myconid pond | -1000 | -840 | 60 | 200 | `pond_watch` (-910,109), `pond_ground_only` (-930,120) | Derived | Ground-only fighting area; pond rock and water are out-of-bounds. |
+| `SEBA-09` | Disco-2 / ostiary fork | -980 | -820 | -380 | -190 | `ostiary_corner` (-871,-315), `disco2_fork` (-900,-250) | Derived | Lower-stair fork; soft boundary — active driver required. |
+| `SEBA-10` | Commander wander path | -1260 | -300 | -400 | -20 | `commander_east` (-369,-63), `commander_west` (-1199,-334) | Exact | Very wide wander corridor; treat as a single patrol area, not a camp zone. |
+| `SEBA-11` | Pickler / Brogg extension | -1280 | -1050 | -800 | -400 | `pickler_room` (-1223,-467), `hidden_passage` (-1160,-600), `brogg_library` (-1109,-727) | Derived | Deepest right-wing extension; active driver only per route notes. |
+
+### Hard-Stop Exclusion Zones
+
+The following coordinate ranges are **outside** all coverage areas and must
+not appear in pull-radius or route definitions without a separate validation
+pass:
+
+| Exclusion ID | Label | Boundary | Reason |
+| --- | --- | --- | --- |
+| `SEBE-01` | Juggernaut / Trakanon approach | X < -1380, any Y | `jugg_line_start` (-1413,118) is the absolute entry; anything past it crosses into juggernaut and protector traffic. |
+| `SEBE-02` | Protector hard-stop | (-2085,-624) ± 200 | `protector_hard_stop` anchor; 2h45m spawn; ignore-listed in runtime config. |
+| `SEBE-03` | Pond rock and water | ~(-940,115) to water edge | `pond_ground_only` restriction; server-rule risk per P99 note. |
+| `SEBE-04` | Entry bridge / first drop | Zone entry corridor | Frequent train lane per P99; not a safe med point. |
+
+### Coverage Evidence for Zone Tracker (#1768)
+
+This section summarises what the `sebilis` zone entry in the zone tracker can
+assert based on the spawn areas above:
+
+- **Right-wing spawn coverage**: areas `SEBA-01` through `SEBA-04` together
+  cover the primary Disco 1+2 short loop from pull-handoff corner through ABC.
+  All coordinates are Derived or Exact from P99 named-mob anchor pages.
+- **Optional extension coverage**: areas `SEBA-05` through `SEBA-08` cover the
+  scarab entry, guardian branch, and crypt corridor. These are flagged as
+  optional in the multibox route notes and require active driver management.
+- **Disco-2 / lower wing coverage**: areas `SEBA-09` through `SEBA-11` cover
+  the ostiary fork, commander wander path, and Brogg extension. The commander
+  wander path (`SEBA-10`) spans a very wide XY range and should not be treated
+  as a static camp area.
+- **Exclusion zones**: `SEBE-01` through `SEBE-04` are explicitly out of scope
+  for the current Disco camp definition. Any future issue that expands routing
+  into those areas must file a separate sub-issue under `#1768` with live
+  evidence before updating this page.
+
+All spawn area bounds in this section are **research-backed** (not live-validated).
+Promote them to `verified` status only after a live sampling run records actual
+mob positions against these bounding boxes.
+
 ## Spawn Pattern Notes
 
 - The Old Sebilis zone page lists a `27:00` zone spawn timer and `23:00` for
