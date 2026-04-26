@@ -338,6 +338,13 @@ enum Commands {
         /// New value
         value: String,
     },
+
+    // ── Statistics & aggregation ─────────────────────────────────────
+    /// Aggregate session event data into metrics (compact JSONL → SQLite)
+    Stats {
+        #[command(subcommand)]
+        action: StatsAction,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -433,6 +440,25 @@ enum CredentialAction {
     Remove {
         /// Account name to remove
         account: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum StatsAction {
+    /// Aggregate session JSONL events into SQLite metrics tables (idempotent)
+    Compact {
+        /// Single session ID to compact (from events directory)
+        #[arg(long)]
+        session: Option<String>,
+        /// Compact all pending (uncompacted) sessions
+        #[arg(long)]
+        all_pending: bool,
+        /// Path to metrics.db (default: ~/.textquest/metrics.db)
+        #[arg(long)]
+        db: Option<std::path::PathBuf>,
+        /// Path to events directory (default: ~/.textquest/sessions)
+        #[arg(long)]
+        events_dir: Option<std::path::PathBuf>,
     },
 }
 
@@ -665,9 +691,7 @@ fn main() -> Result<()> {
         Some(Commands::SetPullMode { pid, mode }) => cli::run_set_pull_mode(&mode, pid),
 
         // Cross-client setting push (gap #4)
-        Some(Commands::SetPeer { peer, key, value }) => {
-            cli::run_set_peer_mode(&peer, &key, &value)
-        }
+        Some(Commands::SetPeer { peer, key, value }) => cli::run_set_peer_mode(&peer, &key, &value),
         Some(Commands::SetAll { key, value }) => cli::run_set_all_mode(&key, &value),
 
         // Credentials
@@ -706,9 +730,12 @@ fn main() -> Result<()> {
 
         // Statistics & aggregation
         Some(Commands::Stats { action }) => match action {
-            StatsAction::Compact { session, all_pending, db, events_dir } => {
-                cli::run_stats_compact_mode(session, all_pending, db, events_dir)
-            }
+            StatsAction::Compact {
+                session,
+                all_pending,
+                db,
+                events_dir,
+            } => cli::run_stats_compact_mode(session, all_pending, db, events_dir),
         },
 
         None => {
