@@ -96,6 +96,8 @@ mod inner {
         if context.Rsp != 0 {
             let return_addr = unsafe { *(context.Rsp as *const usize) };
             context.Rip = return_addr as u64;
+            // Emulate a real `ret`: pop the return address from the stack.
+            context.Rsp = context.Rsp.saturating_add(std::mem::size_of::<usize>() as u64);
         }
 
         true
