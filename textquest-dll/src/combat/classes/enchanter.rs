@@ -6,7 +6,7 @@ use textquest_common::combat::{
 };
 
 use crate::combat::{
-    mez_queue::MezTracker,
+    mez_queue::MezQueue,
     rotation::{self, RotationGroup},
     strategy::{self, ClassStrategy, CombatContext},
 };
@@ -29,19 +29,16 @@ const SLOW_COOLDOWN_TICKS: u32 = 1_200;
 ///    target.
 /// 3. Kill-target debuffs (`Tash`, `Slow`) once adds are stable.
 /// 4. `Nuke` only when mana is comfortably above the floor.
-///
-/// Mez decisions consult [`MezTracker`]: immune mobs are permanently skipped and
-/// re-mez requests are surfaced to the rotation via the tracker's refresh queue.
 pub struct EnchanterStrategy {
     class_id: u8,
-    mez_queue: RefCell<MezTracker>,
+    mez_queue: RefCell<MezQueue>,
 }
 
 impl EnchanterStrategy {
     pub fn new(class_id: u8) -> Self {
         Self {
             class_id,
-            mez_queue: RefCell::new(MezTracker::new(MAX_TRACKED_CC_TARGETS)),
+            mez_queue: RefCell::new(MezQueue::new(MAX_TRACKED_CC_TARGETS)),
         }
     }
 
@@ -406,19 +403,17 @@ impl EnchanterStrategy {
         None
     }
 
-    fn first_uncontrolled_add(ctx: &CombatContext, tracker: &MezTracker) -> Option<u32> {
+    fn first_uncontrolled_add(ctx: &CombatContext) -> Option<u32> {
         if ctx.nearby_enemies.len() <= 1 {
             return None;
         }
 
         if let Some(target_id) = ctx.extended_targets.and_then(|xtargets| {
             xtargets.cc_add_spawn_ids().into_iter().find(|spawn_id| {
-                !tracker.is_immune(*spawn_id)
-                    && ctx
-                        .nearby_enemies
-                        .iter()
-                        .find(|enemy| enemy.spawn_id == *spawn_id)
-                        .is_some_and(|enemy| !strategy::is_mezzed(enemy))
+                ctx.nearby_enemies
+                    .iter()
+                    .find(|enemy| enemy.spawn_id == *spawn_id)
+                    .is_some_and(|enemy| !strategy::is_mezzed(enemy))
             })
         }) {
             return Some(target_id);
@@ -431,7 +426,6 @@ impl EnchanterStrategy {
             .filter(|(index, enemy)| {
                 Some(enemy.spawn_id) != current_target_id
                     && (current_target_id.is_some() || *index > 0)
-                    && !tracker.is_immune(enemy.spawn_id)
             })
             .map(|(_, enemy)| enemy)
             .find(|enemy| !strategy::is_mezzed(enemy))
@@ -457,9 +451,7 @@ impl ClassStrategy for EnchanterStrategy {
             return Some(refresh_target);
         }
 
-        let tracker = self.mez_queue.borrow();
-        let target_id = Self::first_uncontrolled_add(ctx, &tracker)?;
-        drop(tracker);
+        let target_id = Self::first_uncontrolled_add(ctx)?;
         self.queue_target(target_id, ctx.player.level, ctx.tick);
         Some(target_id)
     }
@@ -469,9 +461,7 @@ impl ClassStrategy for EnchanterStrategy {
     }
 
     fn should_assist(&self, ctx: &CombatContext) -> bool {
-        let tracker = self.mez_queue.borrow();
-        self.queued_refresh_target(ctx).is_none()
-            && Self::first_uncontrolled_add(ctx, &tracker).is_none()
+        self.queued_refresh_target(ctx).is_none() && Self::first_uncontrolled_add(ctx).is_none()
     }
 
     fn aoe_threshold(&self) -> u8 {
@@ -492,7 +482,7 @@ impl ClassStrategy for EnchanterStrategy {
 
     fn on_action_complete(&mut self, ctx: &CombatContext) {
         if !ctx.in_combat {
-            self.mez_queue.get_mut().reset(MAX_TRACKED_CC_TARGETS);
+            *self.mez_queue.get_mut() = MezQueue::new(MAX_TRACKED_CC_TARGETS);
             return;
         }
 
@@ -519,15 +509,7 @@ impl ClassStrategy for EnchanterStrategy {
                 mez_queue.add_target(target_id, mez_duration, ctx.tick);
                 mez_queue.record_mez_success(target_id, mez_duration, ctx.tick);
             }
-            CastResult::Immune => {
-                // Mob is permanently immune — remove from queue and blacklist.
-                tracing::info!(
-                    target_id,
-                    "ENC: mez immune — mob blacklisted from future CC attempts"
-                );
-                mez_queue.record_mez_immune(target_id);
-            }
-            CastResult::Resisted | CastResult::TakeHold => {
+            CastResult::Resisted | CastResult::Immune | CastResult::TakeHold => {
                 mez_queue.record_mez_resist(target_id);
             }
             _ => {}
@@ -1295,74 +1277,6 @@ mod tests {
     }
 
     // ── end charm / pet tests ──────────────────────────────────────────────
-
-    // ── MezTracker integration tests ──────────────────────────────────────────
-
-    #[test]
-    fn enchanter_skips_immune_mob_in_select_target() {
-        let mut enc = EnchanterStrategy::new(14);
-        let player = SpawnData {
-            level: 60,
-            ..SpawnData::default()
-        };
-        let primary = make_enemy(1);
-        let immune_add = make_enemy(2);
-        let fresh_add = make_enemy(3);
-        let enemies = vec![primary.clone(), immune_add, fresh_add];
-        let config = CombatConfig::default();
-        let ctx = make_ctx(&player, Some(&primary), &enemies, &config, 10);
-
-        // Record spawn 2 as immune
-        enc.on_resolved_action_outcome(&ctx, Some("Mez"), 3341, 2, CastResult::Immune);
-
-        // select_target must skip the immune mob and pick spawn 3
-        assert_eq!(enc.select_target(&ctx), Some(3));
-    }
-
-    #[test]
-    fn enchanter_immune_mob_not_returned_as_refresh_target() {
-        let mut enc = EnchanterStrategy::new(14);
-        let player = SpawnData {
-            level: 60,
-            ..SpawnData::default()
-        };
-        let primary = make_enemy(1);
-        let mob = make_enemy(2);
-        let enemies = vec![primary.clone(), mob];
-        let config = CombatConfig::default();
-        let ctx = make_ctx(&player, Some(&primary), &enemies, &config, 0);
-
-        // First cast succeeds — mob is tracked
-        enc.on_resolved_action_outcome(&ctx, Some("Mez"), 3341, 2, CastResult::Success);
-
-        // Later, on a re-mez attempt, it resists with Immune
-        let refresh_ctx = make_ctx(&player, Some(&primary), &enemies, &config, 1_900);
-        enc.on_resolved_action_outcome(&refresh_ctx, Some("Mez"), 3341, 2, CastResult::Immune);
-
-        // Should not be returned as a refresh target
-        assert_eq!(enc.select_target(&refresh_ctx), None);
-    }
-
-    #[test]
-    fn enchanter_resist_does_not_mark_immune() {
-        let mut enc = EnchanterStrategy::new(14);
-        let player = SpawnData {
-            level: 60,
-            ..SpawnData::default()
-        };
-        let primary = make_enemy(1);
-        let mob = make_enemy(2);
-        let enemies = vec![primary.clone(), mob];
-        let config = CombatConfig::default();
-        let ctx = make_ctx(&player, Some(&primary), &enemies, &config, 0);
-
-        // A normal resist should NOT mark the mob immune
-        enc.on_resolved_action_outcome(&ctx, Some("Mez"), 3341, 2, CastResult::Resisted);
-        // Mob should still be a candidate (retries > 0)
-        assert_eq!(enc.select_target(&ctx), Some(2));
-    }
-
-    // ── end MezTracker integration tests ──────────────────────────────────────
 
     #[test]
     fn enchanter_toml_level_60_rotation_order_and_thresholds_match_runtime() {

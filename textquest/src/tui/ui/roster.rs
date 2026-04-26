@@ -1499,8 +1499,6 @@ enum OverviewSectionKind {
     Groups,
     Combat,
     Session,
-    /// Per-character personality and LLM model selector strip.
-    Personality,
 }
 
 #[derive(Clone, Copy)]
@@ -1546,14 +1544,6 @@ fn draw_roster_sidebar(
             OverviewSectionKind::Session => {
                 draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed);
             }
-            OverviewSectionKind::Personality => {
-                super::personality_selector::draw_personality_strip(
-                    frame,
-                    *chunk,
-                    app,
-                    &app.theme,
-                );
-            }
         }
     }
 }
@@ -1585,11 +1575,6 @@ fn overview_sections(app: &App, area: Rect, stacked: bool) -> Vec<OverviewSectio
         OverviewSectionLayout {
             kind: OverviewSectionKind::Combat,
             height: 8,
-            collapsed: false,
-        },
-        OverviewSectionLayout {
-            kind: OverviewSectionKind::Personality,
-            height: 7,
             collapsed: false,
         },
     ];
@@ -1673,7 +1658,6 @@ fn stacked_priority(app: &App, kind: OverviewSectionKind, order: usize) -> (u8, 
         OverviewSectionKind::Groups => 3,
         OverviewSectionKind::Combat => 4,
         OverviewSectionKind::Session => 5,
-        OverviewSectionKind::Personality => 6,
     };
     (priority, order)
 }
@@ -1685,7 +1669,6 @@ fn natural_section_order(kind: OverviewSectionKind) -> u8 {
         OverviewSectionKind::Groups => 2,
         OverviewSectionKind::Combat => 3,
         OverviewSectionKind::Session => 4,
-        OverviewSectionKind::Personality => 5,
     }
 }
 

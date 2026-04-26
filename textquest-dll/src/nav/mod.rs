@@ -221,11 +221,11 @@ mod tests {
 
     #[test]
     fn nav_command_set_camp_is_constructible() {
-        let cmd = NavCommand::SetCamp(CampSpot::new(
-            Waypoint::new(0.0, 0.0, 0.0),
-            0.0,
-            String::new(),
-        ));
+        let cmd = NavCommand::SetCamp(CampSpot {
+            position: Waypoint::new(0.0, 0.0, 0.0),
+            heading: 0.0,
+            role: String::new(),
+        });
         assert!(matches!(cmd, NavCommand::SetCamp(_)));
     }
 

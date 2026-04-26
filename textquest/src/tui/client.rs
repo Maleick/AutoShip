@@ -1,7 +1,7 @@
 use super::live_cast_capture::LiveCastCaptureSnapshot;
 use crate::eq::structs::{GroupInfo, SpawnInfo};
 use std::time::Instant;
-use textquest_common::types::{ScannerCandidate, SlotLifecycle};
+use textquest_common::types::SlotLifecycle;
 
 /// Per-client state for each attached EQ process.
 #[derive(Debug, Clone)]
@@ -42,10 +42,6 @@ pub struct ClientState {
     pub launch_profile: Option<String>,
     /// Name of the active session preset that this slot belongs to, if any.
     pub session_preset: Option<String>,
-    /// Top-N MA target scanner candidates from the last DLL scan cycle.
-    /// Populated from the shared-memory frame on each poll tick.
-    /// Empty when the scanner has no candidates, is disabled, or this is a demo client.
-    pub scanner_candidates: Vec<ScannerCandidate>,
 }
 
 impl ClientState {
@@ -71,7 +67,6 @@ impl ClientState {
             slot_lifecycle: SlotLifecycle::Configured,
             launch_profile: None,
             session_preset: None,
-            scanner_candidates: Vec::new(),
         }
     }
 

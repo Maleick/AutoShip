@@ -60,27 +60,8 @@ impl GameState {
             spawn_epoch,
             actual_version: self.actual_version.clone(),
             is_zone_changing: self.is_zone_changing,
-            scanner_candidates: Vec::new(),
         }
     }
-}
-
-/// A single ranked candidate from the MA target scanner, ordered by descending
-/// priority.  The DLL populates this list each scan cycle so the operator TUI
-/// can display the exact target ordering without re-running the scan logic.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ScannerCandidate {
-    /// EQ spawn ID of the candidate.
-    pub spawn_id: u32,
-    /// Display name of the candidate (e.g. "a fire giant").
-    pub name: String,
-    /// HP percentage in [0.0, 100.0].
-    pub hp_pct: f32,
-    /// Human-readable priority label explaining why this candidate ranks here
-    /// (e.g. "Named·Nearest", "Trash·LowestHP").
-    pub priority_label: String,
-    /// 1-based rank within this scan cycle (1 = highest priority).
-    pub rank: u8,
 }
 
 /// Internal shared-memory payload written by the DLL and reconstructed by the
@@ -124,11 +105,6 @@ pub struct SharedStateFrame {
     /// True while the client is in the middle of a zone transition.
     #[serde(default)]
     pub is_zone_changing: bool,
-    /// Top-N MA target scanner candidates ranked by priority for the current
-    /// scan cycle.  Empty when the scanner has no candidates or is disabled.
-    /// Updated each DLL game-loop tick.
-    #[serde(default)]
-    pub scanner_candidates: Vec<ScannerCandidate>,
 }
 
 impl SharedStateFrame {
@@ -218,12 +194,6 @@ pub struct SpawnData {
     pub stand_state: u8,
     /// Whether this spawn is flagged as a GM (Game Master).
     pub is_gm: bool,
-    /// Spawn ID of this spawn's current combat target, if any.
-    ///
-    /// Used by the safe-targeting predicate to skip mobs that are fighting
-    /// a character outside the group/raid (prevents training other groups).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub combat_target_id: Option<u32>,
 }
 
 impl SpawnData {
@@ -477,7 +447,6 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             is_gm: false,
-            combat_target_id: None,
         }
     }
 
@@ -682,7 +651,6 @@ mod tests {
             spawn_epoch: 9,
             actual_version: None,
             is_zone_changing: false,
-            scanner_candidates: Vec::new(),
         };
 
         let state = frame.into_game_state(cached_spawns.clone());
@@ -979,81 +947,6 @@ mod tests {
             ..SpawnData::default()
         };
         assert!(!spawn.is_standing());
-    }
-
-    #[test]
-    fn scanner_candidate_serde_roundtrip() {
-        let candidate = ScannerCandidate {
-            spawn_id: 42,
-            name: "a fire giant".to_string(),
-            hp_pct: 78.5,
-            priority_label: "Named·Nearest".to_string(),
-            rank: 1,
-        };
-        let encoded = serde_json::to_string(&candidate).expect("serialize");
-        let decoded: ScannerCandidate =
-            serde_json::from_str(&encoded).expect("deserialize");
-        assert_eq!(decoded.spawn_id, 42);
-        assert_eq!(decoded.name, "a fire giant");
-        assert_eq!(decoded.rank, 1);
-        assert_eq!(decoded.priority_label, "Named·Nearest");
-    }
-
-    #[test]
-    fn shared_state_frame_scanner_candidates_default_empty() {
-        let frame = SharedStateFrame {
-            client_id: 1,
-            local_player: None,
-            target: None,
-            nearby_spawns: None,
-            timestamp_ms: 0,
-            nav_status: crate::nav::NavStatus::Idle,
-            combat_status: crate::combat::CombatStatus::Idle,
-            zone_short_name: String::new(),
-            zone_long_name: String::new(),
-            active_buffs: vec![],
-            pet: None,
-            spawn_epoch: 0,
-            actual_version: None,
-            is_zone_changing: false,
-            scanner_candidates: Vec::new(),
-        };
-        assert!(frame.scanner_candidates.is_empty());
-    }
-
-    #[test]
-    fn shared_state_frame_scanner_candidates_serde_default() {
-        // Verify that frames serialized without scanner_candidates deserialize
-        // correctly with the default empty vec (backward compat).
-        let frame = SharedStateFrame {
-            client_id: 1,
-            local_player: None,
-            target: None,
-            nearby_spawns: None,
-            timestamp_ms: 0,
-            nav_status: crate::nav::NavStatus::Idle,
-            combat_status: crate::combat::CombatStatus::Idle,
-            zone_short_name: String::new(),
-            zone_long_name: String::new(),
-            active_buffs: vec![],
-            pet: None,
-            spawn_epoch: 0,
-            actual_version: None,
-            is_zone_changing: false,
-            scanner_candidates: vec![ScannerCandidate {
-                spawn_id: 7,
-                name: "Lord Nagafen".to_string(),
-                hp_pct: 100.0,
-                priority_label: "Named·Nearest".to_string(),
-                rank: 1,
-            }],
-        };
-        let encoded = serde_json::to_string(&frame).expect("serialize frame");
-        let decoded: SharedStateFrame =
-            serde_json::from_str(&encoded).expect("deserialize frame");
-        assert_eq!(decoded.scanner_candidates.len(), 1);
-        assert_eq!(decoded.scanner_candidates[0].spawn_id, 7);
-        assert_eq!(decoded.scanner_candidates[0].rank, 1);
     }
 
     #[test]

@@ -375,7 +375,188 @@ fn draw_nav_card(
     lines
 }
 
-/// Draw the navigation screen with nav blockers panel + per-client card grid.
+/// Build the zone graph panel content lines for display.
+///
+/// Renders up to `max_nodes` zones sorted by zone ID, showing:
+/// - Each zone as `[zone_name]` (highlighted in yellow when on the active path,
+///   bracketed with `>` when it is the current zone).
+/// - Outgoing connections as `  -> dest_name` (highlighted when the edge is on
+///   the active path).
+///
+/// This is a text-mode graph — no canvas or Unicode box-drawing required, so
+/// it works on any terminal.
+fn build_zone_graph_lines<'a>(
+    state: &crate::tui::app::ZoneGraphPanelState,
+    t: &'a Theme,
+    max_nodes: usize,
+) -> Vec<Line<'a>> {
+    let Some(graph) = &state.zone_graph else {
+        return vec![Line::from(Span::styled(
+            "  Zone graph unavailable — connect a client to load.",
+            Style::default().fg(t.text_muted),
+        ))];
+    };
+
+    if graph.zones.is_empty() {
+        return vec![Line::from(Span::styled(
+            "  No zones in graph.",
+            Style::default().fg(t.text_muted),
+        ))];
+    }
+
+    // Build active-path set for O(1) lookup.
+    let path_set: std::collections::HashSet<u16> = state
+        .active_path
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .copied()
+        .collect();
+
+    // Build active-edge set: pairs (a, b) where both consecutive in path.
+    let path_edges: std::collections::HashSet<(u16, u16)> = state
+        .active_path
+        .as_deref()
+        .unwrap_or(&[])
+        .windows(2)
+        .map(|w| (w[0], w[1]))
+        .collect();
+
+    // Sort zones by ID for stable display.
+    let mut zone_ids: Vec<u16> = graph.zones.keys().copied().collect();
+    zone_ids.sort_unstable();
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Header: show path summary if active.
+    if let Some(path) = &state.active_path {
+        let names: Vec<&str> = path
+            .iter()
+            .filter_map(|id| graph.zones.get(id).map(|z| z.name.as_str()))
+            .collect();
+        let path_str = names.join(" → ");
+        lines.push(Line::from(vec![
+            Span::styled("Active path: ", Style::default().fg(t.text_secondary)),
+            Span::styled(path_str, Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    let shown = zone_ids.len().min(max_nodes);
+    let truncated = zone_ids.len() > max_nodes;
+
+    for &zone_id in &zone_ids[..shown] {
+        let Some(node) = graph.zones.get(&zone_id) else {
+            continue;
+        };
+
+        let is_current = state.current_zone_id == Some(zone_id);
+        let on_path = path_set.contains(&zone_id);
+
+        // Node label: >[name]< for current zone, [name] otherwise.
+        let node_label = if is_current {
+            format!(">[{}]<", node.name)
+        } else {
+            format!("[{}]", node.name)
+        };
+
+        let node_color = if is_current {
+            t.text_accent
+        } else if on_path {
+            t.text_highlight
+        } else {
+            t.text_bright
+        };
+
+        lines.push(Line::from(Span::styled(
+            node_label,
+            Style::default().fg(node_color).add_modifier(if on_path {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            }),
+        )));
+
+        // Edges: only show up to 4 connections per node to keep density manageable.
+        let conn_limit = 4;
+        let connections = &node.connections;
+        let shown_conns = connections.len().min(conn_limit);
+        for conn in &connections[..shown_conns] {
+            if conn.disabled {
+                continue;
+            }
+            let dest_name = graph
+                .zones
+                .get(&conn.dest_zone_id)
+                .map_or_else(|| conn.dest_zone_id.to_string(), |z| z.name.clone());
+
+            let edge_on_path =
+                path_edges.contains(&(zone_id, conn.dest_zone_id));
+
+            let edge_color = if edge_on_path {
+                t.text_highlight
+            } else {
+                t.text_muted
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled("  -> ", Style::default().fg(edge_color)),
+                Span::styled(
+                    dest_name,
+                    Style::default().fg(edge_color).add_modifier(if edge_on_path {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ),
+            ]));
+        }
+        if connections.len() > conn_limit {
+            lines.push(Line::from(Span::styled(
+                format!("  ... +{} more", connections.len() - conn_limit),
+                Style::default().fg(t.text_muted),
+            )));
+        }
+    }
+
+    if truncated {
+        lines.push(Line::from(Span::styled(
+            format!(
+                "  ... showing {shown}/{} zones — scroll with :nav graph for full view",
+                zone_ids.len()
+            ),
+            Style::default().fg(t.text_muted),
+        )));
+    }
+
+    lines
+}
+
+/// Draw the zone graph panel.
+pub fn draw_zone_graph_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let focused = app.is_panel_focused(crate::tui::app::ActivePanel::ZoneGraph);
+
+    let border_color = if focused {
+        t.border_active
+    } else {
+        t.border_primary
+    };
+
+    let blk = panel(" Zone Graph ", border_color, t);
+
+    // Reserve space inside the block for text.
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    // Approximate how many lines fit — subtract 1 for potential path header.
+    let max_nodes = (inner.height as usize).saturating_sub(3).max(1);
+
+    let lines = build_zone_graph_lines(&app.nav_state.zone_graph_panel, t, max_nodes);
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Draw the navigation screen with nav blockers panel + zone graph + per-client card grid.
 pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let visible = app.visible_clients();
@@ -395,18 +576,26 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    // Split: blocker panel on top, card grid below
-    let blocker_height = 7u16; // estimated height for blocker panel
+    // Split vertically: [blocker panel] | [zone graph] | [client cards]
+    let blocker_height = 7u16;
+    let zone_graph_height = 14u16; // ~10 zones visible
     let sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(blocker_height), Constraint::Min(10)])
+        .constraints([
+            Constraint::Length(blocker_height),
+            Constraint::Length(zone_graph_height),
+            Constraint::Min(8),
+        ])
         .split(area);
 
-    // Draw blocker panel
+    // Draw blocker/status panel (top)
     draw_blocker_panel(frame, sections[0], app);
 
-    // Draw 2-column grid of client cards
-    let card_width = (sections[1].width.saturating_sub(1)) / 2;
+    // Draw zone graph panel (middle)
+    draw_zone_graph_panel(frame, sections[1], app);
+
+    // Draw 2-column grid of client cards (bottom)
+    let card_width = (sections[2].width.saturating_sub(1)) / 2;
 
     // Arrange cards in 2-column layout
     for (idx, client) in visible.iter().enumerate() {
@@ -444,7 +633,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
                 Constraint::Length(1), // gap
                 Constraint::Length(card_width),
             ])
-            .split(sections[1]);
+            .split(sections[2]);
 
         // Determine which column this card goes in
         let col_idx = idx % 2;

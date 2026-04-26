@@ -2011,6 +2011,33 @@ fn resolve_map_dir() -> std::path::PathBuf {
     relative
 }
 
+/// Cached state for the zone graph visualization panel.
+#[derive(Default)]
+pub struct ZoneGraphPanelState {
+    /// Most recently fetched zone graph (zones as nodes, connections as edges).
+    pub zone_graph: Option<textquest_common::nav::ZoneGraph>,
+    /// Active multi-zone path (sequence of zone IDs) when navigation is in
+    /// progress.  `None` when idle or single-zone.
+    pub active_path: Option<Vec<u16>>,
+    /// Zone ID of the active client's current zone, used to highlight the
+    /// current-zone node.
+    pub current_zone_id: Option<u16>,
+}
+
+impl ZoneGraphPanelState {
+    /// Update the cached graph and active path from the latest app state.
+    pub fn update(
+        &mut self,
+        zone_graph: Option<textquest_common::nav::ZoneGraph>,
+        active_path: Option<Vec<u16>>,
+        current_zone_id: Option<u16>,
+    ) {
+        self.zone_graph = zone_graph;
+        self.active_path = active_path;
+        self.current_zone_id = current_zone_id;
+    }
+}
+
 /// State for the Navigation screen.
 pub struct NavigationScreenState {
     /// Currently selected navigation entry index.
@@ -2022,6 +2049,8 @@ pub struct NavigationScreenState {
     /// Most recently fetched nav diagnostics for the focused client (PID,
     /// diagnostics).
     pub nav_diagnostics: Option<(u32, textquest_common::nav::NavDiagnostics)>,
+    /// Zone graph visualization panel state.
+    pub zone_graph_panel: ZoneGraphPanelState,
 }
 
 impl NavigationScreenState {
@@ -2033,6 +2062,7 @@ impl NavigationScreenState {
             nav_statuses: HashMap::new(),
             show_nav_debug: false,
             nav_diagnostics: None,
+            zone_graph_panel: ZoneGraphPanelState::default(),
         }
     }
 }
@@ -4017,7 +4047,6 @@ mod tests {
             endurance_current: 0,
             endurance_max: 0,
             is_gm: false,
-            combat_target_id: None,
             race_id: 1,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),

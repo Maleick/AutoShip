@@ -47,7 +47,6 @@ impl Default for LuaPlayerSnapshot {
             is_feigned: false,
             is_dead: false,
             is_gm: false,
-            combat_target_id: None,
         }
     }
 }

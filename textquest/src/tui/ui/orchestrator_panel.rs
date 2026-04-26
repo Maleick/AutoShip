@@ -374,19 +374,14 @@ pub fn draw_orchestrator_screen(frame: &mut Frame, area: Rect, app: &mut App) {
     draw_fleet_header(frame, main_sections[0], app);
     draw_slots_table(frame, main_sections[1], app);
 
-    // Sidebar: Signal Feed (top) + Target Scanner (middle) + Phase Timeline (bottom)
+    // Sidebar: Signal Feed (top) + Phase Timeline (bottom)
     let sidebar_sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(6),
-            Constraint::Length(10),
-            Constraint::Min(6),
-        ])
+        .constraints([Constraint::Min(8), Constraint::Min(8)])
         .split(sidebar_area);
 
     draw_signal_feed(frame, sidebar_sections[0], app);
-    draw_target_scanner_panel(frame, sidebar_sections[1], app);
-    draw_phase_timeline(frame, sidebar_sections[2], app);
+    draw_phase_timeline(frame, sidebar_sections[1], app);
 }
 
 fn draw_fleet_header(frame: &mut Frame, area: Rect, app: &App) {
@@ -552,76 +547,6 @@ fn draw_signal_feed(frame: &mut Frame, area: Rect, app: &App) {
 
     let content = Paragraph::new(lines).wrap(Wrap { trim: true });
     let block = panel(" SIGNAL FEED ", Style::default().fg(t.text_accent), t);
-    frame.render_widget(content.block(block), area);
-}
-
-/// Render the MA target scanner panel showing the top-N candidates with their
-/// priority labels for the selected client.  Updated each scan cycle from the
-/// shared-memory frame so the operator can verify correct target priority.
-fn draw_target_scanner_panel(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-
-    // Use the selected client's scanner candidates.
-    let candidates = app
-        .clients
-        .get(app.selected_client)
-        .map(|c| c.scanner_candidates.as_slice())
-        .unwrap_or(&[]);
-
-    let visible = area.height.saturating_sub(2) as usize;
-
-    let lines: Vec<Line<'static>> = if candidates.is_empty() {
-        vec![Line::from(Span::styled(
-            "No scan candidates",
-            Style::default().fg(t.text_muted),
-        ))]
-    } else {
-        candidates
-            .iter()
-            .take(visible)
-            .map(|cand| {
-                let rank_color = match cand.rank {
-                    1 => t.hp_high,
-                    2 => t.text_highlight,
-                    3 => t.text_accent,
-                    _ => t.text_muted,
-                };
-                let hp_color = if cand.hp_pct > 66.0 {
-                    t.hp_high
-                } else if cand.hp_pct > 33.0 {
-                    t.text_highlight
-                } else {
-                    t.hp_low
-                };
-                Line::from(vec![
-                    Span::styled(
-                        format!("#{:<2}", cand.rank),
-                        Style::default()
-                            .fg(rank_color)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        truncate_inline(&cand.name, 14),
-                        Style::default().fg(t.text_bright),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        format!("{:>5.1}%", cand.hp_pct),
-                        Style::default().fg(hp_color),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        cand.priority_label.clone(),
-                        Style::default().fg(t.text_secondary),
-                    ),
-                ])
-            })
-            .collect()
-    };
-
-    let content = Paragraph::new(lines).wrap(Wrap { trim: false });
-    let block = panel(" TARGET SCANNER ", Style::default().fg(t.text_server), t);
     frame.render_widget(content.block(block), area);
 }
 
@@ -1402,56 +1327,5 @@ mod tests {
     #[test]
     fn latency_percentiles_handle_empty_input() {
         assert_eq!(latency_percentiles(&[]), (0, 0, 0));
-    }
-
-    #[test]
-    fn target_scanner_panel_renders_no_crash_with_empty_candidates() {
-        use crate::tui::app::App;
-        use ratatui::backend::TestBackend;
-        use ratatui::Terminal;
-
-        let mut terminal =
-            Terminal::new(TestBackend::new(80, 10)).expect("test terminal");
-        let app = App::new();
-        terminal
-            .draw(|frame| {
-                draw_target_scanner_panel(frame, frame.area(), &app);
-            })
-            .expect("draw must not panic");
-    }
-
-    #[test]
-    fn target_scanner_panel_renders_candidates() {
-        use crate::tui::{app::App, client::ClientState};
-        use ratatui::backend::TestBackend;
-        use ratatui::Terminal;
-        use textquest_common::types::ScannerCandidate;
-
-        let mut terminal =
-            Terminal::new(TestBackend::new(80, 10)).expect("test terminal");
-        let mut app = App::new();
-        let mut cs = ClientState::new(1, 0);
-        cs.scanner_candidates = vec![
-            ScannerCandidate {
-                spawn_id: 1,
-                name: "Lord Nagafen".to_string(),
-                hp_pct: 100.0,
-                priority_label: "Named·Nearest".to_string(),
-                rank: 1,
-            },
-            ScannerCandidate {
-                spawn_id: 2,
-                name: "a fire giant".to_string(),
-                hp_pct: 55.0,
-                priority_label: "Trash·Nearest".to_string(),
-                rank: 2,
-            },
-        ];
-        app.clients.push(cs);
-        terminal
-            .draw(|frame| {
-                draw_target_scanner_panel(frame, frame.area(), &app);
-            })
-            .expect("draw must not panic with candidates");
     }
 }

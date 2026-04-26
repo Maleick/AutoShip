@@ -944,15 +944,6 @@ fn refresh_eq_data_live(
             ));
         }
 
-        // Update target scanner candidates from the shared-memory frame.
-        let candidates = read_live_scanner_candidates(
-            client.pid,
-            shared_state_readers,
-            shared_state_reader_retry_at,
-            now,
-        );
-        client.scanner_candidates = candidates;
-
         if !hard_read_failed {
             process_handles.insert(client.pid, proc);
         }
@@ -1008,40 +999,6 @@ fn read_live_nav_state(
         resolve_live_zone_name(state.zone_long_name, state.zone_short_name),
         state.nav_status,
     ))
-}
-
-/// Read the latest MA target scanner candidates for a given client PID from the
-/// shared-memory frame.  Returns an empty `Vec` when the reader is not yet
-/// available or the DLL has not produced any candidates.
-#[cfg(windows)]
-fn read_live_scanner_candidates(
-    pid: u32,
-    shared_state_readers: &mut HashMap<u32, SharedStateReader>,
-    shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
-    now: Instant,
-) -> Vec<textquest_common::types::ScannerCandidate> {
-    if shared_state_reader_retry_at
-        .get(&pid)
-        .is_some_and(|retry_at| *retry_at > now)
-    {
-        return Vec::new();
-    }
-
-    // Reader is initialised by read_live_nav_state; only proceed if available.
-    let Some(reader) = shared_state_readers.get_mut(&pid) else {
-        return Vec::new();
-    };
-    reader.read_scanner_candidates()
-}
-
-#[cfg(not(windows))]
-fn read_live_scanner_candidates(
-    _pid: u32,
-    _shared_state_readers: &mut HashMap<u32, SharedStateReader>,
-    _shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
-    _now: Instant,
-) -> Vec<textquest_common::types::ScannerCandidate> {
-    Vec::new()
 }
 
 #[cfg(windows)]
@@ -1461,7 +1418,6 @@ fn load_demo_data(app: &mut App) {
             heading,
             spawn_id: i as u32 + 1,
             is_gm: false,
-            combat_target_id: None,
             race_id,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),

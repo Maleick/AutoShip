@@ -128,39 +128,10 @@ async fn get_settings(State(state): State<Arc<AppState>>) -> Json<KillTrackerSet
     Json(settings.clone())
 }
 
-/// Maximum byte length for the `auto_report_channel` field.
-const CHANNEL_MAX_LEN: usize = 64;
-/// Maximum allowed value for `max_session_history` to prevent unbounded memory growth.
-const MAX_SESSION_HISTORY_LIMIT: usize = 10_000;
-
-/// Validate unbounded fields in `KillTrackerSettings` before storing.
-///
-/// Returns `Err` with a human-readable description of the first violation found.
-fn validate_kill_tracker_settings(s: &KillTrackerSettings) -> Result<(), String> {
-    if s.auto_report_channel.len() > CHANNEL_MAX_LEN {
-        return Err(format!(
-            "auto_report_channel exceeds max length of {CHANNEL_MAX_LEN} bytes"
-        ));
-    }
-    if s.max_session_history > MAX_SESSION_HISTORY_LIMIT {
-        return Err(format!(
-            "max_session_history exceeds maximum allowed value of {MAX_SESSION_HISTORY_LIMIT}"
-        ));
-    }
-    Ok(())
-}
-
 async fn put_settings(
     State(state): State<Arc<AppState>>,
     Json(settings): Json<KillTrackerSettings>,
 ) -> impl IntoResponse {
-    if let Err(error) = validate_kill_tracker_settings(&settings) {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({"error": error})),
-        )
-            .into_response();
-    }
     state
         .kill_tracker_state
         .update_settings(settings.clone())
@@ -315,56 +286,5 @@ mod tests {
         let response = get_history(State(state)).await.into_response();
         let history: Vec<CharacterHistory> = json_body(response).await;
         assert!(history.is_empty());
-    }
-
-    fn valid_settings() -> KillTrackerSettings {
-        KillTrackerSettings {
-            enabled: true,
-            auto_report_interval_minutes: 10,
-            auto_report_channel: "group".to_string(),
-            auto_report_include_mobs: true,
-            auto_report_include_kph: true,
-            track_per_character: true,
-            max_session_history: 100,
-        }
-    }
-
-    #[test]
-    fn validate_settings_valid_passes() {
-        assert!(validate_kill_tracker_settings(&valid_settings()).is_ok());
-    }
-
-    #[test]
-    fn validate_settings_channel_too_long_rejected() {
-        let mut s = valid_settings();
-        s.auto_report_channel = "x".repeat(CHANNEL_MAX_LEN + 1);
-        let err = validate_kill_tracker_settings(&s).unwrap_err();
-        assert!(err.contains("auto_report_channel"));
-    }
-
-    #[test]
-    fn validate_settings_max_session_history_too_large_rejected() {
-        let mut s = valid_settings();
-        s.max_session_history = MAX_SESSION_HISTORY_LIMIT + 1;
-        let err = validate_kill_tracker_settings(&s).unwrap_err();
-        assert!(err.contains("max_session_history"));
-    }
-
-    #[tokio::test]
-    async fn put_settings_rejects_oversized_channel() {
-        let state = test_state();
-        let mut bad = valid_settings();
-        bad.auto_report_channel = "x".repeat(CHANNEL_MAX_LEN + 1);
-        let response = put_settings(State(state), Json(bad)).await.into_response();
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    }
-
-    #[tokio::test]
-    async fn put_settings_rejects_huge_history_limit() {
-        let state = test_state();
-        let mut bad = valid_settings();
-        bad.max_session_history = MAX_SESSION_HISTORY_LIMIT + 1;
-        let response = put_settings(State(state), Json(bad)).await.into_response();
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

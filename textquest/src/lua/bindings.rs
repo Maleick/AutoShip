@@ -1907,7 +1907,6 @@ return removed and not fired
             is_feigned: false,
             is_dead: false,
             is_gm: false,
-            combat_target_id: None,
         });
 
         let (name, hp_pct, x, moving): (String, f32, f32, bool) = b
@@ -2077,7 +2076,6 @@ textquest.execute_command("/stand")
                 speed_run: 0.0,
                 stand_state: 0,
                 is_gm: false,
-            combat_target_id: None,
             }];
             state.buffs = vec!["Rage".to_string(), "Haste".to_string()];
             state.debuffs = vec!["Curse".to_string()];
@@ -2179,7 +2177,6 @@ textquest.execute_command("/stand")
                     speed_run: 0.0,
                     stand_state: 0,
                     is_gm: false,
-            combat_target_id: None,
                 },
                 textquest_common::types::SpawnData {
                     spawn_id: 2,
@@ -2202,7 +2199,6 @@ textquest.execute_command("/stand")
                     speed_run: 0.0,
                     stand_state: 0,
                     is_gm: false,
-            combat_target_id: None,
                 },
             ];
             state.target = state.spawns.first().cloned();
@@ -2227,7 +2223,6 @@ textquest.execute_command("/stand")
                 speed_run: 0.0,
                 stand_state: 0,
                 is_gm: false,
-            combat_target_id: None,
             }];
         }
         let lua = b.get_lua();

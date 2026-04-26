@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use textquest_common::{
-    nav::{CampDefinition, CampSpot, FollowConfig, ScatterConfig, Waypoint},
+    nav::{CampDefinition, CampSpot, FollowConfig, Waypoint},
     types::ClientId,
 };
 
@@ -247,43 +247,43 @@ pub fn create_standard_camp(center: Waypoint, pull_heading: f32, num_dps: usize)
 
     // Tank: 20 units in the pull direction.
     let pull_rad = pull_heading * std::f32::consts::PI * 2.0 / 512.0;
-    spots.push(CampSpot::new(
-        Waypoint::new(
+    spots.push(CampSpot {
+        position: Waypoint::new(
             center.x + 20.0 * pull_rad.sin(),
             center.y + 20.0 * pull_rad.cos(),
             center.z,
         ),
-        pull_heading,
-        "tank".to_string(),
-    ));
+        heading: pull_heading,
+        role: "tank".to_string(),
+    });
 
     // Healer: 15 units behind center (opposite pull direction).
     let back_heading = (pull_heading + 256.0) % 512.0;
     let back_rad = back_heading * std::f32::consts::PI * 2.0 / 512.0;
-    spots.push(CampSpot::new(
-        Waypoint::new(
+    spots.push(CampSpot {
+        position: Waypoint::new(
             center.x + 15.0 * back_rad.sin(),
             center.y + 15.0 * back_rad.cos(),
             center.z,
         ),
-        pull_heading,
-        "healer".to_string(),
-    ));
+        heading: pull_heading,
+        role: "healer".to_string(),
+    });
 
     // DPS: spread in a semicircle behind center.
     for i in 0..num_dps {
         let angle_offset = (i as f32 / num_dps as f32 - 0.5) * 128.0; // +/- 45 degrees
         let dps_heading = (back_heading + angle_offset + 512.0) % 512.0;
         let dps_rad = dps_heading * std::f32::consts::PI * 2.0 / 512.0;
-        spots.push(CampSpot::new(
-            Waypoint::new(
+        spots.push(CampSpot {
+            position: Waypoint::new(
                 center.x + 18.0 * dps_rad.sin(),
                 center.y + 18.0 * dps_rad.cos(),
                 center.z,
             ),
-            pull_heading,
-            format!("dps{}", i + 1),
-        ));
+            heading: pull_heading,
+            role: format!("dps{}", i + 1),
+        });
     }
 
     CampDefinition {
@@ -291,42 +291,6 @@ pub fn create_standard_camp(center: Waypoint, pull_heading: f32, num_dps: usize)
         zone: String::new(),
         spots,
     }
-}
-
-/// Compute per-slot scatter offsets for a group of characters at camp-activate
-/// time.
-///
-/// Given a camp `center`, a base `ScatterConfig`, and a number of slots, this
-/// function assigns each slot a **deterministic** position by evenly
-/// distributing bearings around a full 360° circle. Slot 0 uses
-/// `scatter.bearing` as-is; subsequent slots rotate by `360 / num_slots`
-/// degrees each.
-///
-/// The resulting vec has one entry per slot, in slot-index order. Each entry
-/// contains the computed `(ScatterConfig, Waypoint)` so callers can store the
-/// resolved position alongside the config that produced it.
-///
-/// # Panics
-///
-/// Does not panic; returns an empty vec when `num_slots == 0`.
-#[must_use]
-pub fn compute_scatter_offsets(
-    center: &Waypoint,
-    scatter: &ScatterConfig,
-    num_slots: usize,
-) -> Vec<(ScatterConfig, Waypoint)> {
-    if num_slots == 0 {
-        return Vec::new();
-    }
-    let step_deg = 360.0 / num_slots as f32;
-    (0..num_slots)
-        .map(|slot| {
-            let bearing = (scatter.bearing + step_deg * slot as f32) % 360.0;
-            let slot_scatter = ScatterConfig::new(bearing, scatter.scatdist, scatter.scatsize);
-            let pos = slot_scatter.offset(center);
-            (slot_scatter, pos)
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -742,95 +706,5 @@ mod tests {
         // Last anchor should now be updated.
         assert!(mode.last_anchor().is_some());
         assert!((mode.last_anchor().unwrap().x - 10.0).abs() < f32::EPSILON);
-    }
-
-    // ── ScatterConfig / compute_scatter_offsets tests ─────────────────────────
-
-    /// Fixture ScatterConfig: 15-unit radius, 0° bearing, 0 scatter noise.
-    fn scatter_fixture() -> ScatterConfig {
-        ScatterConfig::new(0.0, 15.0, 0.0)
-    }
-
-    #[test]
-    fn scatter_offsets_six_slots_non_overlapping() {
-        let center = Waypoint::new(0.0, 0.0, 0.0);
-        let scatter = scatter_fixture();
-        let slots = compute_scatter_offsets(&center, &scatter, 6);
-
-        assert_eq!(slots.len(), 6, "should produce exactly 6 slots");
-
-        // All positions must be distinct — no two slots overlap.
-        for i in 0..slots.len() {
-            for j in (i + 1)..slots.len() {
-                let (_, pos_i) = &slots[i];
-                let (_, pos_j) = &slots[j];
-                let dist = ((pos_i.x - pos_j.x).powi(2) + (pos_i.y - pos_j.y).powi(2)).sqrt();
-                assert!(
-                    dist > 0.1,
-                    "slots {i} and {j} overlap: pos_i=({:.2},{:.2}) pos_j=({:.2},{:.2})",
-                    pos_i.x,
-                    pos_i.y,
-                    pos_j.x,
-                    pos_j.y,
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn scatter_offsets_bearings_evenly_distributed() {
-        let center = Waypoint::new(0.0, 0.0, 0.0);
-        let scatter = scatter_fixture();
-        let slots = compute_scatter_offsets(&center, &scatter, 6);
-
-        // Bearings should step by 60° each slot.
-        for (idx, (slot_scatter, _)) in slots.iter().enumerate() {
-            let expected_bearing = (idx as f32 * 60.0) % 360.0;
-            assert!(
-                (slot_scatter.bearing - expected_bearing).abs() < 0.01,
-                "slot {idx}: expected bearing {expected_bearing:.1}°, got {:.1}°",
-                slot_scatter.bearing
-            );
-        }
-    }
-
-    #[test]
-    fn scatter_offsets_zero_slots_is_empty() {
-        let center = Waypoint::new(0.0, 0.0, 0.0);
-        let scatter = scatter_fixture();
-        let slots = compute_scatter_offsets(&center, &scatter, 0);
-        assert!(slots.is_empty());
-    }
-
-    #[test]
-    fn scatter_offsets_single_slot_uses_base_bearing() {
-        let center = Waypoint::new(0.0, 0.0, 0.0);
-        let scatter = ScatterConfig::new(90.0, 10.0, 0.0);
-        let slots = compute_scatter_offsets(&center, &scatter, 1);
-        assert_eq!(slots.len(), 1);
-        let (slot_scatter, _) = &slots[0];
-        assert!((slot_scatter.bearing - 90.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn camp_spot_scatter_field_serializes() {
-        // Verify CampSpot with a scatter value round-trips through JSON.
-        let spot = CampSpot {
-            position: Waypoint::new(1.0, 2.0, 0.0),
-            heading: 128.0,
-            role: "tank".to_string(),
-            scatter: Some(ScatterConfig::new(45.0, 10.0, 2.0)),
-        };
-        let json = serde_json::to_string(&spot).expect("serialize");
-        let loaded: CampSpot = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(loaded, spot);
-    }
-
-    #[test]
-    fn camp_spot_no_scatter_deserializes_as_none() {
-        // When scatter is absent from JSON, the field defaults to None.
-        let json = r#"{"position":{"x":0.0,"y":0.0,"z":0.0},"heading":0.0,"role":"healer"}"#;
-        let spot: CampSpot = serde_json::from_str(json).expect("deserialize");
-        assert!(spot.scatter.is_none());
     }
 }

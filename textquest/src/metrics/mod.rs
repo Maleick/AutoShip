@@ -17,7 +17,6 @@ pub mod kill_reporter;
 pub mod kill_session_store;
 pub mod kill_tracker;
 pub mod performance;
-pub mod persistence;
 pub mod plat_tracker;
 pub mod progress;
 pub mod sampling;
@@ -67,4 +66,3 @@ pub use types::{
     MovementMetrics as RtMovementMetrics, SystemMetrics, TimeWindowedMetrics,
 };
 pub use xp_tracker::{XpSample, XpSessionSnapshot, XpTracker};
-pub use persistence::{MetricsPersister, MetricsHistoryRow};

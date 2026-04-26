@@ -388,7 +388,6 @@ mod tests {
             endurance_current: 100,
             endurance_max: 100,
             is_gm: false,
-            combat_target_id: None,
             race_id: 1,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),

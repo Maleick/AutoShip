@@ -1,10 +1,7 @@
 //! Multi-target crowd control queue for enchanters (and bards).
 //! Tracks mez targets with duration, auto-refreshes before break.
-//!
-//! [`MezTracker`] wraps [`MezQueue`] and additionally records which spawn IDs
-//! have proven immune to mesmerization so rotations can permanently skip them.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 
 /// A mob being tracked for crowd control.
 #[derive(Debug, Clone)]
@@ -98,95 +95,6 @@ impl MezQueue {
 
     pub fn is_empty(&self) -> bool {
         self.targets.is_empty()
-    }
-}
-
-/// Combines a [`MezQueue`] with a permanent immune-mob registry.
-///
-/// When a mob resists mez via `CastResult::Immune`, it is added to the immune
-/// set and will never be offered as a mez target again — even across resets of
-/// the underlying queue. Non-immune resists are handled by the queue's normal
-/// retry-decrement logic.
-pub struct MezTracker {
-    queue: MezQueue,
-    immune: HashSet<u32>,
-}
-
-impl MezTracker {
-    /// Create a new tracker backed by a queue with the given capacity.
-    pub fn new(max_targets: u8) -> Self {
-        Self {
-            queue: MezQueue::new(max_targets),
-            immune: HashSet::new(),
-        }
-    }
-
-    /// Returns `true` if this spawn has been confirmed immune to mez.
-    pub fn is_immune(&self, spawn_id: u32) -> bool {
-        self.immune.contains(&spawn_id)
-    }
-
-    /// Add a mob to the CC queue, skipping it silently if it is immune.
-    pub fn add_target(&mut self, spawn_id: u32, duration_ticks: u32, current_tick: u32) {
-        if self.immune.contains(&spawn_id) {
-            return;
-        }
-        self.queue.add_target(spawn_id, duration_ticks, current_tick);
-    }
-
-    /// Return the most-urgent refresh target, skipping any that are immune.
-    pub fn next_refresh_target(&self, current_tick: u32) -> Option<u32> {
-        // The queue already filters by retry count and timing.
-        // Immune mobs are never added to the queue, so this is a pass-through.
-        self.queue.next_refresh_target(current_tick)
-    }
-
-    /// Record a successful mez cast and refresh the timer.
-    pub fn record_mez_success(&mut self, spawn_id: u32, duration_ticks: u32, current_tick: u32) {
-        self.queue
-            .record_mez_success(spawn_id, duration_ticks, current_tick);
-    }
-
-    /// Record a normal resist — decrement retries.
-    pub fn record_mez_resist(&mut self, spawn_id: u32) {
-        self.queue.record_mez_resist(spawn_id);
-    }
-
-    /// Record an immunity result: permanently remove from the queue and mark
-    /// the mob so it is never targeted again.
-    pub fn record_mez_immune(&mut self, spawn_id: u32) {
-        self.queue.remove_target(spawn_id);
-        self.immune.insert(spawn_id);
-    }
-
-    /// Remove a target (died, despawned, etc.). Does NOT clear the immune flag.
-    pub fn remove_target(&mut self, spawn_id: u32) {
-        self.queue.remove_target(spawn_id);
-    }
-
-    /// Prune expired targets with no retries left.
-    pub fn prune_expired(&mut self, current_tick: u32) {
-        self.queue.prune_expired(current_tick);
-    }
-
-    /// Reset the queue and immune set (e.g. when leaving combat or changing zone).
-    pub fn reset(&mut self, max_targets: u8) {
-        self.queue = MezQueue::new(max_targets);
-        self.immune.clear();
-    }
-
-    /// Number of actively-tracked targets (excludes immune mobs).
-    pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
-    }
-
-    /// Number of permanently-immune mobs recorded this session.
-    pub fn immune_count(&self) -> usize {
-        self.immune.len()
     }
 }
 
@@ -354,82 +262,5 @@ mod tests {
         assert!(queue.is_empty());
         assert_eq!(queue.len(), 0);
         assert!(queue.next_refresh_target(0).is_none());
-    }
-
-    // ─── MezTracker tests ──────────────────────────────────────────────────────
-
-    #[test]
-    fn tracker_is_immune_false_by_default() {
-        let tracker = MezTracker::new(5);
-        assert!(!tracker.is_immune(1));
-    }
-
-    #[test]
-    fn tracker_add_target_skips_immune() {
-        let mut tracker = MezTracker::new(5);
-        tracker.record_mez_immune(42);
-        tracker.add_target(42, 600, 0);
-        assert_eq!(tracker.len(), 0);
-    }
-
-    #[test]
-    fn tracker_record_immune_removes_from_queue() {
-        let mut tracker = MezTracker::new(5);
-        tracker.add_target(10, 600, 0);
-        assert_eq!(tracker.len(), 1);
-        tracker.record_mez_immune(10);
-        assert_eq!(tracker.len(), 0);
-        assert!(tracker.is_immune(10));
-    }
-
-    #[test]
-    fn tracker_immune_mob_never_returned_as_refresh_target() {
-        let mut tracker = MezTracker::new(5);
-        tracker.add_target(7, 100, 0);
-        tracker.record_mez_immune(7);
-        // Even at tick 90 (inside refresh window), immune mob not returned
-        assert!(tracker.next_refresh_target(90).is_none());
-    }
-
-    #[test]
-    fn tracker_non_immune_mob_still_returned() {
-        let mut tracker = MezTracker::new(5);
-        tracker.add_target(1, 100, 0);
-        tracker.add_target(2, 100, 0);
-        tracker.record_mez_immune(1);
-        // Mob 2 is still in the queue and within refresh window at tick 90
-        assert_eq!(tracker.next_refresh_target(90), Some(2));
-    }
-
-    #[test]
-    fn tracker_resist_still_decrements_retries() {
-        let mut tracker = MezTracker::new(5);
-        tracker.add_target(5, 100, 0);
-        tracker.record_mez_resist(5);
-        tracker.record_mez_resist(5);
-        tracker.record_mez_resist(5); // 0 retries left
-        // No longer returned — but NOT immune
-        assert!(!tracker.is_immune(5));
-        assert!(tracker.next_refresh_target(90).is_none());
-    }
-
-    #[test]
-    fn tracker_immune_count() {
-        let mut tracker = MezTracker::new(5);
-        assert_eq!(tracker.immune_count(), 0);
-        tracker.record_mez_immune(1);
-        tracker.record_mez_immune(2);
-        assert_eq!(tracker.immune_count(), 2);
-    }
-
-    #[test]
-    fn tracker_reset_clears_queue_and_immune_set() {
-        let mut tracker = MezTracker::new(5);
-        tracker.add_target(1, 100, 0);
-        tracker.record_mez_immune(2);
-        tracker.reset(5);
-        assert_eq!(tracker.len(), 0);
-        assert_eq!(tracker.immune_count(), 0);
-        assert!(!tracker.is_immune(2));
     }
 }

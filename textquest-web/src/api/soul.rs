@@ -411,78 +411,13 @@ pub async fn export_all_audit_csv(State(state): State<Arc<AppState>>) -> impl In
 /// - Numeric values in debrief are read-only — they come from aggregates.
 /// - All Soul Engine references to debrief must use the provided values,
 ///   never paraphrase or author new numbers.
-/// Maximum byte length for a single string field in `SessionDebrief`.
-const DEBRIEF_FIELD_MAX_LEN: usize = 512;
-/// Maximum number of items in wins/losses/suggestions vectors.
-const DEBRIEF_VEC_MAX_LEN: usize = 50;
-
-/// Validate unbounded string/vec fields in a `SessionDebrief` before storing.
-///
-/// Returns `Err` with a human-readable description of the first violation found.
-fn validate_session_debrief(d: &SessionDebrief) -> Result<(), String> {
-    if d.session_id.len() > DEBRIEF_FIELD_MAX_LEN {
-        return Err(format!(
-            "session_id exceeds max length of {DEBRIEF_FIELD_MAX_LEN} bytes"
-        ));
-    }
-    if d.created_at.len() > DEBRIEF_FIELD_MAX_LEN {
-        return Err(format!(
-            "created_at exceeds max length of {DEBRIEF_FIELD_MAX_LEN} bytes"
-        ));
-    }
-    if d.wins.len() > DEBRIEF_VEC_MAX_LEN {
-        return Err(format!(
-            "wins exceeds max item count of {DEBRIEF_VEC_MAX_LEN}"
-        ));
-    }
-    for (i, w) in d.wins.iter().enumerate() {
-        if w.len() > DEBRIEF_FIELD_MAX_LEN {
-            return Err(format!(
-                "wins[{i}] exceeds max length of {DEBRIEF_FIELD_MAX_LEN} bytes"
-            ));
-        }
-    }
-    if d.losses.len() > DEBRIEF_VEC_MAX_LEN {
-        return Err(format!(
-            "losses exceeds max item count of {DEBRIEF_VEC_MAX_LEN}"
-        ));
-    }
-    for (i, l) in d.losses.iter().enumerate() {
-        if l.len() > DEBRIEF_FIELD_MAX_LEN {
-            return Err(format!(
-                "losses[{i}] exceeds max length of {DEBRIEF_FIELD_MAX_LEN} bytes"
-            ));
-        }
-    }
-    if d.suggestions.len() > DEBRIEF_VEC_MAX_LEN {
-        return Err(format!(
-            "suggestions exceeds max item count of {DEBRIEF_VEC_MAX_LEN}"
-        ));
-    }
-    for (i, s) in d.suggestions.iter().enumerate() {
-        if s.len() > DEBRIEF_FIELD_MAX_LEN {
-            return Err(format!(
-                "suggestions[{i}] exceeds max length of {DEBRIEF_FIELD_MAX_LEN} bytes"
-            ));
-        }
-    }
-    Ok(())
-}
-
 pub async fn receive_session_debrief(
     State(state): State<Arc<AppState>>,
     Json(debrief): Json<SessionDebrief>,
 ) -> impl IntoResponse {
-    if let Err(error) = validate_session_debrief(&debrief) {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({"error": error})),
-        )
-            .into_response();
-    }
     let mut debriefs = state.soul_audit.debrief_by_character.write().await;
     debriefs.insert(debrief.character_id, debrief.clone());
-    (StatusCode::OK, Json(serde_json::json!({"status": "debrief_received"}))).into_response()
+    (StatusCode::OK, Json(serde_json::json!({"status": "debrief_received"})))
 }
 
 /// `GET /api/soul/debrief/:character_id` — retrieve latest session debrief.
@@ -624,90 +559,5 @@ mod tests {
         assert_eq!(json["damage_taken"], 12000);
         assert_eq!(json["mobs_defeated"], 47);
         assert_eq!(json["deaths"], 2);
-    }
-
-    fn valid_debrief() -> SessionDebrief {
-        SessionDebrief {
-            session_id: "s1".into(),
-            character_id: 1,
-            wins: vec!["win".into()],
-            losses: vec!["loss".into()],
-            suggestions: vec!["suggestion".into()],
-            duration_secs: 60,
-            damage_dealt: 100,
-            damage_taken: 50,
-            mobs_defeated: 5,
-            deaths: 0,
-            created_at: "2026-04-26T00:00:00Z".into(),
-        }
-    }
-
-    #[test]
-    fn validate_debrief_valid_passes() {
-        assert!(validate_session_debrief(&valid_debrief()).is_ok());
-    }
-
-    #[test]
-    fn validate_debrief_session_id_too_long_rejected() {
-        let mut d = valid_debrief();
-        d.session_id = "x".repeat(DEBRIEF_FIELD_MAX_LEN + 1);
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("session_id"));
-    }
-
-    #[test]
-    fn validate_debrief_created_at_too_long_rejected() {
-        let mut d = valid_debrief();
-        d.created_at = "x".repeat(DEBRIEF_FIELD_MAX_LEN + 1);
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("created_at"));
-    }
-
-    #[test]
-    fn validate_debrief_too_many_wins_rejected() {
-        let mut d = valid_debrief();
-        d.wins = vec!["win".into(); DEBRIEF_VEC_MAX_LEN + 1];
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("wins"));
-    }
-
-    #[test]
-    fn validate_debrief_win_item_too_long_rejected() {
-        let mut d = valid_debrief();
-        d.wins = vec!["x".repeat(DEBRIEF_FIELD_MAX_LEN + 1)];
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("wins[0]"));
-    }
-
-    #[test]
-    fn validate_debrief_too_many_losses_rejected() {
-        let mut d = valid_debrief();
-        d.losses = vec!["loss".into(); DEBRIEF_VEC_MAX_LEN + 1];
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("losses"));
-    }
-
-    #[test]
-    fn validate_debrief_loss_item_too_long_rejected() {
-        let mut d = valid_debrief();
-        d.losses = vec!["x".repeat(DEBRIEF_FIELD_MAX_LEN + 1)];
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("losses[0]"));
-    }
-
-    #[test]
-    fn validate_debrief_too_many_suggestions_rejected() {
-        let mut d = valid_debrief();
-        d.suggestions = vec!["s".into(); DEBRIEF_VEC_MAX_LEN + 1];
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("suggestions"));
-    }
-
-    #[test]
-    fn validate_debrief_suggestion_item_too_long_rejected() {
-        let mut d = valid_debrief();
-        d.suggestions = vec!["x".repeat(DEBRIEF_FIELD_MAX_LEN + 1)];
-        let err = validate_session_debrief(&d).unwrap_err();
-        assert!(err.contains("suggestions[0]"));
     }
 }

@@ -88,12 +88,6 @@ impl LootState {
 
 // ── API types ────────────────────────────────────────────────────────────────
 
-/// Maximum number of items allowed in any single loot-rules array field.
-pub const LOOT_RULES_MAX_ARRAY_LEN: usize = 1000;
-
-/// Maximum byte length allowed for any single item-name string inside loot rules.
-pub const LOOT_RULES_MAX_STRING_BYTES: usize = 4096;
-
 /// Global auto-loot rules.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LootRulesPayload {
@@ -107,36 +101,6 @@ pub struct LootRulesPayload {
     pub loot_all: bool,
     /// Auto-split coin with group.
     pub auto_split: bool,
-}
-
-impl LootRulesPayload {
-    /// Validate length guards: returns an error message if any array exceeds
-    /// [`LOOT_RULES_MAX_ARRAY_LEN`] items or any string exceeds
-    /// [`LOOT_RULES_MAX_STRING_BYTES`] bytes.
-    pub fn validate(&self) -> Result<(), String> {
-        for (field, items) in [
-            ("keep_items", &self.keep_items),
-            ("sell_items", &self.sell_items),
-            ("destroy_items", &self.destroy_items),
-        ] {
-            if items.len() > LOOT_RULES_MAX_ARRAY_LEN {
-                return Err(format!(
-                    "`{field}` exceeds the maximum of {LOOT_RULES_MAX_ARRAY_LEN} items (got {})",
-                    items.len()
-                ));
-            }
-            for item in items {
-                if item.len() > LOOT_RULES_MAX_STRING_BYTES {
-                    return Err(format!(
-                        "item name in `{field}` exceeds the maximum of \
-                         {LOOT_RULES_MAX_STRING_BYTES} bytes (got {} bytes)",
-                        item.len()
-                    ));
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 impl Default for LootRulesPayload {
@@ -499,10 +463,6 @@ pub async fn put_rules(
 ) -> StatusCode {
     if !is_trusted_origin(&headers) {
         return StatusCode::FORBIDDEN;
-    }
-    if let Err(error) = payload.validate() {
-        tracing::warn!(%error, "loot rules PUT rejected: validation failed");
-        return StatusCode::UNPROCESSABLE_ENTITY;
     }
     let mut rules = state.loot_state.rules.write().await;
     *rules = payload;
@@ -879,76 +839,6 @@ mod tests {
         // Empty HeaderMap — no Origin header present — must be rejected even in test builds.
         let status = put_rules(State(state), HeaderMap::new(), Json(payload)).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
-    }
-
-    #[tokio::test]
-    async fn put_rules_rejects_oversized_array() {
-        let state = demo_state();
-        let oversized: Vec<String> = (0..=LOOT_RULES_MAX_ARRAY_LEN)
-            .map(|i| format!("Item {i}"))
-            .collect();
-        let payload = LootRulesPayload {
-            keep_items: oversized,
-            sell_items: vec![],
-            destroy_items: vec![],
-            loot_all: false,
-            auto_split: false,
-        };
-        let status = put_rules(State(state), trusted_headers(), Json(payload)).await;
-        assert!(
-            status == StatusCode::UNPROCESSABLE_ENTITY || status == StatusCode::BAD_REQUEST,
-            "expected 422 or 400, got {status}"
-        );
-    }
-
-    #[tokio::test]
-    async fn put_rules_rejects_oversized_string() {
-        let state = demo_state();
-        let long_name = "x".repeat(LOOT_RULES_MAX_STRING_BYTES + 1);
-        let payload = LootRulesPayload {
-            keep_items: vec![long_name],
-            sell_items: vec![],
-            destroy_items: vec![],
-            loot_all: false,
-            auto_split: false,
-        };
-        let status = put_rules(State(state), trusted_headers(), Json(payload)).await;
-        assert!(
-            status == StatusCode::UNPROCESSABLE_ENTITY || status == StatusCode::BAD_REQUEST,
-            "expected 422 or 400, got {status}"
-        );
-    }
-
-    #[test]
-    fn loot_rules_validate_passes_for_valid_payload() {
-        let payload = LootRulesPayload::default();
-        assert!(payload.validate().is_ok());
-    }
-
-    #[test]
-    fn loot_rules_validate_rejects_oversized_keep_items() {
-        let payload = LootRulesPayload {
-            keep_items: (0..=LOOT_RULES_MAX_ARRAY_LEN)
-                .map(|i| format!("Item {i}"))
-                .collect(),
-            sell_items: vec![],
-            destroy_items: vec![],
-            loot_all: false,
-            auto_split: false,
-        };
-        assert!(payload.validate().is_err());
-    }
-
-    #[test]
-    fn loot_rules_validate_rejects_oversized_string_in_sell_items() {
-        let payload = LootRulesPayload {
-            keep_items: vec![],
-            sell_items: vec!["x".repeat(LOOT_RULES_MAX_STRING_BYTES + 1)],
-            destroy_items: vec![],
-            loot_all: false,
-            auto_split: false,
-        };
-        assert!(payload.validate().is_err());
     }
 
     #[test]

@@ -2294,7 +2294,6 @@ mod tests {
             speed_run: 0.0,
             stand_state: if hp_current <= 0 { 111 } else { 0 },
             is_gm: false,
-            combat_target_id: None,
         }
     }
 
@@ -2351,7 +2350,6 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             is_gm: false,
-            combat_target_id: None,
         });
         state.zone_long_name = "Kael Drakkel".into();
         state.nearby_spawns = vec![SpawnData {
@@ -2375,7 +2373,6 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             is_gm: false,
-            combat_target_id: None,
         }];
         orch.game_states.insert(100, state);
 
@@ -2422,7 +2419,6 @@ mod tests {
                     speed_run: 0.0,
                     stand_state: 0,
                     is_gm: false,
-            combat_target_id: None,
                 }],
             }],
         };
@@ -2545,7 +2541,6 @@ mod tests {
                     speed_run: 0.0,
                     stand_state: 0,
                     is_gm: false,
-            combat_target_id: None,
                 }],
             }],
         };
@@ -2748,7 +2743,6 @@ mod tests {
                 speed_run: 0.0,
                 stand_state: 0,
                 is_gm: false,
-            combat_target_id: None,
             }
         }
 
@@ -2874,7 +2868,6 @@ mod tests {
                 speed_run: 0.0,
                 stand_state: 0,
                 is_gm: false,
-            combat_target_id: None,
             }
         }
 
@@ -3185,7 +3178,6 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             is_gm: false,
-            combat_target_id: None,
         };
         orch.game_states.insert(
             100,
@@ -3212,7 +3204,6 @@ mod tests {
                     speed_run: 0.0,
                     stand_state: 0,
                     is_gm: false,
-            combat_target_id: None,
                 }),
                 target: None,
                 nearby_spawns: vec![new_npc],

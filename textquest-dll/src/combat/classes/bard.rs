@@ -4,7 +4,7 @@ use textquest_common::combat::{
 };
 
 use crate::combat::{
-    mez_queue::{MezQueue, MezTracker},
+    mez_queue::MezQueue,
     rotation::{self, RotationGroup},
     strategy::{ClassStrategy, CombatContext},
     twist::{
@@ -33,8 +33,6 @@ pub struct BardStrategy {
     melody_fallback_active: bool,
     tick: u32,
     mez_queue: MezQueue,
-    /// Tracks permanently immune spawn IDs so the rotation never re-attempts them.
-    mez_tracker: MezTracker,
     mez_gem: Option<u8>,
     full_rotation_enabled: bool,
     instrument_swap: InstrumentSwapEngine,
@@ -50,7 +48,6 @@ impl BardStrategy {
             melody_fallback_active: false,
             tick: 0,
             mez_queue: MezQueue::new(4),
-            mez_tracker: MezTracker::new(4),
             mez_gem: None,
             full_rotation_enabled: false,
             instrument_swap: InstrumentSwapEngine::new(),
@@ -66,7 +63,6 @@ impl BardStrategy {
             melody_fallback_active: false,
             tick: 0,
             mez_queue: MezQueue::new(4),
-            mez_tracker: MezTracker::new(4),
             mez_gem: None,
             full_rotation_enabled: false,
             instrument_swap: InstrumentSwapEngine::new(),
@@ -82,7 +78,6 @@ impl BardStrategy {
             melody_fallback_active: false,
             tick: 0,
             mez_queue: MezQueue::new(4),
-            mez_tracker: MezTracker::new(4),
             mez_gem: None,
             full_rotation_enabled: false,
             instrument_swap: InstrumentSwapEngine::new(),
@@ -102,7 +97,6 @@ impl BardStrategy {
             melody_fallback_active: false,
             tick: 0,
             mez_queue: MezQueue::new(4),
-            mez_tracker: MezTracker::new(4),
             mez_gem: None,
             full_rotation_enabled: true,
             instrument_swap: InstrumentSwapEngine::new(),
@@ -196,12 +190,7 @@ impl BardStrategy {
         self.mez_gem = Some(gem);
     }
 
-    /// Queue a mob for mez. Silently skips immune mobs.
     pub fn queue_mez(&mut self, target_id: u32) {
-        if self.mez_tracker.is_immune(target_id) {
-            tracing::debug!(target_id, "Bard: skipping immune mob in queue_mez");
-            return;
-        }
         self.mez_queue
             .add_target(target_id, MEZ_DURATION_TICKS, self.tick);
         tracing::info!(target_id, "Bard: mez target queued");
@@ -214,22 +203,6 @@ impl BardStrategy {
 
     pub fn record_mez_resist(&mut self, target_id: u32) {
         self.mez_queue.record_mez_resist(target_id);
-    }
-
-    /// Record that a mob is permanently immune to mez songs.
-    /// Removes it from the active queue and prevents future queuing.
-    pub fn record_mez_immune(&mut self, target_id: u32) {
-        self.mez_queue.remove_target(target_id);
-        self.mez_tracker.record_mez_immune(target_id);
-        tracing::info!(
-            target_id,
-            "Bard: mez immune — mob permanently removed from CC rotation"
-        );
-    }
-
-    /// Returns `true` if this spawn ID has been confirmed immune to bard mez.
-    pub fn is_mez_immune(&self, spawn_id: u32) -> bool {
-        self.mez_tracker.is_immune(spawn_id)
     }
 
     pub fn remove_mez_target(&mut self, target_id: u32) {
@@ -610,8 +583,6 @@ impl ClassStrategy for BardStrategy {
         }
 
         // Mez queue has highest priority — check before song rotation.
-        // Immune mobs are tracked in mez_tracker and never added to mez_queue,
-        // so next_refresh_target will never return them.
         if let Some(mez_gem) = self.mez_gem {
             if let Some(target_id) = self.mez_queue.next_refresh_target(ctx.tick) {
                 // Interrupt current song and cast mez on the target.
@@ -1063,47 +1034,6 @@ mod tests {
         // The on_action_complete at that tick should trigger the mez cast
         // (we can't test the actual slash_command side effects, but we can
         // verify the queue was checked)
-        assert_eq!(b.mez_queue_len(), 1);
-    }
-
-    // --- MezTracker integration tests ---
-
-    #[test]
-    fn bard_queue_mez_skips_immune_mob() {
-        let mut b = BardStrategy::new(8);
-        b.set_mez_gem(5);
-        b.record_mez_immune(99);
-        b.queue_mez(99); // should be silently skipped
-        assert_eq!(b.mez_queue_len(), 0);
-    }
-
-    #[test]
-    fn bard_is_mez_immune_reflects_recorded_immune() {
-        let mut b = BardStrategy::new(8);
-        assert!(!b.is_mez_immune(42));
-        b.record_mez_immune(42);
-        assert!(b.is_mez_immune(42));
-    }
-
-    #[test]
-    fn bard_record_mez_immune_removes_from_queue() {
-        let mut b = BardStrategy::new(8);
-        b.set_mez_gem(5);
-        b.queue_mez(77);
-        assert_eq!(b.mez_queue_len(), 1);
-        b.record_mez_immune(77);
-        assert_eq!(b.mez_queue_len(), 0);
-        assert!(b.is_mez_immune(77));
-    }
-
-    #[test]
-    fn bard_resist_does_not_mark_immune() {
-        let mut b = BardStrategy::new(8);
-        b.set_mez_gem(5);
-        b.queue_mez(55);
-        b.record_mez_resist(55);
-        assert!(!b.is_mez_immune(55));
-        // Still in queue (retries left)
         assert_eq!(b.mez_queue_len(), 1);
     }
 

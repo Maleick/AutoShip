@@ -389,47 +389,10 @@ pub fn builtin_shortcuts(config: &UiKeyboardConfig) -> Vec<ShortcutDoc> {
     }
 
     if config.style == KeyboardStyle::Emacs {
-        // Movement keybindings
         shortcuts.push(ShortcutDoc {
-            context: "Emacs movement",
+            context: "Emacs aliases",
             keys: "Ctrl+N / Ctrl+P",
-            action: "Move down or up in lists (next/previous)",
-        });
-        shortcuts.push(ShortcutDoc {
-            context: "Emacs movement",
-            keys: "Ctrl+F / Ctrl+B",
-            action: "Move right or left (forward/backward character)",
-        });
-
-        // Line editing
-        shortcuts.push(ShortcutDoc {
-            context: "Emacs line editing",
-            keys: "Ctrl+A / Ctrl+E",
-            action: "Jump to line start or end",
-        });
-        shortcuts.push(ShortcutDoc {
-            context: "Emacs line editing",
-            keys: "Ctrl+K",
-            action: "Kill (delete) to end of line",
-        });
-        shortcuts.push(ShortcutDoc {
-            context: "Emacs line editing",
-            keys: "Ctrl+U",
-            action: "Undo (clear) line",
-        });
-
-        // Word navigation
-        shortcuts.push(ShortcutDoc {
-            context: "Emacs word navigation",
-            keys: "Alt+F / Alt+B",
-            action: "Jump forward or backward by word",
-        });
-
-        // Search
-        shortcuts.push(ShortcutDoc {
-            context: "Emacs search",
-            keys: "Ctrl+S / Ctrl+R",
-            action: "Search forward or backward",
+            action: "Move to next or previous client",
         });
     }
 
@@ -657,17 +620,6 @@ impl HotkeyRegistry {
         }
 
         None
-    }
-
-    /// Check if a binding is a built-in (reserved) hotkey that cannot be overridden
-    pub fn is_builtin_hotkey(&self, binding: &KeyBinding, config: &UiKeyboardConfig) -> bool {
-        let key_str = binding.to_string_pretty();
-        for shortcut in builtin_shortcuts(config) {
-            if shortcut.keys == key_str {
-                return true;
-            }
-        }
-        false
     }
 
     /// Find the action for a keyboard event

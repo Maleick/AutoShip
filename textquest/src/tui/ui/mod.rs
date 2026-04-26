@@ -28,7 +28,6 @@ pub mod packets;
 pub mod patch_reconciliation;
 pub mod spawns;
 pub mod widgets;
-pub mod personality_selector;
 pub mod policy_panel;
 pub mod zone_blocker_panel;
 pub mod zone_status_panel;
@@ -163,12 +162,6 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     if app.alert_panel_visible {
         draw_alert_overlay(frame, area, app);
-    }
-
-    // Personality/model selector popup overlay
-    if app.personality_selector.open {
-        let theme = app.theme.clone();
-        personality_selector::draw_personality_popup(frame, app, &theme);
     }
 
     if app.diagnostics_visible {
@@ -2045,7 +2038,6 @@ mod tests {
             endurance_current: 4_000,
             endurance_max: 5_000,
             is_gm: false,
-            combat_target_id: None,
             race_id: 1,
             buff_slots: vec![BuffSlot {
                 spell_id: 0xFFFF,
@@ -2080,7 +2072,6 @@ mod tests {
             endurance_current: 0,
             endurance_max: 0,
             is_gm: false,
-            combat_target_id: None,
             race_id: 1,
             buff_slots: Vec::new(),
             spellbook: Vec::new(),
