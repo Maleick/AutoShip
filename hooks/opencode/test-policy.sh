@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+source "$SCRIPT_DIR/test-fixtures/mock-opencode-models.sh"
+
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
   if [[ -n "${AUTOSHIP_FAILURE_ISSUE:-${AUTOSHIP_ISSUE_ID:-}}" && -x "$SCRIPT_DIR/../capture-failure.sh" ]]; then
@@ -962,6 +964,7 @@ chmod +x "$SETUP_REPO/bin/opencode"
   printf '%s\n' "$setup_output" | grep -F '/autoship' >/dev/null || fail "setup prints autoship next step"
   jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup writes all live free models by default"
   jq -e '.maxConcurrentAgents == 15 and .max_agents == 15' .autoship/config.json >/dev/null || fail "setup writes default concurrency cap consumed by runtime"
+  jq -e '.cargoConcurrencyCap == 8 and .cargoTargetIsolationThreshold == 8 and .cargoTimeoutSeconds == 120 and .mergeStrategy == "safe" and .quotaRouting == true and .policyProfile == "default"' .autoship/config.json >/dev/null || fail "setup writes burndown policy config defaults"
   jq -e '.roles.planner == "openai/gpt-5.5" and .roles.coordinator == "openai/gpt-5.5" and .roles.orchestrator == "openai/gpt-5.5" and .roles.lead == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup configures GPT-5.5 as planner/coordinator/orchestrator/lead"
   jq -e '.pools != null and .pools.default != null and .pools.frontend != null and .pools.backend != null and .pools.docs != null' .autoship/model-routing.json >/dev/null || fail "setup writes worker pools"
   jq -e 'all(.models[]; .cost == "free")' .autoship/model-routing.json >/dev/null || fail "default setup excludes paid worker models"
@@ -990,6 +993,16 @@ chmod +x "$SETUP_REPO/bin/opencode"
   AUTOSHIP_LEAD_MODEL=openai/gpt-5.5 PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
   jq -e '.roles.lead == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup accepts lead model override via AUTOSHIP_LEAD_MODEL"
 )
+
+OVERRIDE_POLICY_REPO="$TMP_DIR/override-policy-repo"
+mkdir -p "$OVERRIDE_POLICY_REPO/bin"
+cp -R "$SETUP_REPO/autoship" "$OVERRIDE_POLICY_REPO/autoship"
+install_mock_opencode_models_fixture "$OVERRIDE_POLICY_REPO/bin"
+(
+  cd "$OVERRIDE_POLICY_REPO/autoship"
+  AUTOSHIP_CARGO_CONCURRENCY_CAP=6 AUTOSHIP_CARGO_TARGET_ISOLATION_THRESHOLD=11 AUTOSHIP_CARGO_TIMEOUT_SECONDS=75 AUTOSHIP_MERGE_STRATEGY=high_throughput AUTOSHIP_POLICY_PROFILE=textquest PATH="$OVERRIDE_POLICY_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null
+  jq -e '.cargoConcurrencyCap == 6 and .cargoTargetIsolationThreshold == 11 and .cargoTimeoutSeconds == 75 and .mergeStrategy == "high_throughput" and .policyProfile == "textquest"' .autoship/config.json >/dev/null
+) || fail "setup honors burndown policy environment overrides"
 
 POLICY_REPO="$TMP_DIR/policy-repo"
 mkdir -p "$POLICY_REPO/hooks/opencode" "$POLICY_REPO/policies" "$POLICY_REPO/.autoship"

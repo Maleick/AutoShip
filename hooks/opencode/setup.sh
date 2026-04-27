@@ -14,6 +14,12 @@ ORCHESTRATOR_MODEL="${AUTOSHIP_ORCHESTRATOR_MODEL:-$PLANNER_MODEL}"
 REVIEWER_MODEL="${AUTOSHIP_REVIEWER_MODEL:-$PLANNER_MODEL}"
 LEAD_MODEL="${AUTOSHIP_LEAD_MODEL:-$PLANNER_MODEL}"
 LABELS="${AUTOSHIP_LABELS:-agent:ready}"
+CARGO_CONCURRENCY_CAP="${AUTOSHIP_CARGO_CONCURRENCY_CAP:-8}"
+CARGO_TARGET_ISOLATION_THRESHOLD="${AUTOSHIP_CARGO_TARGET_ISOLATION_THRESHOLD:-8}"
+CARGO_TIMEOUT_SECONDS="${AUTOSHIP_CARGO_TIMEOUT_SECONDS:-120}"
+MERGE_STRATEGY="${AUTOSHIP_MERGE_STRATEGY:-safe}"
+POLICY_PROFILE="${AUTOSHIP_POLICY_PROFILE:-default}"
+QUOTA_ROUTING="${AUTOSHIP_QUOTA_ROUTING:-true}"
 
 NO_TUI=0
 POSITIONAL=()
@@ -34,6 +40,11 @@ OPTIONS:
   --planner-model MODEL Set planner/coordinator/orchestrator/reviewer/lead model (default: openai/gpt-5.5)
   --lead-model MODEL   Set lead model separately (default: same as planner)
   --worker-models MODELS Comma-separated worker models (default: auto-detect free)
+  --cargo-concurrency-cap N       Max Rust workers without cargo target isolation (default: 8)
+  --cargo-target-isolation-threshold N  Isolate CARGO_TARGET_DIR above this max-agent count (default: 8)
+  --cargo-timeout-seconds N       Cargo verification timeout guidance for workers (default: 120)
+  --merge-strategy STRATEGY       safe or high_throughput (default: safe)
+  --policy-profile PROFILE        Policy profile name (default: default)
   -h, --help           Show this help message
 
 EXAMPLES:
@@ -122,6 +133,26 @@ parse_args() {
         SELECTED_MODELS="${1#*=}"
         shift
         ;;
+      --cargo-concurrency-cap)
+        [[ $# -ge 2 ]] || { echo "Error: --cargo-concurrency-cap requires a value" >&2; usage 2; }
+        CARGO_CONCURRENCY_CAP="$2"; shift 2 ;;
+      --cargo-concurrency-cap=*) CARGO_CONCURRENCY_CAP="${1#*=}"; shift ;;
+      --cargo-target-isolation-threshold)
+        [[ $# -ge 2 ]] || { echo "Error: --cargo-target-isolation-threshold requires a value" >&2; usage 2; }
+        CARGO_TARGET_ISOLATION_THRESHOLD="$2"; shift 2 ;;
+      --cargo-target-isolation-threshold=*) CARGO_TARGET_ISOLATION_THRESHOLD="${1#*=}"; shift ;;
+      --cargo-timeout-seconds)
+        [[ $# -ge 2 ]] || { echo "Error: --cargo-timeout-seconds requires a value" >&2; usage 2; }
+        CARGO_TIMEOUT_SECONDS="$2"; shift 2 ;;
+      --cargo-timeout-seconds=*) CARGO_TIMEOUT_SECONDS="${1#*=}"; shift ;;
+      --merge-strategy)
+        [[ $# -ge 2 ]] || { echo "Error: --merge-strategy requires a value" >&2; usage 2; }
+        MERGE_STRATEGY="$2"; shift 2 ;;
+      --merge-strategy=*) MERGE_STRATEGY="${1#*=}"; shift ;;
+      --policy-profile)
+        [[ $# -ge 2 ]] || { echo "Error: --policy-profile requires a value" >&2; usage 2; }
+        POLICY_PROFILE="$2"; shift 2 ;;
+      --policy-profile=*) POLICY_PROFILE="${1#*=}"; shift ;;
       -h|--help)
         usage 0
         ;;
@@ -153,6 +184,11 @@ if [[ ${#POSITIONAL[@]} -gt 0 ]]; then
   usage 2
 fi
 
+case "$MERGE_STRATEGY" in
+  safe|high_throughput) ;;
+  *) echo "Error: --merge-strategy must be safe or high_throughput" >&2; exit 2 ;;
+esac
+
 if [[ "$NO_TUI" -eq 0 && -t 0 ]]; then
   echo "Running in interactive mode. Use --no-tui for non-interactive."
 fi
@@ -166,8 +202,8 @@ fi
 if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]; then
   if jq -e '(.models // []) | length > 0' "$ROUTING_FILE" >/dev/null 2>&1; then
     if [[ ! -f "$CONFIG_FILE" ]]; then
-      jq -n --argjson max "$MAX_AGENTS" --arg labels "$LABELS" \
-        '{runtime: "opencode", maxConcurrentAgents: $max, max_agents: $max, models: [], labels: ($labels | split(",")), refreshModels: false}' > "$CONFIG_FILE"
+      jq -n --argjson max "$MAX_AGENTS" --arg labels "$LABELS" --argjson cargoCap "$CARGO_CONCURRENCY_CAP" --argjson cargoThreshold "$CARGO_TARGET_ISOLATION_THRESHOLD" --argjson cargoTimeout "$CARGO_TIMEOUT_SECONDS" --arg mergeStrategy "$MERGE_STRATEGY" --arg policyProfile "$POLICY_PROFILE" --arg quotaRouting "$QUOTA_ROUTING" \
+        '{runtime: "opencode", maxConcurrentAgents: $max, max_agents: $max, models: [], labels: ($labels | split(",")), refreshModels: false, cargoConcurrencyCap: $cargoCap, cargoTargetIsolationThreshold: $cargoThreshold, cargoTimeoutSeconds: $cargoTimeout, mergeStrategy: $mergeStrategy, policyProfile: $policyProfile, quotaRouting: ($quotaRouting == "true")}' > "$CONFIG_FILE"
     fi
     echo "AutoShip OpenCode setup already configured"
     echo "Model routing preserved: $ROUTING_FILE"
@@ -184,7 +220,8 @@ fi
 if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]; then
   if jq -e '(.models // []) | length > 0' "$ROUTING_FILE" >/dev/null 2>&1; then
     if [[ ! -f "$CONFIG_FILE" ]]; then
-      jq -n --argjson max "$MAX_AGENTS" '{runtime: "opencode", maxConcurrentAgents: $max, max_agents: $max, models: []}' > "$CONFIG_FILE"
+      jq -n --argjson max "$MAX_AGENTS" --argjson cargoCap "$CARGO_CONCURRENCY_CAP" --argjson cargoThreshold "$CARGO_TARGET_ISOLATION_THRESHOLD" --argjson cargoTimeout "$CARGO_TIMEOUT_SECONDS" --arg mergeStrategy "$MERGE_STRATEGY" --arg policyProfile "$POLICY_PROFILE" --arg quotaRouting "$QUOTA_ROUTING" \
+        '{runtime: "opencode", maxConcurrentAgents: $max, max_agents: $max, models: [], cargoConcurrencyCap: $cargoCap, cargoTargetIsolationThreshold: $cargoThreshold, cargoTimeoutSeconds: $cargoTimeout, mergeStrategy: $mergeStrategy, policyProfile: $policyProfile, quotaRouting: ($quotaRouting == "true")}' > "$CONFIG_FILE"
     fi
     echo "AutoShip OpenCode setup already configured"
     echo "Model routing preserved: $ROUTING_FILE"
@@ -235,12 +272,12 @@ if [[ -n "$missing_role_models" ]]; then
   exit 1
 fi
 
-python3 - "$ROUTING_FILE" "$CONFIG_FILE" "$SELECTED_MODELS" "$MAX_AGENTS" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" "$LEAD_MODEL" "$LABELS" <<'PY'
+python3 - "$ROUTING_FILE" "$CONFIG_FILE" "$SELECTED_MODELS" "$MAX_AGENTS" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" "$LEAD_MODEL" "$LABELS" "$CARGO_CONCURRENCY_CAP" "$CARGO_TARGET_ISOLATION_THRESHOLD" "$CARGO_TIMEOUT_SECONDS" "$MERGE_STRATEGY" "$POLICY_PROFILE" "$QUOTA_ROUTING" <<'PY'
 import json
 import sys
 import os
 
-routing_path, config_path, selected_models, max_agents, planner_model, coordinator_model, orchestrator_model, reviewer_model, lead_model, labels = sys.argv[1:]
+routing_path, config_path, selected_models, max_agents, planner_model, coordinator_model, orchestrator_model, reviewer_model, lead_model, labels, cargo_cap, cargo_target_threshold, cargo_timeout, merge_strategy, policy_profile, quota_routing = sys.argv[1:]
 models = [m.strip() for m in selected_models.split(",") if m.strip()]
 labels_list = [l.strip() for l in labels.split(",") if l.strip()]
 
@@ -337,6 +374,12 @@ with open(config_path, "w", encoding="utf-8") as f:
         "leadModel": lead_model,
         "models": models,
         "labels": labels_list,
+        "cargoConcurrencyCap": int(cargo_cap),
+        "cargoTargetIsolationThreshold": int(cargo_target_threshold),
+        "cargoTimeoutSeconds": int(cargo_timeout),
+        "mergeStrategy": merge_strategy,
+        "policyProfile": policy_profile,
+        "quotaRouting": quota_routing.lower() == "true",
         "refreshModels": int(os.environ.get("AUTOSHIP_REFRESH_MODELS", "0")) == 1,
     }, f, indent=2)
     f.write("\n")
