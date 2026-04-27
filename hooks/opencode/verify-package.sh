@@ -16,7 +16,7 @@ const packResult = JSON.parse(raw);
 const entries = Array.isArray(packResult) ? packResult : [packResult];
 const files = entries.flatMap((entry) => Array.isArray(entry.files) ? entry.files : []);
 
-const allowedRoots = new Set(["dist", "hooks", "commands", "skills", "plugins"]);
+const allowedRoots = new Set(["dist", "hooks", "commands", "skills", "plugins", "policies"]);
 const allowedFiles = new Set(["package.json", "README.md", "LICENSE", "AGENTS.md", "VERSION"]);
 const requiredFiles = [
   "plugins/autoship.ts",
@@ -24,6 +24,8 @@ const requiredFiles = [
   "hooks/opencode/sync-release.sh",
   "skills/autoship-setup/SKILL.md",
   "commands/autoship-setup.md",
+  "policies/default.json",
+  "policies/textquest.json",
 ];
 
 function normalizePath(filePath) {

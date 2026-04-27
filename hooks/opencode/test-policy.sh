@@ -102,7 +102,7 @@ assert_eq "fix: Validate Discord webhook URLs (#2298)" "$fix_title" "bug/securit
 assert_eq "docs: mandate poison recovery pattern (#2296)" "$docs_title" "documentation title uses docs prefix"
 
 PACKAGE_VERIFY_REPO="$TMP_DIR/package-verify-repo"
-mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks/opencode" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills/autoship-setup" "$PACKAGE_VERIFY_REPO/plugins" "$PACKAGE_VERIFY_REPO/.autoship"
+mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks/opencode" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills/autoship-setup" "$PACKAGE_VERIFY_REPO/plugins" "$PACKAGE_VERIFY_REPO/policies" "$PACKAGE_VERIFY_REPO/.autoship"
 cp "$SCRIPT_DIR/../../package.json" "$PACKAGE_VERIFY_REPO/package.json"
 jq '.files += [".autoship", "unintended.tmp"]' "$PACKAGE_VERIFY_REPO/package.json" > "$PACKAGE_VERIFY_REPO/package.json.tmp" && mv "$PACKAGE_VERIFY_REPO/package.json.tmp" "$PACKAGE_VERIFY_REPO/package.json"
 printf 'runtime state\n' > "$PACKAGE_VERIFY_REPO/.autoship/state.json"
@@ -116,6 +116,8 @@ printf 'command\n' > "$PACKAGE_VERIFY_REPO/commands/autoship-setup.md"
 printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-orchestrate.md"
 printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-setup/SKILL.md"
 printf 'plugin\n' > "$PACKAGE_VERIFY_REPO/plugins/autoship.ts"
+printf '{}\n' > "$PACKAGE_VERIFY_REPO/policies/default.json"
+printf '{}\n' > "$PACKAGE_VERIFY_REPO/policies/textquest.json"
 printf 'agents\n' > "$PACKAGE_VERIFY_REPO/AGENTS.md"
 printf '1.0.0\n' > "$PACKAGE_VERIFY_REPO/VERSION"
 printf 'readme\n' > "$PACKAGE_VERIFY_REPO/README.md"
@@ -128,6 +130,9 @@ printf 'license\n' > "$PACKAGE_VERIFY_REPO/LICENSE"
   rm -rf .autoship unintended.tmp
   cp "$SCRIPT_DIR/../../package.json" package.json
   bash "$SCRIPT_DIR/verify-package.sh" >/dev/null
+  package_files=$(npm pack --dry-run --json --ignore-scripts)
+  printf '%s\n' "$package_files" | jq -e '.[0].files | any(.path == "policies/default.json")' >/dev/null || fail "package verification includes default policy JSON"
+  printf '%s\n' "$package_files" | jq -e '.[0].files | any(.path == "policies/textquest.json")' >/dev/null || fail "package verification includes TextQuest policy JSON"
 )
 
 STATE_REPO="$TMP_DIR/repo"
@@ -1001,6 +1006,11 @@ assert_eq "90" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value cargo
 assert_eq "high_throughput" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value mergeStrategy)" "policy loader reads merge strategy"
 assert_eq "false" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value quotaRouting)" "policy loader reads quota routing"
 assert_eq "[self-hosted, Linux, textquest]" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value workflowRunnerDefault)" "policy loader reads TextQuest runner policy"
+policy_json_output=$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh json)
+assert_eq "6" "$(printf '%s\n' "$policy_json_output" | jq -r '.cargoConcurrencyCap')" "policy json applies config cargo cap override"
+assert_eq "90" "$(printf '%s\n' "$policy_json_output" | jq -r '.cargoTimeoutSeconds')" "policy json applies config cargo timeout override"
+assert_eq "false" "$(printf '%s\n' "$policy_json_output" | jq -r '.quotaRouting')" "policy json applies config quota routing override"
+assert_eq "[self-hosted, Linux, textquest]" "$(printf '%s\n' "$policy_json_output" | jq -r '.workflowRunnerDefault')" "policy json preserves profile policy values"
 
 SELECT_REPO="$TMP_DIR/select-repo"
 mkdir -p "$SELECT_REPO/.autoship" "$SELECT_REPO/hooks/opencode"

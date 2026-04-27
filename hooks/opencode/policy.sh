@@ -37,6 +37,15 @@ policy_json() {
   jq -s '.[0] * .[1]' "$default_file" "$profile_file"
 }
 
+effective_policy_json() {
+  local config_filter='with_entries(select(.key as $key | ["cargoConcurrencyCap", "cargoTargetIsolationThreshold", "cargoTimeoutSeconds", "mergeStrategy", "quotaRouting", "workerCwdLock", "truncationSalvage", "workflowRunnerDefault"] | index($key)))'
+  if [[ -f "$CONFIG_FILE" ]]; then
+    policy_json | jq --slurpfile config "$CONFIG_FILE" ". * (\$config[0] | $config_filter)"
+  else
+    policy_json
+  fi
+}
+
 config_or_policy_value() {
   local key="$1"
   local from_config=""
@@ -46,13 +55,13 @@ config_or_policy_value() {
   if [[ -n "$from_config" ]]; then
     printf '%s\n' "$from_config"
   else
-    policy_json | jq -r --arg key "$key" '.[$key] // empty'
+    effective_policy_json | jq -r --arg key "$key" '.[$key] // empty'
   fi
 }
 
 case "$COMMAND" in
   profile) detect_profile ;;
-  json) policy_json ;;
+  json) effective_policy_json ;;
   value) [[ -n "$KEY" ]] || { echo "value key required" >&2; exit 2; }; config_or_policy_value "$KEY" ;;
   *) echo "Usage: policy.sh profile|json|value KEY" >&2; exit 2 ;;
 esac
