@@ -96,7 +96,8 @@ blocked_numbers=$(jq -r '.blocked[].number' "$PLAN_OUTPUT" | paste -sd ' ' -)
 assert_eq "746 748 749 751 2301" "$eligible_numbers" "eligible issues are sorted ascending and exclude only terminal/manual labels"
 assert_eq "" "$blocked_numbers" "content-based safety filter does not block issues"
 
-jq -e '.eligible[] | select(.number == 751 and (.probable_files | index("textquest/src/tui/characters_tab.rs")) and .overlap_cluster == "tui-characters")' "$PLAN_OUTPUT" >/dev/null || fail "plan emits probable files and overlap cluster metadata"
+jq -e '.eligible[] | select(.number == 751 and (.probable_files | index("textquest/src/tui/characters_tab.rs")) and .overlap_cluster == null)' "$PLAN_OUTPUT" >/dev/null || fail "plan emits probable file metadata from literal paths"
+jq -e '.eligible[] | select(.number == 751) | has("probable_files") and has("overlap_cluster")' "$PLAN_OUTPUT" >/dev/null || fail "plan includes overlap metadata fields"
 
 limited_numbers=$(bash "$SCRIPT_DIR/plan-issues.sh" --issues-file "$ISSUES_FILE" --limit 2 | jq -r '.eligible[].number' | paste -sd ' ' -)
 assert_eq "746 748" "$limited_numbers" "plan limit caps eligible queue"
