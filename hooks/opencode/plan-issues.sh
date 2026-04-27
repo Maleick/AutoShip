@@ -24,6 +24,13 @@ if [[ -n "$LIMIT" ]]; then
   limit_filter=".[0:${LIMIT}]"
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+POLICY_JSON='{}'
+if [[ -x "$SCRIPT_DIR/policy.sh" ]]; then
+  POLICY_JSON=$(cd "$REPO_ROOT" && bash "$SCRIPT_DIR/policy.sh" json 2>/dev/null || printf '{}')
+fi
+
 eligible_tmp=$(mktemp)
 blocked_tmp=$(mktemp)
 cleanup() {
@@ -42,7 +49,16 @@ jq -c '.[]' "$ISSUES_FILE" | while IFS= read -r issue; do
     continue
   fi
 
-  jq -c '.' <<< "$issue" >> "$eligible_tmp"
+  jq -c --argjson policy "$POLICY_JSON" '
+    . as $issue
+    | def literal_paths: [($issue | .. | strings | match("[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+";"g").string)];
+    def cluster_matches:
+      [($policy.overlapClusters // [])[] | select(any(.keywords[]; . as $kw | $issue | .. | strings | test($kw; "i")))];
+    $issue + {
+      probable_files: ((literal_paths + (cluster_matches | map(.files[]) )) | unique),
+      overlap_cluster: ((cluster_matches[0].name // null))
+    }
+  ' <<< "$issue" >> "$eligible_tmp"
 done
 
 eligible_json=$(jq -s "sort_by(.number) | $limit_filter" "$eligible_tmp")
