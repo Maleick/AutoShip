@@ -1494,4 +1494,58 @@ assert_file_contains "$PROMPT_REPO/.autoship/workspaces/issue-321/AUTOSHIP_PROMP
 assert_file_contains "$PROMPT_REPO/.autoship/workspaces/issue-321/AUTOSHIP_PROMPT.md" "textquest-web/src/test_support.rs:28" "dispatch prompt includes hot fixture registry"
 assert_file_contains "$PROMPT_REPO/.autoship/workspaces/issue-321/AUTOSHIP_PROMPT.md" "[self-hosted, Linux, textquest]" "dispatch prompt includes workflow runner policy"
 
+VERIFY_POLICY_REPO="$TMP_DIR/verify-policy-repo"
+mkdir -p "$VERIFY_POLICY_REPO/hooks/opencode" "$VERIFY_POLICY_REPO/policies" "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501/.github/workflows"
+git init -q "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501"
+cp "$SCRIPT_DIR/policy.sh" "$VERIFY_POLICY_REPO/hooks/opencode/policy.sh"
+cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_POLICY_REPO/hooks/opencode/policy-verify.sh"
+cp "$SCRIPT_DIR/../../policies/default.json" "$VERIFY_POLICY_REPO/policies/default.json"
+cp "$SCRIPT_DIR/../../policies/textquest.json" "$VERIFY_POLICY_REPO/policies/textquest.json"
+cat > "$VERIFY_POLICY_REPO/.autoship/config.json" <<'JSON'
+{"policyProfile":"textquest"}
+JSON
+cat > "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501/.github/workflows/new.yml" <<'YAML'
+name: Bad
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+YAML
+(
+  cd "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501"
+  git add .github/workflows/new.yml
+  git commit -q -m initial
+)
+if (cd "$VERIFY_POLICY_REPO" && bash hooks/opencode/policy-verify.sh .autoship/workspaces/issue-501 >/dev/null 2>&1); then
+  fail "policy verification should reject ubuntu-latest for TextQuest"
+fi
+
+SANITIZED_FLOW="$TMP_DIR/sanitized-workflow"
+mkdir -p "$SANITIZED_FLOW/.autoship/workspaces/issue-502/.github/workflows" "$SANITIZED_FLOW/policies" "$SANITIZED_FLOW/hooks/opencode"
+git init -q "$SANITIZED_FLOW/.autoship/workspaces/issue-502"
+cp "$SCRIPT_DIR/policy.sh" "$SANITIZED_FLOW/hooks/opencode/policy.sh"
+cp "$SCRIPT_DIR/policy-verify.sh" "$SANITIZED_FLOW/hooks/opencode/policy-verify.sh"
+cp "$SCRIPT_DIR/../../policies/default.json" "$SANITIZED_FLOW/policies/default.json"
+cp "$SCRIPT_DIR/../../policies/textquest.json" "$SANITIZED_FLOW/policies/textquest.json"
+cat > "$SANITIZED_FLOW/.autoship/config.json" <<'JSON'
+{"policyProfile":"textquest"}
+JSON
+cat > "$SANITIZED_FLOW/.autoship/workspaces/issue-502/.github/workflows/good.yml" <<'YAML'
+name: Good
+on: push
+jobs:
+  test:
+    runs-on: [self-hosted, Linux, textquest]
+    steps:
+      - run: true
+YAML
+(
+  cd "$SANITIZED_FLOW/.autoship/workspaces/issue-502"
+  git add .github/workflows/good.yml
+  git commit -q -m initial
+)
+(cd "$SANITIZED_FLOW" && bash hooks/opencode/policy-verify.sh .autoship/workspaces/issue-502 >/dev/null 2>&1) || fail "policy verification should accept self-hosted runner"
+
 echo "OpenCode policy tests passed"
