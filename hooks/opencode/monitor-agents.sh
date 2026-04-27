@@ -54,7 +54,8 @@ emit_event() {
     touch "$marker" 2>/dev/null || true
   }
 
-  if command -v flock >/dev/null 2>&1; then
+  # Skip flock on macOS (Darwin) due to compatibility issues with fd-based locking
+  if command -v flock >/dev/null 2>&1 && [[ "$(uname -s)" != "Darwin" ]]; then
     (
       if flock -x 200 2>/dev/null; then
         write_event
