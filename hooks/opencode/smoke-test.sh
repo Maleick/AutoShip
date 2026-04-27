@@ -79,7 +79,7 @@ git init -q "$INSTALLED_PROJECT"
 [[ -f "$STATE_FILE" ]]
 [[ "$(cat "$HOOKS_FILE")" == "$REPO_ROOT/hooks" ]]
 jq -e '.config.maxConcurrentAgents == 15' "$STATE_FILE" >/dev/null
-jq -e '.config.cargoConcurrencyCap == 8 and .config.mergeStrategy == "safe" and .config.policyProfile == "default"' "$STATE_FILE" >/dev/null
+jq -e '.cargoConcurrencyCap == 8 and .mergeStrategy == "safe" and .policyProfile == "default"' "$REPO_ROOT/.autoship/config.json" >/dev/null
 [[ -f "$REPO_ROOT/.autoship/model-history.json" ]]
 [[ -f "$REPO_ROOT/.autoship/model-routing.json" ]]
 jq -e '[.models[] | select(.cost == "free")] | length > 0' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null
