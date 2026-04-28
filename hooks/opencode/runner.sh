@@ -332,8 +332,10 @@ for dir in "$WORKSPACES_DIR"/*/; do
           [[ -f status ]] && current_status=$(tr -d '[:space:]' < status)
           if [[ "$current_status" == "COMPLETE" ]]; then
             bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$model" >/dev/null 2>&1 || true
           else
             bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
           fi
         else
           if is_billing_or_quota_failure AUTOSHIP_RUNNER.log; then
@@ -352,19 +354,23 @@ for dir in "$WORKSPACES_DIR"/*/; do
                 [[ -f status ]] && current_status=$(tr -d '[:space:]' < status)
                 if [[ "$current_status" == "COMPLETE" ]]; then
                   bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
+                  bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$fallback_model" >/dev/null 2>&1 || true
                 else
                   bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
+                  bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true
                 fi
               else
                 echo "STUCK" > status
                 error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "fallback worker run failed")
                 autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
                 bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
+                bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true
               fi
             else
               echo "STUCK" > status
               error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
               autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
+              bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
             fi
           else
             annotate_session_failure AUTOSHIP_RUNNER.log || true
@@ -372,6 +378,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
             error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
             autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
             bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
           fi
         fi
       else
@@ -379,6 +386,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
         echo "STUCK" > status
         autoship_capture_failure model_failure "$issue_id" "error_summary=opencode CLI not found"
         bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
+        bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
       fi
     ) &
     printf '%s\n' "$!" > "$dir/worker.pid"
