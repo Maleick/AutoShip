@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/runtime-config.sh"
 DRY_RUN=false
 POSITIONAL=()
 
@@ -28,6 +29,7 @@ STATE_FILE="$AUTOSHIP_DIR/state.json"
 ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
+ITEM_RECORD="$SCRIPT_DIR/item-record.sh"
 
 if [[ -f "$STATE_FILE" ]] && jq -e --arg key "$ISSUE_KEY" '(.issues[$key].terminal_failure // false) == true or (.issues[$key].retry_eligible // true) == false' "$STATE_FILE" >/dev/null 2>&1; then
   mkdir -p "$WORKSPACE_PATH"
@@ -38,11 +40,7 @@ if [[ -f "$STATE_FILE" ]] && jq -e --arg key "$ISSUE_KEY" '(.issues[$key].termin
   exit 0
 fi
 
-max_agents=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$STATE_FILE" 2>/dev/null || true)
-if [[ -z "$max_agents" && -f "$AUTOSHIP_DIR/config.json" ]]; then
-  max_agents=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
-fi
-max_agents="${max_agents:-15}"
+max_agents=$(autoship_max_agents "$STATE_FILE" "$AUTOSHIP_DIR")
 running=$(jq '[.issues | to_entries[] | select((.value.state // .value.status) == "running")] | length' "$STATE_FILE" 2>/dev/null || echo 0)
 cap_note=""
 if (( running >= max_agents )); then
@@ -52,6 +50,19 @@ fi
 TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title' 2>/dev/null || echo "Issue $ISSUE_NUM")
 BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body' 2>/dev/null || echo "")
 LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
+SANITIZED_BODY="$BODY"
+if [[ -x "$SCRIPT_DIR/sanitize-issue.sh" ]]; then
+  SANITIZED_BODY=$(bash "$SCRIPT_DIR/sanitize-issue.sh" sanitize "$ISSUE_NUM" "$BODY" 2>/dev/null || printf '%s' "$BODY")
+fi
+CRITERIA_JSON='{}'
+if [[ -x "$SCRIPT_DIR/extract-criteria.sh" ]]; then
+  CRITERIA_JSON=$(bash "$SCRIPT_DIR/extract-criteria.sh" extract "$BODY" 2>/dev/null || echo '{}')
+fi
+FAILURE_CONTEXT=""
+latest_failure=$(ls -t "$AUTOSHIP_DIR/failures"/*-"$ISSUE_KEY".json 2>/dev/null | head -1 || true)
+if [[ -n "$latest_failure" ]]; then
+  FAILURE_CONTEXT=$(jq -r '"Previous failure: " + (.failure_category // "unknown") + " - " + (.error_summary // "")' "$latest_failure" 2>/dev/null || true)
+fi
 
 resolve_model() {
   local task_type="$1"
@@ -62,15 +73,9 @@ resolve_model() {
     return 0
   fi
   if [[ -f "$ROUTING_FILE" ]]; then
-    local routing_log
-    routing_log=$(bash "$SCRIPT_DIR/select-model.sh" --log "$task_type" "$issue_num" 2>/dev/null || echo "")
+    ROUTING_LOG=$(bash "$SCRIPT_DIR/select-model.sh" --log "$task_type" "$issue_num" 2>/dev/null || echo "")
     local selected_model
     selected_model=$(bash "$SCRIPT_DIR/select-model.sh" "$task_type" "$issue_num" 2>/dev/null || echo "")
-    if [[ -n "$routing_log" ]]; then
-      mkdir -p "$WORKSPACE_PATH"
-      log_file="$WORKSPACE_PATH/routing-log.txt"
-      printf '%s\n' "$routing_log" > "$log_file"
-    fi
     printf '%s\n' "$selected_model"
     return 0
   fi
@@ -111,10 +116,16 @@ fi
 
 FULL_WORKSPACE_PATH=$(bash "$SCRIPT_DIR/create-worktree.sh" "$ISSUE_KEY" "autoship/issue-${ISSUE_NUM}")
 mkdir -p "$WORKSPACE_PATH"
+if [[ -x "$ITEM_RECORD" ]]; then
+  bash "$ITEM_RECORD" init "$ISSUE_NUM" "$TITLE" >/dev/null 2>&1 || true
+  bash "$ITEM_RECORD" append "$ISSUE_NUM" queued 1 "$MODEL" "dispatched as $TASK_TYPE" >/dev/null 2>&1 || true
+fi
 date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE_PATH/started_at"
 printf 'QUEUED\n' > "$WORKSPACE_PATH/status"
 printf '%s\n' "$MODEL" > "$WORKSPACE_PATH/model"
 printf '%s\n' "$ROLE" > "$WORKSPACE_PATH/role"
+printf '%s\n' "$CRITERIA_JSON" > "$WORKSPACE_PATH/acceptance-criteria.json"
+bash "$SCRIPT_DIR/worktree-checksum.sh" checksum "$FULL_WORKSPACE_PATH" > "$WORKSPACE_PATH/shasum.before" 2>/dev/null || true
 
 cat > "$WORKSPACE_PATH/AUTOSHIP_PROMPT.md" <<EOF
 # AutoShip Agent Prompt
@@ -134,12 +145,19 @@ $MODEL
 $ROLE
 
 ## Body
-$BODY
+$(bash "$SCRIPT_DIR/sanitize-issue.sh" wrap "$SANITIZED_BODY" 2>/dev/null || printf '%s' "$SANITIZED_BODY")
+
+## Normalized Acceptance Criteria
+$CRITERIA_JSON
+
+## Previous Failure Context
+${FAILURE_CONTEXT:-No previous failure context.}
 
 ## Instructions
 - Work only in this worktree: $FULL_WORKSPACE_PATH
 - Implement the issue per its acceptance criteria.
 - Run relevant project checks before finishing.
+- Do not repeat the same failing command. If a command fails, read the error, change approach, and try a simpler supported command or inspect the relevant file directly.
 - Commit changes on branch autoship/issue-$ISSUE_NUM.
 - Write AUTOSHIP_RESULT.md in the worktree.
 - Write COMPLETE, BLOCKED, or STUCK to $FULL_WORKSPACE_PATH/status.

@@ -26,7 +26,8 @@ Guide users through model selection and configuration on first run.
   --max-agents 10 \
   --labels "agent:ready,autoship:in-progress" \
   --refresh-models \
-  --planner-model openai/gpt-5.5
+  --orchestrator-model provider/model-a \
+  --reviewer-model provider/model-b
 ```
 
 ---
@@ -36,7 +37,7 @@ Guide users through model selection and configuration on first run.
 1. **Runtime Detection** — Check for OpenCode CLI
 2. **GitHub Auth** — Verify `gh` auth status
 3. **Model Discovery** — List models from `opencode models`
-4. **Model Selection** — Free-first or custom
+4. **Model Selection** — Role prompts plus free-first or custom worker routing
 5. **Concurrency** — How many agents?
 6. **Labels** — Which labels to monitor?
 7. **Refresh Behavior** — Auto-refresh model inventory?
@@ -85,6 +86,10 @@ Ask the user:
 
 ```
 Which model configuration?
+
+◉ Choose orchestrator and reviewer role models
+  └ They can be the same model or different models
+  └ Prefer capable free or OpenCode Go Kimi/Kimmy/Ling 2.6-family models when available
 
 ◉ Free-first OpenCode
   └ Prefer configured free OpenCode models
@@ -161,7 +166,8 @@ bash "$AUTOSHIP_HOME/hooks/opencode/setup.sh" --no-tui \
   --max-agents 10 \
   --labels "agent:ready" \
   --refresh-models \
-  --planner-model openai/gpt-5.5
+  --orchestrator-model provider/model-a \
+  --reviewer-model provider/model-b
 ```
 
 Setup preserves existing `.autoship/model-routing.json` by default so operators can edit it manually. Use `AUTOSHIP_REFRESH_MODELS=1` or `--refresh-models` to regenerate free defaults from the current OpenCode model inventory.
@@ -192,7 +198,9 @@ Next: Run /autoship to start
 | `--max-agents N` | Set max concurrent agents | 15 |
 | `--labels LABEL1,LABEL2` | Comma-separated labels to monitor | agent:ready |
 | `--refresh-models` | Force refresh model inventory | false |
-| `--planner-model MODEL` | Set planner/coordinator/orchestrator model | openai/gpt-5.5 |
+| `--planner-model MODEL` | Set planner/coordinator/orchestrator/reviewer/lead model | best available role model |
+| `--orchestrator-model MODEL` | Set orchestrator model | prompted on first run |
+| `--reviewer-model MODEL` | Set reviewer model | prompted on first run |
 | `--worker-models MODEL1,MODEL2` | Comma-separated worker models | auto-detect free models |
 
 ---

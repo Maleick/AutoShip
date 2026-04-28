@@ -19,11 +19,23 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+assert_not_symlink() {
+  local path="$1"
+  if [[ -L "$path" ]]; then
+    echo "Error: refusing to operate on symlinked path: $path" >&2
+    exit 1
+  fi
+}
+
 if [[ -z "${AUTOSHIP_QUEUE_LOCKED:-}" ]]; then
   export AUTOSHIP_QUEUE_LOCKED=1
+  assert_not_symlink "$AUTOSHIP_DIR"
   mkdir -p "$AUTOSHIP_DIR"
+  assert_not_symlink "$LOCK_FILE"
   touch "$LOCK_FILE"
-  if command -v flock >/dev/null 2>&1; then
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
+    exec lockf -k "$LOCK_FILE" "$0" "$@"
+  elif command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK_FILE"
     flock -x 9
   elif command -v lockf >/dev/null 2>&1; then
@@ -36,6 +48,7 @@ make_tmp() { mktemp "$AUTOSHIP_DIR/event-queue.tmp.XXXXXX"; }
 ensure_array_file() {
   local file="$1"
   local tmp
+  assert_not_symlink "$file"
   if [[ ! -f "$file" ]] || ! jq -e 'type == "array"' "$file" >/dev/null 2>&1; then
     tmp=$(make_tmp)
     printf '[]\n' > "$tmp"
@@ -146,25 +159,27 @@ create_verified_pr() {
   local body_path="$workspace/AUTOSHIP_PR_BODY.md"
   local number title labels pr_title pr_url branch
 
+  [[ -d "$workspace" ]] || return 1
+
   number=$(issue_number "$issue")
   title=$(issue_title "$issue")
   labels=$(issue_labels "$issue")
   pr_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$number" --title "$title" --labels "$labels")
-  branch=$(git branch --show-current 2>/dev/null || true)
+  branch=$(git -C "$workspace" branch --show-current 2>/dev/null || true)
   [[ -n "$branch" ]] || branch="autoship/issue-$number"
 
   generate_pr_body "$issue"
 
-  git add -A -- . ':!.autoship'
-  if git diff --cached --quiet; then
+  git -C "$workspace" add -A -- .
+  if git -C "$workspace" diff --cached --quiet; then
     return 1
   fi
-  git commit -m "$pr_title
+  git -C "$workspace" commit -m "$pr_title
 
 Closes #$number
 Dispatched by AutoShip." >/dev/null
 
-  pr_url=$(gh pr create \
+  pr_url=$(cd "$workspace" && gh pr create \
     --title "$pr_title" \
     --body-file "$body_path" \
     --label autoship \

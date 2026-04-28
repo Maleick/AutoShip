@@ -9,7 +9,6 @@ AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 LEDGER_FILE="$AUTOSHIP_DIR/token-ledger.json"
 
-# Locate repo root
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "Error: not inside a git repository" >&2
   exit 1
@@ -22,7 +21,11 @@ LEDGER_FILE="$REPO_ROOT/$LEDGER_FILE"
 LOCK_FILE="${STATE_FILE%.json}.lock"
 if [[ -z "${AUTOSHIP_STATE_LOCKED:-}" ]]; then
   export AUTOSHIP_STATE_LOCKED=1
-  if command -v flock >/dev/null 2>&1; then
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
+    # macOS (BSD): prefer lockf. Some environments provide a non-BSD flock
+    # whose FD locking semantics can hang under test fixtures.
+    exec lockf -k "$LOCK_FILE" "$0" "$@"
+  elif command -v flock >/dev/null 2>&1; then
     # Linux: hold FD lock for script duration
     if [[ -L "$LOCK_FILE" ]]; then
       echo "Error: refusing symlink lock file: $LOCK_FILE" >&2
@@ -54,20 +57,16 @@ if [[ $# -lt 2 ]]; then
   exit 1
 fi
 
-# Helper function to manage GitHub labels (bash 3.2 compatible)
-# Usage: manage_labels <issue-id> <add-label> [remove-label1] [remove-label2] ...
 manage_labels() {
   local issue_id="$1"
   local add_label="$2"
   shift 2
   local remove_labels=("$@")
 
-  # Check if gh is available and repo info exists
   if ! command -v gh >/dev/null 2>&1; then
     return 0
   fi
 
-  # Get repo slug from state.json
   local repo_slug
   repo_slug=$(jq -r '.repo // empty' "$STATE_FILE") || return 0
   if [[ -z "$repo_slug" ]]; then
@@ -89,15 +88,12 @@ manage_labels() {
     return 0
   fi
 
-  # Remove old labels first
   for old_label in "${remove_labels[@]}"; do
-    # Verify the label exists before trying to remove it
     if gh label list --repo "$repo_slug" --json name --jq ".[].name" 2>/dev/null | grep -q "^${old_label}$"; then
       gh issue edit "$issue_id" --repo "$repo_slug" --remove-label "$old_label" 2>/dev/null || true
     fi
   done
 
-  # Add new label (if not already present)
   if [[ -n "$add_label" ]]; then
     if gh label list --repo "$repo_slug" --json name --jq ".[].name" 2>/dev/null | grep -q "^${add_label}$"; then
       gh issue edit "$issue_id" --repo "$repo_slug" --add-label "$add_label" 2>/dev/null || true
@@ -119,7 +115,6 @@ append_ledger_record() {
     return 0
   fi
 
-  # Read fields from state.json
   local issue_number complexity agent pr_number attempt task_type started_at duration_ms tokens_used
   issue_number=$(echo "$issue_id" | grep -o '[0-9]*' | head -1)
   complexity=$(jq -r --arg k "$issue_id" '.issues[$k].complexity // "medium"' "$STATE_FILE" 2>/dev/null) || complexity="medium"
@@ -148,7 +143,6 @@ append_ledger_record() {
   attempt=$(( ${attempt:-1} )) || attempt=1
   tokens_used=$(( ${tokens_used:-0} )) || tokens_used=0
 
-  # Build the record JSON
   local record
   record=$(jq -n \
     --argjson num "$issue_number" \
@@ -219,7 +213,6 @@ ISSUE_ID="issue-${ISSUE_NUMBER}"
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Cleanup temp files on exit
 TMP_FILES=()
 cleanup() { for f in "${TMP_FILES[@]+"${TMP_FILES[@]}"}"; do rm -f "$f"; done; }
 trap cleanup EXIT
@@ -376,13 +369,10 @@ case "$ACTION" in
     ;;
 esac
 
-# Normalize state key: convert underscores to hyphens
 NEW_STATE=$(echo "$NEW_STATE" | tr '_' '-')
 
-# Ensure the issue entry exists (initialize if new)
 CURRENT=$(jq -r --arg id "$ISSUE_ID" '.issues[$id] // empty' "$STATE_FILE")
 if [[ -z "$CURRENT" ]]; then
-  # Create a new issue entry
   TMP=$(make_tmp)
   jq --arg id "$ISSUE_ID" --arg now "$NOW" \
     '.issues[$id] = {"state": "unclaimed", "complexity": "medium", "agent": "", "attempt": 1, "worktree": "", "started_at": $now, "attempts_history": []}' \
@@ -391,7 +381,6 @@ fi
 
 # Special handling for retries in set-running: preserve original started_at as first_started_at
 if [[ "$NEW_STATE" == "running" ]]; then
-  # Parse attempt from key=value args (default to 1 if not provided)
   ATTEMPT=1
   for pair in "$@"; do
     if [[ "$pair" == attempt=* ]]; then
@@ -423,13 +412,11 @@ if [[ "$ACTION" == "set-merged" ]]; then
     AGENT="direct"
   fi
   
-  # Update state with title and agent
   TMP=$(make_tmp)
   jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" --arg title "$TITLE" --arg agent "$AGENT" \
     '.issues[$id].state = $state | .updated_at = $now | .issues[$id].title = $title | .issues[$id].agent = $agent' \
     "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
 else
-  # Standard state update
   TMP=$(make_tmp)
   jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" \
     '.issues[$id].state = $state | .updated_at = $now' \
@@ -462,17 +449,14 @@ if [[ -n "$STAT_KEY" ]]; then
   esac
 fi
 
-# Append issue record to token ledger for completion events
 if [[ "$ACTION" == "set-completed" || "$ACTION" == "set-merged" ]]; then
   append_ledger_record "$ISSUE_ID" "pass" || true
 fi
 
-# Manage GitHub labels for lifecycle transitions
 if [[ -n "$ADD_LABEL" ]] || [[ ${#REMOVE_LABELS[@]} -gt 0 ]]; then
   manage_labels "$ISSUE_NUMBER" "$ADD_LABEL" "${REMOVE_LABELS[@]}"
 fi
 
-# Apply optional key=value overrides
 for pair in "$@"; do
   KEY="${pair%%=*}"
   VALUE="${pair#*=}"

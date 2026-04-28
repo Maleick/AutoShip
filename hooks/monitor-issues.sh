@@ -24,7 +24,6 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# Get repo slug from state
 REPO_SLUG=$(jq -r '.repo // empty' "$STATE_FILE" 2>/dev/null) || REPO_SLUG=""
 if [[ -z "$REPO_SLUG" ]]; then
   REPO_SLUG=$(git remote get-url origin 2>/dev/null | sed -E 's#^.+[:/]([^/]+/[^/]+)(\.git)?$#\1#' | sed 's/\.git$//')
@@ -46,6 +45,22 @@ _autoship_md_mtime() {
 AUTOSHIP_MD_LAST_MTIME=$(_autoship_md_mtime)
 
 WATERMARK_FILE="$AUTOSHIP_DIR/.issue-monitor-watermark"
+
+if [[ -L "$AUTOSHIP_DIR" ]]; then
+  echo "Error: $AUTOSHIP_DIR must not be a symlink" >&2
+  exit 1
+fi
+
+if [[ -e "$WATERMARK_FILE" ]]; then
+  if [[ -L "$WATERMARK_FILE" ]]; then
+    echo "Error: $WATERMARK_FILE must not be a symlink" >&2
+    exit 1
+  fi
+  if [[ ! -f "$WATERMARK_FILE" ]]; then
+    echo "Error: $WATERMARK_FILE must be a regular file" >&2
+    exit 1
+  fi
+fi
 
 # Initialize watermark on first run (capture current time, emit nothing on first loop)
 if [[ ! -f "$WATERMARK_FILE" ]]; then

@@ -4,13 +4,13 @@
 
 AutoShip supports OpenCode as the only worker runtime. This keeps setup, state, dispatch, and verification paths simple and consistent.
 
-## GPT-5.5 role model
+## Role model selection
 
-`openai/gpt-5.5` is the default planner, coordinator, orchestrator, reviewer, and lead role because those steps require global judgment and consistency.
+Role models are selected from the live `opencode models` inventory and stored in `.autoship/model-routing.json`. Setup prefers capable free or OpenCode Go Kimi/Kimmy/Ling 2.6-family models when available, and first-run setup asks the operator to choose orchestrator and reviewer models.
 
 ## Worker model selection
 
-Workers are selected per task from configured live OpenCode models. The selector considers task compatibility, cost class, configured strength, and previous success/failure history.
+Workers are selected per task from configured live OpenCode models. The selector considers task compatibility, cost class, configured strength, previous success/failure history, and deterministic issue-number rotation across compatible workers.
 
 ## Editable model routing
 

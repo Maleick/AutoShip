@@ -35,7 +35,8 @@ Required checks:
 1. Read AUTOSHIP_RESULT.md.
 2. Review git diff against the base branch.
 3. Run the test command if it is not "none".
-4. Return exactly one verdict line: VERDICT: PASS or VERDICT: FAIL.
+4. For each acceptance criterion, state whether it was met.
+5. Return a JSON object matching schema/reviewer-decision.json and exactly one verdict line: VERDICT: PASS or VERDICT: FAIL.
 
 Be strict: partial implementation is FAIL.
 EOF
@@ -52,6 +53,14 @@ printf '%s\n' "$reviewer_output"
 
 verdict_line=$(printf '%s\n' "$reviewer_output" | grep -E '^VERDICT: (PASS|FAIL)([^A-Z]|$)' | head -1 || true)
 error_summary=""
+
+json_block=$(printf '%s\n' "$reviewer_output" | sed -n '/^{/,/^}/p' | head -200 || true)
+if [[ -n "$json_block" ]]; then
+  if ! echo "$json_block" | jq -e '(.verdict == "PASS" or .verdict == "FAIL") and (.summary | type == "string")' >/dev/null 2>&1; then
+    error_summary="reviewer JSON did not match required schema"
+    verdict_line=""
+  fi
+fi
 
 if [[ $reviewer_status -ne 0 ]]; then
   error_summary="reviewer model failed with non-zero exit"

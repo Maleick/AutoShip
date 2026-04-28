@@ -1,5 +1,4 @@
-# init-opencode.sh — Initialize .autoship/ directory for OpenCode
-# Adapted from init.sh for OpenCode's Agent-based execution
+# Initialize .autoship/ directory for OpenCode.
 
 set -euo pipefail
 
@@ -26,7 +25,6 @@ echo "AutoShip v${AUTOSHIP_VERSION} initializing for OpenCode..."
 
 bash "$SCRIPT_DIR/sync-release.sh"
 
-# Check dependencies
 if ! command -v jq >/dev/null 2>&1; then
   echo "Warning: jq not found. Install with: brew install jq" >&2
 fi
@@ -35,7 +33,6 @@ if ! command -v gh >/dev/null 2>&1; then
   echo "Warning: gh not found. Install with: brew install gh" >&2
 fi
 
-# Derive repo from git remote
 REPO_SLUG=""
 REMOTE_URL=$(git remote get-url origin 2>/dev/null) || true
 if [[ -n "$REMOTE_URL" ]]; then

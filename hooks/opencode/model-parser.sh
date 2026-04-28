@@ -8,7 +8,13 @@ normalize_model_ids() {
 is_free_model() {
   local model
   model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
-  [[ "$model" == *":free" || "$model" == *"/free"* || "$model" == *"-free"* ]]
+  [[ "$model" == *":free" || "$model" == *"/free"* || "$model" == *"-free"* || "$model" == "opencode/big-pickle" || "$model" == "opencode/gpt-5-nano" ]]
+}
+
+is_go_model() {
+  local model
+  model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  [[ "$model" == opencode-go/* ]]
 }
 
 default_free_models() {
@@ -27,6 +33,55 @@ default_free_models() {
   printf '%s\n' "$result"
 }
 
+default_worker_models() {
+  local available_model_ids="$1"
+  local free_models
+  local go_models
+  free_models=$(default_free_models "$available_model_ids")
+  go_models=$(printf '%s\n' "$available_model_ids" | grep -E '^opencode-go/' | paste -sd ',' - || true)
+  if [[ -n "$free_models" && -n "$go_models" ]]; then
+    printf '%s,%s\n' "$free_models" "$go_models"
+  elif [[ -n "$free_models" ]]; then
+    printf '%s\n' "$free_models"
+  else
+    printf '%s\n' "$go_models"
+  fi
+}
+
+default_role_model() {
+  local available_model_ids="$1"
+  local preferred
+  preferred=$(printf '%s\n' "$available_model_ids" | grep -Ei '^opencode-go/(kimi|kimmy).*2\.6' | head -1 || true)
+  if [[ -n "$preferred" ]]; then
+    printf '%s\n' "$preferred"
+    return 0
+  fi
+
+  preferred=$(printf '%s\n' "$available_model_ids" | while IFS= read -r model; do
+    if is_free_model "$model"; then
+      printf '%s\t%s\n' "$(free_model_rank "$model")" "$model"
+    fi
+  done | sort -t $'\t' -k1,1nr -k2,2 | cut -f2 | head -1)
+  if [[ -n "$preferred" ]]; then
+    printf '%s\n' "$preferred"
+    return 0
+  fi
+
+  preferred=$(printf '%s\n' "$available_model_ids" | grep -E '^opencode-go/' | head -1 || true)
+  if [[ -n "$preferred" ]]; then
+    printf '%s\n' "$preferred"
+    return 0
+  fi
+
+  preferred=$(printf '%s\n' "$available_model_ids" | grep -Ei 'gpt-5\.5|gpt-5\.3-codex-spark' | head -1 || true)
+  if [[ -n "$preferred" ]]; then
+    printf '%s\n' "$preferred"
+    return 0
+  fi
+
+  printf '%s\n' "$available_model_ids" | head -1
+}
+
 free_model_rank() {
   local model
   model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
@@ -34,8 +89,11 @@ free_model_rank() {
 
   case "$model" in
     *nemotron-3-super*) score=95 ;;
+    *kimi*k2.6*|*kimi-2.6*) score=94 ;;
     *gpt-oss-120b*) score=92 ;;
+    *gpt-5-nano*) score=90 ;;
     *llama-3.3-70b*) score=88 ;;
+    *big-pickle*) score=86 ;;
     *minimax-m2.5*) score=84 ;;
     *qwen*|*glm*|*kimi*|*mimo*) score=80 ;;
     *gemma-3-27b*|*gemma-4-31b*) score=72 ;;
@@ -79,6 +137,8 @@ classify_models() {
     [[ -z "$model" ]] && continue
     if is_free_model "$model"; then
       printf '%s:free\n' "$model"
+    elif is_go_model "$model"; then
+      printf '%s:go\n' "$model"
     else
       printf '%s:selected\n' "$model"
     fi

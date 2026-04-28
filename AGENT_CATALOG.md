@@ -13,7 +13,7 @@ This document defines the specialized agent roles used in AutoShip orchestration
 | **Inputs** | GitHub issue body, acceptance criteria, project context, existing code references |
 | **Outputs** | Implementation plan, task breakdown, priority assessment |
 | **Boundaries** | Does not write implementation code; scope limited to planning |
-| **Default Model** | `openai/gpt-5.5` (orchestration capable) |
+| **Default Model** | Best available role model from `opencode models` |
 
 ### 2. Lead
 
@@ -24,7 +24,7 @@ This document defines the specialized agent roles used in AutoShip orchestration
 | **Inputs** | Issue queue state, agent statuses, project priorities |
 | **Outputs** | Dispatch decisions, concurrency assignments, escalation triggers |
 | **Boundaries** | Does not implement code directly; delegates to specialized agents |
-| **Default Model** | `openai/gpt-5.5` (orchestration capable) |
+| **Default Model** | Best available role model from `opencode models` |
 
 ### 3. Implementer
 
@@ -46,7 +46,7 @@ This document defines the specialized agent roles used in AutoShip orchestration
 | **Inputs** | Changed files, diff output, test results |
 | **Outputs** | Review findings, approval/block decision, improvement suggestions |
 | **Boundaries** | Does not implement fixes; only approves or requests changes |
-| **Default Model** | `openai/gpt-5.5` (strong reasoning) |
+| **Default Model** | Prompted during first-run setup |
 
 ### 5. Simplifier
 
@@ -57,7 +57,7 @@ This document defines the specialized agent roles used in AutoShip orchestration
 | **Inputs** | Source code, review feedback, complexity metrics |
 | **Outputs** | Refactored code, simplification suggestions |
 | **Boundaries** | Must preserve behavior; scope limited to simplification |
-| **Default Model** | `openai/gpt-5.5` (strong reasoning) |
+| **Default Model** | Best available role model from `opencode models` |
 
 ### 6. Tester
 
@@ -90,20 +90,20 @@ This document defines the specialized agent roles used in AutoShip orchestration
 | **Inputs** | Committed changes, version files, changelog entries |
 | **Outputs** | PR titles, release tags, version bumps |
 | **Boundaries** | Only manages release workflow; does not implement code |
-| **Default Model** | `openai/gpt-5.5` (orchestration capable) |
+| **Default Model** | Best available role model from `opencode models` |
 
 ## Model Routing
 
 | Role | Primary Model Family | Fallback |
 |------|-------------------|----------|
-| Planner | `openai/gpt-5.5` | Configured OpenCode models |
-| Lead | `openai/gpt-5.5` | Configured OpenCode models |
+| Planner | Best available role model | Configured OpenCode models |
+| Lead | Best available role model | Configured OpenCode models |
 | Implementer | `opencode/*` free models | Operator-selected models |
-| Reviewer | `openai/gpt-5.5` | Configured OpenCode models |
-| Simplifier | `openai/gpt-5.5` | Configured OpenCode models |
+| Reviewer | First-run selected model | Configured OpenCode models |
+| Simplifier | Best available role model | Configured OpenCode models |
 | Tester | `opencode/*` free models | Operator-selected models |
 | Docs | `opencode/*` free models | Operator-selected models |
-| Release | `openai/gpt-5.5` | Configured OpenCode models |
+| Release | Best available role model | Configured OpenCode models |
 
 ## Agent State Transitions
 

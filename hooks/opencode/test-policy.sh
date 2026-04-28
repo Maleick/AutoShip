@@ -203,6 +203,7 @@ RUNNER_REPO="$TMP_DIR/runner-repo"
 mkdir -p "$RUNNER_REPO/.autoship/workspaces/issue-996" "$RUNNER_REPO/hooks/opencode" "$RUNNER_REPO/hooks" "$RUNNER_REPO/bin"
 git init -q "$RUNNER_REPO"
 cp "$SCRIPT_DIR/runner.sh" "$RUNNER_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/runtime-config.sh" "$RUNNER_REPO/hooks/opencode/runtime-config.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$RUNNER_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$RUNNER_REPO/hooks/capture-failure.sh"
 chmod +x "$RUNNER_REPO/hooks/opencode/runner.sh" "$RUNNER_REPO/hooks/update-state.sh" "$RUNNER_REPO/hooks/capture-failure.sh"
@@ -255,6 +256,7 @@ mkdir -p "$RETRY_REPO/.autoship/workspaces/issue-181" "$RETRY_REPO/.autoship/fai
 git init -q "$RETRY_REPO"
 cp "$SCRIPT_DIR/../update-state.sh" "$RETRY_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/dispatch.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
+cp "$SCRIPT_DIR/runtime-config.sh" "$RETRY_REPO/hooks/opencode/runtime-config.sh"
 chmod +x "$RETRY_REPO/hooks/update-state.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
 cat > "$RETRY_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-181":{"state":"running","attempt":3,"model":"opencode/test","role":"implementer"}},"stats":{},"config":{"maxConcurrentAgents":15,"maxRetries":3}}
@@ -295,6 +297,7 @@ FALLBACK_REPO="$TMP_DIR/fallback-runner-repo"
 mkdir -p "$FALLBACK_REPO/.autoship/workspaces/issue-208" "$FALLBACK_REPO/hooks/opencode" "$FALLBACK_REPO/hooks" "$FALLBACK_REPO/bin"
 git init -q "$FALLBACK_REPO"
 cp "$SCRIPT_DIR/runner.sh" "$FALLBACK_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/runtime-config.sh" "$FALLBACK_REPO/hooks/opencode/runtime-config.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$FALLBACK_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$FALLBACK_REPO/hooks/capture-failure.sh"
 chmod +x "$FALLBACK_REPO/hooks/opencode/runner.sh" "$FALLBACK_REPO/hooks/update-state.sh" "$FALLBACK_REPO/hooks/capture-failure.sh"
@@ -341,6 +344,7 @@ AUTOCOMMIT_REPO="$TMP_DIR/autocommit-runner-repo"
 mkdir -p "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" "$AUTOCOMMIT_REPO/hooks/opencode" "$AUTOCOMMIT_REPO/hooks" "$AUTOCOMMIT_REPO/bin"
 git init -q "$AUTOCOMMIT_REPO"
 cp "$SCRIPT_DIR/runner.sh" "$AUTOCOMMIT_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/runtime-config.sh" "$AUTOCOMMIT_REPO/hooks/opencode/runtime-config.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$AUTOCOMMIT_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$AUTOCOMMIT_REPO/hooks/capture-failure.sh"
 chmod +x "$AUTOCOMMIT_REPO/hooks/opencode/runner.sh" "$AUTOCOMMIT_REPO/hooks/update-state.sh" "$AUTOCOMMIT_REPO/hooks/capture-failure.sh"
@@ -452,6 +456,7 @@ TESTS_ONLY_REPO="$TMP_DIR/tests-only-runner-repo"
 mkdir -p "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" "$TESTS_ONLY_REPO/hooks/opencode" "$TESTS_ONLY_REPO/hooks" "$TESTS_ONLY_REPO/bin"
 git init -q "$TESTS_ONLY_REPO"
 cp "$SCRIPT_DIR/runner.sh" "$TESTS_ONLY_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/runtime-config.sh" "$TESTS_ONLY_REPO/hooks/opencode/runtime-config.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$TESTS_ONLY_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$TESTS_ONLY_REPO/hooks/capture-failure.sh"
 chmod +x "$TESTS_ONLY_REPO/hooks/opencode/runner.sh" "$TESTS_ONLY_REPO/hooks/update-state.sh" "$TESTS_ONLY_REPO/hooks/capture-failure.sh"
@@ -492,6 +497,7 @@ SESSION_REPO="$TMP_DIR/session-runner-repo"
 mkdir -p "$SESSION_REPO/.autoship/workspaces/issue-997" "$SESSION_REPO/hooks/opencode" "$SESSION_REPO/hooks" "$SESSION_REPO/bin"
 git init -q "$SESSION_REPO"
 cp "$SCRIPT_DIR/runner.sh" "$SESSION_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/runtime-config.sh" "$SESSION_REPO/hooks/opencode/runtime-config.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$SESSION_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$SESSION_REPO/hooks/capture-failure.sh"
 chmod +x "$SESSION_REPO/hooks/opencode/runner.sh" "$SESSION_REPO/hooks/update-state.sh" "$SESSION_REPO/hooks/capture-failure.sh"
@@ -1028,6 +1034,7 @@ if [[ "$1" == "models" ]]; then
     'opencode/nemotron-3-super-free' \
     'opencode/minimax-m2.5-free' \
     'opencode/gpt-5' \
+    'opencode-go/kimi-k2.6' \
     'opencode-go/qwen3.6-plus' \
     'openrouter/google/gemma-3-27b-it:free' \
     'openrouter/minimax/minimax-m2.5:free' \
@@ -1048,12 +1055,11 @@ chmod +x "$SETUP_REPO/bin/opencode"
   printf '%s\n' "$setup_output" | grep -F 'opencode-autoship doctor' >/dev/null || fail "setup prints doctor next step"
   printf '%s\n' "$setup_output" | grep -F '/autoship-setup' >/dev/null || fail "setup prints setup next step"
   printf '%s\n' "$setup_output" | grep -F '/autoship' >/dev/null || fail "setup prints autoship next step"
-  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup writes all live free models by default"
+  jq -e '.models | length == 7' .autoship/model-routing.json >/dev/null || fail "setup writes live free and OpenCode Go models by default"
   jq -e '.maxConcurrentAgents == 15 and .max_agents == 15' .autoship/config.json >/dev/null || fail "setup writes default concurrency cap consumed by runtime"
-  jq -e '.cargoConcurrencyCap == 8 and .cargoTargetIsolationThreshold == 8 and .cargoTimeoutSeconds == 120 and .mergeStrategy == "safe" and .quotaRouting == true and .policyProfile == "default"' .autoship/config.json >/dev/null || fail "setup writes burndown policy config defaults"
-  jq -e '.roles.planner == "openai/gpt-5.5" and .roles.coordinator == "openai/gpt-5.5" and .roles.orchestrator == "openai/gpt-5.5" and .roles.lead == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup configures GPT-5.5 as planner/coordinator/orchestrator/lead"
+  jq -e '.roles.planner == "opencode-go/kimi-k2.6" and .roles.coordinator == "opencode-go/kimi-k2.6" and .roles.orchestrator == "opencode-go/kimi-k2.6" and .roles.lead == "opencode-go/kimi-k2.6"' .autoship/model-routing.json >/dev/null || fail "setup configures the best available role model by default"
   jq -e '.pools != null and .pools.default != null and .pools.frontend != null and .pools.backend != null and .pools.docs != null' .autoship/model-routing.json >/dev/null || fail "setup writes worker pools"
-  jq -e 'all(.models[]; .cost == "free")' .autoship/model-routing.json >/dev/null || fail "default setup excludes paid worker models"
+  jq -e 'all(.models[]; .cost == "free" or .cost == "go")' .autoship/model-routing.json >/dev/null || fail "default setup excludes paid worker models"
   jq -e 'all(.models[]; .id != "openai/gpt-5.5")' .autoship/model-routing.json >/dev/null || fail "planner model is not used as a default worker"
   jq -e '.models[0].id == "opencode/nemotron-3-super-free" and .defaultFallback == "opencode/nemotron-3-super-free"' .autoship/model-routing.json >/dev/null || fail "setup ranks strongest free worker first"
   jq -e 'any(.models[]; .id == "openrouter/google/gemma-3-27b-it:free")' .autoship/model-routing.json >/dev/null || fail "setup includes OpenRouter free models from live OpenCode list"
@@ -1064,12 +1070,12 @@ chmod +x "$SETUP_REPO/bin/opencode"
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --max-agents=9 >/dev/null
   jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "noninteractive setup preserves manual model-routing edits by default"
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models >/dev/null
-  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup --refresh-models regenerates manual model routing when explicitly requested"
+  jq -e '.models | length == 7' .autoship/model-routing.json >/dev/null || fail "setup --refresh-models regenerates manual model routing when explicitly requested"
   jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json > .autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   AUTOSHIP_REFRESH_MODELS=1 PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
-  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup refreshes generated model routing when requested"
+  jq -e '.models | length == 7' .autoship/model-routing.json >/dev/null || fail "setup refreshes generated model routing when requested"
   AUTOSHIP_MODELS='opencode/gpt-5,opencode-go/qwen3.6-plus,openai/gpt-5.3-codex-spark' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
-  jq -e '.models[0].id == "opencode/gpt-5" and .models[0].cost == "selected" and .models[1].id == "opencode-go/qwen3.6-plus" and .models[2].id == "openai/gpt-5.3-codex-spark"' .autoship/model-routing.json >/dev/null || fail "setup allows explicit selected non-free and Spark models from live list"
+  jq -e '.models[0].id == "opencode/gpt-5" and .models[0].cost == "selected" and .models[1].id == "opencode-go/qwen3.6-plus" and .models[1].cost == "go" and .models[2].id == "openai/gpt-5.3-codex-spark"' .autoship/model-routing.json >/dev/null || fail "setup allows explicit selected non-free, Go, and Spark models from live list"
   if AUTOSHIP_MODELS='missing/model' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null 2>&1; then
     fail "setup rejects selected models that are not in the live OpenCode list"
   fi
@@ -1136,7 +1142,7 @@ cat > "$SELECT_REPO/.autoship/model-routing.json" <<'JSON'
   ]
 }
 JSON
-assert_eq "free/strong:free" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh simple_code 101)" "selector treats missing model history as empty"
+assert_eq "free/strong:free" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh simple_code 100)" "selector treats missing model history as empty"
 cat > "$SELECT_REPO/.autoship/model-history.json" <<'JSON'
 {
   "free/strong:free": {"success": 0, "fail": 6},
@@ -1156,7 +1162,7 @@ assert_eq "true" "$(echo "$POOL_MODELS" | grep -q "free/strong:free" && echo "tr
 
 ROUTING_LOG=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log simple_code 101)
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "routing_log:" && echo "true" || echo "false")" "selector --log outputs routing log"
-assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "selection: free/strong:free" && echo "true" || echo "false")" "routing log shows free model selection"
+assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "selection: free/reliable:free" && echo "true" || echo "false")" "routing log shows free model selection"
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "score:" && echo "true" || echo "false")" "routing log shows score"
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "reason:" && echo "true" || echo "false")" "routing log shows reason"
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "final_selection: free/reliable:free" && echo "true" || echo "false")" "routing log shows final selection"
@@ -1257,7 +1263,7 @@ git -C "$DISPATCH_REPO" remote add origin git@github.com:owner/repo.git
 printf 'base\n' > "$DISPATCH_REPO/README.md"
 git -C "$DISPATCH_REPO" add README.md
 git -C "$DISPATCH_REPO" commit -q -m initial
-cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$SCRIPT_DIR/runtime-config.sh" "$DISPATCH_REPO/hooks/opencode/"
 cp "$SCRIPT_DIR/../update-state.sh" "$DISPATCH_REPO/hooks/update-state.sh"
 cat > "$DISPATCH_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
@@ -1293,6 +1299,7 @@ assert_eq "docs" "$(cat "$DISPATCH_REPO/.autoship/workspaces/issue-456/role")" "
 assert_eq "docs" "$(jq -r '.issues["issue-456"].role' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records specialized role in state"
 assert_eq "free/strong:free" "$(jq -r '.issues["issue-456"].model' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records selected model in state"
 grep -F '## Specialized Role' "$DISPATCH_REPO/.autoship/workspaces/issue-456/AUTOSHIP_PROMPT.md" >/dev/null || fail "dispatch records specialized role in prompt"
+grep -F 'Do not repeat the same failing command' "$DISPATCH_REPO/.autoship/workspaces/issue-456/AUTOSHIP_PROMPT.md" >/dev/null || fail "dispatch prompt prevents repeated failing command loops"
 
 FIXTURE_REPO="$TMP_DIR/fixture-pipeline-repo"
 mkdir -p "$FIXTURE_REPO/.autoship" "$FIXTURE_REPO/hooks/opencode" "$FIXTURE_REPO/hooks" "$FIXTURE_REPO/bin"
@@ -1303,7 +1310,7 @@ git -C "$FIXTURE_REPO" remote add origin git@github.com:owner/repo.git
 printf 'base\n' > "$FIXTURE_REPO/README.md"
 git -C "$FIXTURE_REPO" add README.md
 git -C "$FIXTURE_REPO" commit -q -m initial
-cp "$SCRIPT_DIR/plan-issues.sh" "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$SCRIPT_DIR/runner.sh" "$SCRIPT_DIR/reviewer.sh" "$SCRIPT_DIR/create-pr.sh" "$FIXTURE_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/plan-issues.sh" "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$SCRIPT_DIR/runner.sh" "$SCRIPT_DIR/reviewer.sh" "$SCRIPT_DIR/create-pr.sh" "$SCRIPT_DIR/runtime-config.sh" "$FIXTURE_REPO/hooks/opencode/"
 cp "$SCRIPT_DIR/../update-state.sh" "$SCRIPT_DIR/../capture-failure.sh" "$FIXTURE_REPO/hooks/"
 chmod +x "$FIXTURE_REPO"/hooks/opencode/*.sh "$FIXTURE_REPO"/hooks/*.sh
 cat > "$FIXTURE_REPO/.autoship/state.json" <<'JSON'
@@ -1386,6 +1393,14 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
   if PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-190 "$artifact_workspace" >/dev/null 2>&1; then
     fail "PR dry-run must reject artifact-only worktrees"
   fi
+  symlink_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-symlink-result"
+  mkdir -p "$symlink_workspace"
+  git -C "$FIXTURE_REPO" worktree add -q "$symlink_workspace" HEAD
+  printf 'implementation\n' > "$symlink_workspace/implementation.txt"
+  ln -s /etc/hosts "$symlink_workspace/AUTOSHIP_RESULT.md"
+  if PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-190 "$symlink_workspace" >/dev/null 2>&1; then
+    fail "PR dry-run must reject symlinked AUTOSHIP_RESULT.md"
+  fi
   live_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-191"
   git -C "$FIXTURE_REPO" worktree add -q -b autoship/issue-191 "$live_workspace" HEAD
   printf 'implementation\n' > "$live_workspace/implementation.txt"
@@ -1420,6 +1435,20 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   if jq -e '.plugin[] | select(type == "string" and contains("autoship.ts"))' "$CONFIG_DIR/opencode.json" >/dev/null; then
     fail "package installer removes legacy autoship.ts plugin entries"
   fi
+  printf '%s\n' '{invalid-json' > "$CONFIG_DIR/opencode.json"
+  if OPENCODE_CONFIG_DIR="$CONFIG_DIR" node dist/cli.js install >/"$TMP_DIR/package-invalid-config.txt" 2>&1; then
+    fail "package installer fails instead of replacing invalid opencode.json"
+  fi
+  grep -F 'Error:' "$TMP_DIR/package-invalid-config.txt" >/dev/null || fail "package installer reports invalid opencode.json errors"
+  printf '%s\n' '{"plugin":["file:///tmp/legacy/autoship.ts","other-plugin"],"customSetting":true}' > "$CONFIG_DIR/opencode.json"
+  mv AGENTS.md AGENTS.md.real
+  ln -s AGENTS.md.real AGENTS.md
+  if OPENCODE_CONFIG_DIR="$CONFIG_DIR" node dist/cli.js install >/"$TMP_DIR/package-symlink-asset.txt" 2>&1; then
+    fail "package installer fails instead of skipping symlinked package assets"
+  fi
+  grep -F 'Refusing to install symlinked package asset' "$TMP_DIR/package-symlink-asset.txt" >/dev/null || fail "package installer reports symlinked package assets"
+  rm AGENTS.md
+  mv AGENTS.md.real AGENTS.md
   test -d "$CONFIG_DIR/.autoship/hooks" || fail "package installer copies hooks"
   test -d "$CONFIG_DIR/.autoship/commands" || fail "package installer copies commands"
   test -d "$CONFIG_DIR/.autoship/skills" || fail "package installer copies skills"

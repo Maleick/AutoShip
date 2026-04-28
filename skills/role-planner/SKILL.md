@@ -51,4 +51,4 @@ Write the plan to `.autoship/workspaces/<issue-key>/PLAN.md`
 
 ## Model
 
-Uses `openai/gpt-5.5` (orchestration capable).
+Uses the configured planner role model from `.autoship/model-routing.json`.

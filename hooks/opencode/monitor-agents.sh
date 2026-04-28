@@ -1,7 +1,6 @@
-# monitor-agents-opencode.sh — Poll status files for OpenCode agents
-# Adapted from monitor-agents.sh for OpenCode's file-based status
+# Poll status files for OpenCode agents.
 
-set -euo pipefail
+set -eo pipefail
 
 AUTOSHIP_DIR=".autoship"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
@@ -35,7 +34,9 @@ emit_event() {
     touch "$marker" 2>/dev/null || true
   }
 
-  if command -v flock >/dev/null 2>&1; then
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
+    lockf -k "$LOCK_FILE" bash -c 'jq --argjson evt "$1" '\'' . + [$evt] '\'' "$2" > "$2.tmp" && mv "$2.tmp" "$2" && touch "$3"' _ "$event" "$EVENT_QUEUE" "$marker" 2>/dev/null || write_event
+  elif command -v flock >/dev/null 2>&1; then
     (
       if flock -x 200 2>/dev/null; then
         write_event
@@ -95,8 +96,9 @@ is_worker_live() {
   local pid_file="$1/worker.pid"
   [[ -s "$pid_file" ]] || return 0
   local pid
+  local pid_re='^[0-9]+$'
   pid=$(tr -d '[:space:]' < "$pid_file")
-  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  [[ "$pid" =~ $pid_re ]] || return 1
   kill -0 "$pid" 2>/dev/null
 }
 

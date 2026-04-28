@@ -6,16 +6,15 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   exit 1
 }
 cd "$REPO_ROOT"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/runtime-config.sh"
 
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
-MAX=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$STATE_FILE" 2>/dev/null || true)
-if [[ -z "$MAX" && -f "$AUTOSHIP_DIR/config.json" ]]; then
-  MAX=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
-fi
-MAX="${MAX:-15}"
+MAX=$(autoship_max_agents "$STATE_FILE" "$AUTOSHIP_DIR")
 DRY_RUN="${AUTOSHIP_RUNNER_DRY_RUN:-false}"
+CHECKPOINT_EVERY="${AUTOSHIP_CHECKPOINT_EVERY:-0}"
 
 active_count() {
   local count=0
@@ -85,7 +84,7 @@ EOF
 }
 
 base_ref_for_workspace() {
-  for ref in origin/master origin/main master main HEAD~1; do
+  for ref in origin/master origin/main HEAD~1 master main; do
     if git rev-parse --verify "$ref" >/dev/null 2>&1; then
       printf '%s\n' "$ref"
       return 0
@@ -99,12 +98,33 @@ auto_commit_workspace_changes() {
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     return 0
   fi
+  local git_root current_dir
+  git_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+  current_dir=$(pwd -P)
+  if [[ -n "$git_root" ]]; then
+    git_root=$(cd "$git_root" && pwd -P)
+  fi
+  if [[ -z "$git_root" || "$git_root" != "$current_dir" ]]; then
+    return 0
+  fi
 
   if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
     return 0
   fi
 
-  git add -A
+  git status --porcelain | while IFS= read -r line; do
+    local path
+    path="${line#???}"
+    case "$line" in
+      R*|C*) path="${path#* -> }" ;;
+    esac
+    case "$path" in
+      .autoship|.autoship/*|AUTOSHIP_PROMPT.md|AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|AUTOSHIP_VERIFICATION.log|BLOCKED_REASON.txt|model|role|routing-log.txt|started_at|status|worker.pid|checkpoint_at|shasum.before|shasum.after|acceptance-criteria.json)
+        continue
+        ;;
+    esac
+    git add -- "$path"
+  done
   if git diff --cached --quiet; then
     return 0
   fi
@@ -267,8 +287,14 @@ for dir in "$WORKSPACES_DIR"/*/; do
   [[ -f "$model_file" ]] && model=$(cat "$model_file")
   [[ -f "$role_file" ]] && role=$(cat "$role_file")
   issue_id="$(basename "$dir")"
+  if [[ -x "$REPO_ROOT/hooks/opencode/quota-guard.sh" || -f "$REPO_ROOT/hooks/opencode/quota-guard.sh" ]]; then
+    bash "$REPO_ROOT/hooks/opencode/quota-guard.sh" >/dev/null 2>&1 || { echo "Quota guard paused dispatch"; break; }
+  fi
   echo "RUNNING" > "$status_file"
   bash "$REPO_ROOT/hooks/update-state.sh" set-running "$(basename "$dir")" agent="$model" model="$model" role="$role" 2>/dev/null || true
+  if [[ "$CHECKPOINT_EVERY" != "0" ]]; then
+    date -u +%Y-%m-%dT%H:%M:%SZ > "$dir/checkpoint_at" 2>/dev/null || true
+  fi
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "DRY_RUN start $(basename "$dir") with $model"

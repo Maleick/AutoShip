@@ -19,7 +19,6 @@ extract_section() {
   ' "$REPORT_FILE"
 }
 
-evidence="$(extract_section '## Root Cause Evidence' | sed '/^[[:space:]]*$/d' | head -20)"
 affected="$(extract_section '## Affected Files' | sed '/^[[:space:]]*$/d' | head -20)"
 
 extract_section '## Candidate Acceptance Criteria' |
@@ -31,7 +30,8 @@ extract_section '## Candidate Acceptance Criteria' |
 Generated from AutoShip self-improvement report.
 
 ## Root Cause Evidence
-${evidence:-No evidence provided.}
+Automatically redacted from auto-filed issues to prevent prompt-injection from untrusted logs.
+Refer to the source report for manual review: ${REPORT_FILE}
 
 ## Affected Files
 ${affected:-No affected files listed.}

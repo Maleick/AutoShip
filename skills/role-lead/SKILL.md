@@ -52,4 +52,4 @@ bash hooks/opencode/runner.sh
 
 ## Model
 
-Uses `openai/gpt-5.5` (orchestration capable).
+Uses the configured lead role model from `.autoship/model-routing.json`.

@@ -1,0 +1,32 @@
+name: AutoShip
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan or apply
+        required: true
+        default: plan
+  pull_request:
+
+concurrency:
+  group: autoship-${{ github.workflow }}-${{ github.event.inputs.mode || 'pr' }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  hooks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: [syntax, policy]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt jq
+      - name: Run AutoShip shard
+        run: |
+          if [ "${{ matrix.shard }}" = syntax ]; then
+            bash hooks/opencode/check.sh --syntax
+          else
+            bash hooks/opencode/check.sh --policy
+          fi

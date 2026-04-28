@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.0.11
+
+- Consolidate shared runtime configuration lookup for worker concurrency across dispatch, runner, and status scripts.
+- Add shared TypeScript config and routing types, tightening CLI handling of malformed config and unsafe package asset errors.
+- Remove stale legacy hook, placeholder release note page, and completed in-progress planning documents.
+- Refresh OpenCode install docs around npm-first installation and trim stale comments from shell hooks.
+
+## v2.0.10
+
+- Rotate compatible free worker models deterministically by issue number so parallel dispatches do not overload one free provider.
+- Classify bundled free Zen models as free even when model IDs do not include a `free` suffix, and include `opencode-go/*` models as low-cost subscription fallbacks.
+- Prefer capable free or OpenCode Go Kimi/Kimmy/Ling 2.6-family role models from live OpenCode inventory instead of assuming `openai/gpt-5.5`.
+- Prompt for orchestrator and reviewer models during first-run setup, with separate CLI/env overrides for each role.
+- Route complex tasks without a strong compatible worker to the configured orchestrator model as an advisor fallback.
+- Add worker prompt guardrails against repeating the same failing command loop.
+- Refresh README, docs, wiki, commands, skills, and agent guidance for free-first OpenCode-only routing.
+
+## v2.0.9
+
+- Add AutoShip audit, dashboard, retry, cancel, clean, and apply workflows for issue-to-PR orchestration operations.
+- Add safety guardrails for GitHub API retries, protected label classification, diff size limits, prompt sanitization, acceptance criteria extraction, worktree checksums, quota pauses, and anti-flake retries.
+- Harden CI and verification behavior for monitor polling, setup without GitHub auth, package diagnostics, and no-check PR merge blocking.
+
 ## v2.0.8
 
 - Refresh worker monitoring from `status.sh` so dead worker PIDs are marked stuck during normal status checks.

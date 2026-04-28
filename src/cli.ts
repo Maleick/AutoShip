@@ -6,20 +6,16 @@ import {
   readFile,
   copyFile,
   readdir,
-  stat,
+  lstat,
   access,
 } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
+import type { AutoshipConfig, DoctorCheck, ModelRouting, OpenCodeConfig } from "./types.js";
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 const VERSION = (await readFile(join(PACKAGE_ROOT, "VERSION"), "utf8")).trim();
-
-interface Config {
-  plugin?: string[];
-  [key: string]: unknown;
-}
 
 function resolveConfigDir(): string {
   if (process.env.OPENCODE_CONFIG_DIR) {
@@ -44,29 +40,74 @@ function resolveProjectAutoshipDir(): string {
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {
+  const srcStat = await lstat(src);
+  if (srcStat.isSymbolicLink()) {
+    throw new Error(`Refusing to copy symlinked source directory: ${src}`);
+  }
+  if (!srcStat.isDirectory()) {
+    throw new Error(`Expected source directory but found non-directory: ${src}`);
+  }
+
+  try {
+    const destStat = await lstat(dest);
+    if (destStat.isSymbolicLink()) {
+      throw new Error(`Refusing to write through symlinked path: ${dest}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
   await mkdir(dest, { recursive: true });
   const entries = await readdir(src);
   for (const entry of entries) {
     const srcPath = join(src, entry);
     const destPath = join(dest, entry);
-    const st = await stat(srcPath);
+    const st = await lstat(srcPath);
+    if (st.isSymbolicLink()) {
+      throw new Error(`Refusing to copy symlinked source path: ${srcPath}`);
+    }
     if (st.isDirectory()) {
       await copyDir(srcPath, destPath);
     } else {
+      try {
+        const destStat = await lstat(destPath);
+        if (destStat.isSymbolicLink()) {
+          throw new Error(`Refusing to write through symlinked path: ${destPath}`);
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
       await copyFile(srcPath, destPath);
     }
   }
 }
 
-async function loadConfig(path: string): Promise<Config> {
+async function loadConfig(path: string): Promise<OpenCodeConfig> {
   try {
     return JSON.parse(await readFile(path, "utf8"));
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
     return {};
   }
 }
 
-async function saveConfig(path: string, config: Config): Promise<void> {
+async function saveConfig(path: string, config: OpenCodeConfig): Promise<void> {
+  try {
+    const existing = await lstat(path);
+    if (existing.isSymbolicLink()) {
+      throw new Error(`Refusing to write through symlinked config file: ${path}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
   await writeFile(path, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
@@ -89,13 +130,29 @@ async function install() {
 
   for (const item of items) {
     try {
-      const st = await stat(item.src);
+      const st = await lstat(item.src);
+      if (st.isSymbolicLink()) {
+        throw new Error(`Refusing to install symlinked package asset: ${item.src}`);
+      }
       if (st.isDirectory()) {
         await copyDir(item.src, item.dest);
       } else {
+        try {
+          const destStat = await lstat(item.dest);
+          if (destStat.isSymbolicLink()) {
+            throw new Error(`Refusing to write through symlinked path: ${item.dest}`);
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw error;
+          }
+        }
         await copyFile(item.src, item.dest);
       }
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
       console.warn(`Warning: ${item.src} not found, skipping`);
     }
   }
@@ -115,8 +172,7 @@ async function install() {
   plugins = plugins.filter(
     (p) =>
       typeof p === "string" &&
-      !p.includes("autoship.ts") &&
-      !p.endsWith("/autoship.ts")
+      !p.includes("autoship.ts")
   );
 
   config.plugin = plugins;
@@ -132,13 +188,7 @@ async function doctor() {
   console.log("=====================");
   console.log();
 
-  interface Check {
-    name: string;
-    status: "PASS" | "WARN" | "FAIL";
-    message: string;
-  }
-
-  const checks: Check[] = [];
+  const checks: DoctorCheck[] = [];
   let hasFailure = false;
 
   const configDir = resolveConfigDir();
@@ -171,16 +221,37 @@ async function doctor() {
     await access(join(projectAutoshipDir, "config.json"));
     checks.push({ name: "config", status: "PASS", message: "Config file exists" });
   } catch {
-    checks.push({ name: "config", status: "FAIL", message: "Project .autoship/config.json not found; run /autoship-setup" });
-    hasFailure = true;
+    checks.push({ name: "config", status: "WARN", message: "Project .autoship/config.json not found; run /autoship-setup before dispatch" });
   }
 
   try {
     await access(join(projectAutoshipDir, "model-routing.json"));
     checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
   } catch {
-    checks.push({ name: "model-routing", status: "FAIL", message: "Project .autoship/model-routing.json not found; run /autoship-setup" });
-    hasFailure = true;
+    checks.push({ name: "model-routing", status: "WARN", message: "Project .autoship/model-routing.json not found; run /autoship-setup before dispatch" });
+  }
+
+  for (const tool of ["gh", "git", "jq", "opencode"]) {
+    try {
+      execSync(`command -v ${tool}`, { stdio: "ignore", shell: "/bin/sh" });
+      checks.push({ name: `tool-${tool}`, status: "PASS", message: `${tool} is available` });
+    } catch {
+      checks.push({ name: `tool-${tool}`, status: "FAIL", message: `${tool} is not available in PATH` });
+      hasFailure = true;
+    }
+  }
+
+  try {
+    const configPath = join(projectAutoshipDir, "config.json");
+    const config = JSON.parse(await readFile(configPath, "utf8")) as AutoshipConfig;
+    const maxAgents = Number(config.maxConcurrentAgents ?? config.max_agents ?? 0);
+    if (maxAgents > 0 && maxAgents <= 15) {
+      checks.push({ name: "worker-cap", status: "PASS", message: `Worker cap is ${maxAgents}` });
+    } else {
+      checks.push({ name: "worker-cap", status: "WARN", message: `Worker cap ${maxAgents || "unset"} is outside recommended range 1-15` });
+    }
+  } catch {
+    checks.push({ name: "worker-cap", status: "WARN", message: "Unable to validate worker cap" });
   }
 
   try {
@@ -244,9 +315,9 @@ async function doctor() {
         const routingPath = join(projectAutoshipDir, "model-routing.json");
         await access(routingPath);
         const routingContent = await readFile(routingPath, "utf8");
-        const routing = JSON.parse(routingContent);
+        const routing = JSON.parse(routingContent) as ModelRouting;
         const modelIds = modelsOutput.split("\n").map((l) => l.trim()).filter(Boolean);
-        const configuredModels = (routing.models || []).map((m: { id: string }) => m.id);
+        const configuredModels = (routing.models || []).map((m) => m.id);
         const missingModels = configuredModels.filter((m: string) => !modelIds.some((id: string) => id.includes(m) || m.includes(id)));
         if (missingModels.length > 0) {
           checks.push({ name: "model-routing-refs", status: "WARN", message: `Configured models not in current inventory: ${missingModels.join(", ")}` });

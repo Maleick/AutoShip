@@ -5,12 +5,15 @@ AutoShip supports OpenCode as its only worker runtime.
 ## Runtime Model
 
 - Model inventory comes from `opencode models` at setup time.
-- Default routing includes only currently available model IDs flagged free.
+- Default routing includes currently available free model IDs, including `:free`/`-free` IDs and bundled free Zen models such as `opencode/big-pickle` and `opencode/gpt-5-nano`.
+- OpenCode Go models (`opencode-go/*`) are included as low-cost subscription fallback models, not classified as free.
 - Operators may explicitly select model IDs with `AUTOSHIP_MODELS`.
 - Selected models must exist in the current OpenCode model list.
 - Selected routing is saved in `.autoship/model-routing.json`, which is user-editable and preserved by setup unless refresh is requested.
-- `openai/gpt-5.5` is the default planner, coordinator, orchestrator, and reviewer role model.
-- Worker models are selected per task by `select-model.sh`, which scores task compatibility, cost class, configured strength, and prior success/failure history.
+- Role models are selected from live `opencode models` inventory. Setup prefers capable free models first, then OpenCode Go models, instead of requiring `openai/gpt-5.5`. Paid Zen/OpenRouter Kimi models require explicit selection.
+- First-run setup prompts for orchestrator and reviewer models; they may be the same model or different models.
+- Worker models are selected per task by `select-model.sh`, which scores task compatibility, cost class, configured strength, prior success/failure history, and rotates deterministically by issue number across compatible workers.
+- Complex tasks require a sufficiently strong compatible worker; otherwise `select-model.sh` falls back to the configured orchestrator model as an advisor.
 - Go-provider and Spark models are allowed when selected and can win if they are the best configured fit for the task.
 - `openai/gpt-5.5-fast` is not allowed.
 - Worker concurrency defaults to 15 active workspaces.
