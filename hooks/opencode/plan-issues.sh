@@ -26,6 +26,13 @@ if [[ -n "$LIMIT" ]]; then
   limit_filter=".[0:${LIMIT}]"
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+POLICY_JSON='{}'
+if [[ -x "$SCRIPT_DIR/policy.sh" ]]; then
+  POLICY_JSON=$(cd "$REPO_ROOT" && bash "$SCRIPT_DIR/policy.sh" json 2>/dev/null || printf '{}')
+fi
+
 eligible_tmp=$(mktemp)
 blocked_tmp=$(mktemp)
 cleanup() {

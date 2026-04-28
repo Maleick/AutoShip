@@ -24,17 +24,45 @@ active_count() {
   printf '%s\n' "$count"
 }
 
+config_value() {
+  local key="$1" default="$2"
+  local value=""
+  if [[ -f "$STATE_FILE" ]]; then
+    value=$(jq -r --arg key "$key" '.config[$key] // empty' "$STATE_FILE" 2>/dev/null || true)
+  fi
+  if [[ -z "$value" && -f "$AUTOSHIP_DIR/config.json" ]]; then
+    value=$(jq -r --arg key "$key" '.[$key] // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
+  fi
+  printf '%s\n' "${value:-$default}"
+}
+
+repo_is_rust() {
+  [[ -f "$REPO_ROOT/Cargo.toml" ]] || find "$REPO_ROOT" -maxdepth 2 -name Cargo.toml -print -quit 2>/dev/null | grep -q .
+}
+
+should_isolate_cargo_target() {
+  local threshold
+  threshold=$(config_value cargoTargetIsolationThreshold 8)
+  [[ "$MAX" =~ ^[0-9]+$ && "$threshold" =~ ^[0-9]+$ ]] || return 1
+  repo_is_rust || return 1
+  (( MAX > threshold ))
+}
+
 run_worker() {
   local model="$1"
-  env \
-    -u OPENCODE \
-    -u OPENCODE_CLIENT \
-    -u OPENCODE_PID \
-    -u OPENCODE_PROCESS_ROLE \
-    -u OPENCODE_RUN_ID \
-    -u OPENCODE_SERVER_PASSWORD \
-    -u OPENCODE_SERVER_USERNAME \
-    opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+  local cargo_target_dir=""
+  if should_isolate_cargo_target; then
+    cargo_target_dir="$PWD/target-isolated"
+  fi
+  if [[ -n "$cargo_target_dir" ]]; then
+    env CARGO_TARGET_DIR="$cargo_target_dir" \
+      -u OPENCODE -u OPENCODE_CLIENT -u OPENCODE_PID -u OPENCODE_PROCESS_ROLE -u OPENCODE_RUN_ID -u OPENCODE_SERVER_PASSWORD -u OPENCODE_SERVER_USERNAME \
+      opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+  else
+    env \
+      -u OPENCODE -u OPENCODE_CLIENT -u OPENCODE_PID -u OPENCODE_PROCESS_ROLE -u OPENCODE_RUN_ID -u OPENCODE_SERVER_PASSWORD -u OPENCODE_SERVER_USERNAME \
+      opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+  fi
 }
 
 is_billing_or_quota_failure() {
@@ -105,6 +133,39 @@ auto_commit_workspace_changes() {
     -c user.name="AutoShip" \
     -c user.email="autoship@local" \
     commit -m "autoship: ${issue_key} auto-commit" >> AUTOSHIP_RUNNER.log 2>&1 || true
+}
+
+has_non_runtime_changes() {
+  git status --porcelain | while IFS= read -r line; do
+    path="${line#???}"
+    case "$line" in R*|C*) path="${path#* -> }" ;; esac
+    case "$path" in
+      AUTOSHIP_PROMPT.md|AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|AUTOSHIP_VERIFICATION.log|BLOCKED_REASON.txt|model|role|routing-log.txt|started_at|status|worker.pid|target-isolated|target-isolated/*) ;;
+      *) printf '%s\n' "$path" ;;
+    esac
+  done | grep -q .
+}
+
+salvage_truncated_worker() {
+  local issue_key="$1"
+  local repo_root="$2"
+  local current=""
+  [[ -f status ]] && current=$(tr -d '[:space:]' < status)
+  case "$current" in COMPLETE|BLOCKED|STUCK) return 0 ;; esac
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  has_non_runtime_changes || return 1
+  auto_commit_workspace_changes "$issue_key"
+  if [[ ! -s AUTOSHIP_RESULT.md ]]; then
+    {
+      printf 'Implemented issue %s with salvaged worker changes.\n\n' "$issue_key"
+      printf 'The worker exited without a terminal AutoShip status after modifying implementation files. AutoShip committed the changed files for normal verification.\n'
+    } > AUTOSHIP_RESULT.md
+  fi
+  echo "COMPLETE" > status
+  if [[ -x "$repo_root/hooks/capture-failure.sh" ]]; then
+    bash "$repo_root/hooks/capture-failure.sh" salvaged_truncation "$issue_key" "error_summary=worker exited without terminal status but non-runtime changes were committed" 2>/dev/null || true
+  fi
+  return 0
 }
 
 is_test_path() {
@@ -244,7 +305,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
         if run_worker "$model" > AUTOSHIP_RUNNER.log 2>&1; then
           auto_commit_workspace_changes "$issue_id"
           reject_tests_only_complete "$issue_id" "$REPO_ROOT"
-          mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
+          salvage_truncated_worker "$issue_id" "$REPO_ROOT" || mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
         else
           if is_billing_or_quota_failure AUTOSHIP_RUNNER.log; then
             record_model_failure "$model" AUTOSHIP_RUNNER.log
@@ -255,7 +316,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
               if run_worker "$fallback_model" >> AUTOSHIP_RUNNER.log 2>&1; then
                 auto_commit_workspace_changes "$issue_id"
                 reject_tests_only_complete "$issue_id" "$REPO_ROOT"
-                mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
+                salvage_truncated_worker "$issue_id" "$REPO_ROOT" || mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
               else
                 echo "STUCK" > status
                 if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then

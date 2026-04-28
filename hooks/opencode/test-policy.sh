@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+source "$SCRIPT_DIR/test-fixtures/mock-opencode-models.sh"
+
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
   if [[ -n "${AUTOSHIP_FAILURE_ISSUE:-${AUTOSHIP_ISSUE_ID:-}}" && -x "$SCRIPT_DIR/../capture-failure.sh" ]]; then
@@ -73,6 +75,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 test -f "$REPO_ROOT/commands/autoship-setup.md" || fail "canonical /autoship-setup command file is installed"
 grep -F '| `/autoship-setup` |' "$REPO_ROOT/README.md" >/dev/null || fail "README public command table includes /autoship-setup"
 grep -F '| `/autoship-setup` |' "$REPO_ROOT/commands/autoship.md" >/dev/null || fail "/autoship command table includes /autoship-setup"
+grep -F 'cargoConcurrencyCap' "$REPO_ROOT/README.md" >/dev/null || fail "README documents cargo concurrency policy"
+grep -F 'high_throughput' "$REPO_ROOT/README.md" >/dev/null || fail "README documents high throughput merge strategy"
 
 ISSUES_FILE="$TMP_DIR/issues.json"
 cat > "$ISSUES_FILE" <<'JSON'
@@ -81,7 +85,8 @@ cat > "$ISSUES_FILE" <<'JSON'
   {"number": 746, "title": "low safe docs", "body": "update docs", "labels": [{"name": "agent:ready"}, {"name": "documentation"}, {"name": "size-s"}]},
   {"number": 748, "title": "VM fingerprint evasion research", "body": "hide hooks from anti-cheat detection", "labels": [{"name": "agent:ready"}, {"name": "security"}]},
   {"number": 749, "title": "middle safe bug", "body": "fix the setting", "labels": [{"name": "agent:ready"}, {"name": "bug"}]},
-  {"number": 750, "title": "already running", "body": "safe", "labels": [{"name": "agent:ready"}, {"name": "agent:running"}]}
+  {"number": 750, "title": "already running", "body": "safe", "labels": [{"name": "agent:ready"}, {"name": "agent:running"}]},
+  {"number": 751, "title": "Improve TUI Characters tab", "body": "Touch textquest/src/tui/characters_tab.rs", "labels": [{"name": "agent:ready"}, {"name": "tui"}]}
 ]
 JSON
 
@@ -90,8 +95,11 @@ bash "$SCRIPT_DIR/plan-issues.sh" --issues-file "$ISSUES_FILE" --limit 10 > "$PL
 
 eligible_numbers=$(jq -r '.eligible[].number' "$PLAN_OUTPUT" | paste -sd ' ' -)
 blocked_numbers=$(jq -r '.blocked[].number' "$PLAN_OUTPUT" | paste -sd ' ' -)
-assert_eq "746 748 749 2301" "$eligible_numbers" "eligible issues are sorted ascending and exclude only terminal/manual labels"
+assert_eq "746 748 749 751 2301" "$eligible_numbers" "eligible issues are sorted ascending and exclude only terminal/manual labels"
 assert_eq "" "$blocked_numbers" "content-based safety filter does not block issues"
+
+jq -e '.eligible[] | select(.number == 751 and (.probable_files | index("textquest/src/tui/characters_tab.rs")) and .overlap_cluster == null)' "$PLAN_OUTPUT" >/dev/null || fail "plan emits probable file metadata from literal paths"
+jq -e '.eligible[] | select(.number == 751) | has("probable_files") and has("overlap_cluster")' "$PLAN_OUTPUT" >/dev/null || fail "plan includes overlap metadata fields"
 
 limited_numbers=$(bash "$SCRIPT_DIR/plan-issues.sh" --issues-file "$ISSUES_FILE" --limit 2 | jq -r '.eligible[].number' | paste -sd ' ' -)
 assert_eq "746 748" "$limited_numbers" "plan limit caps eligible queue"
@@ -101,8 +109,15 @@ docs_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 2296 --title "mandate poison
 assert_eq "fix: Validate Discord webhook URLs (#2298)" "$fix_title" "bug/security title uses fix prefix"
 assert_eq "docs: mandate poison recovery pattern (#2296)" "$docs_title" "documentation title uses docs prefix"
 
+web_fix_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 3321 --title "Fix loot route error" --labels "bug,web,agent:ready")
+tui_feat_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 3322 --title "Add characters tab filter" --labels "tui,agent:ready")
+ci_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 3323 --title "Update validate workflow" --labels "ci-cd,agent:ready")
+assert_eq "fix(web): Fix loot route error (#3321)" "$web_fix_title" "bug/web title uses fix(web) prefix"
+assert_eq "feat(tui): Add characters tab filter (#3322)" "$tui_feat_title" "tui title uses feat(tui) prefix"
+assert_eq "ci: Update validate workflow (#3323)" "$ci_title" "ci-cd title uses ci prefix"
+
 PACKAGE_VERIFY_REPO="$TMP_DIR/package-verify-repo"
-mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks/opencode" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills/autoship-setup" "$PACKAGE_VERIFY_REPO/plugins" "$PACKAGE_VERIFY_REPO/.autoship"
+mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks/opencode" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills/autoship-setup" "$PACKAGE_VERIFY_REPO/plugins" "$PACKAGE_VERIFY_REPO/policies" "$PACKAGE_VERIFY_REPO/.autoship"
 cp "$SCRIPT_DIR/../../package.json" "$PACKAGE_VERIFY_REPO/package.json"
 jq '.files += [".autoship", "unintended.tmp"]' "$PACKAGE_VERIFY_REPO/package.json" > "$PACKAGE_VERIFY_REPO/package.json.tmp" && mv "$PACKAGE_VERIFY_REPO/package.json.tmp" "$PACKAGE_VERIFY_REPO/package.json"
 printf 'runtime state\n' > "$PACKAGE_VERIFY_REPO/.autoship/state.json"
@@ -116,6 +131,8 @@ printf 'command\n' > "$PACKAGE_VERIFY_REPO/commands/autoship-setup.md"
 printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-orchestrate.md"
 printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-setup/SKILL.md"
 printf 'plugin\n' > "$PACKAGE_VERIFY_REPO/plugins/autoship.ts"
+printf '{}\n' > "$PACKAGE_VERIFY_REPO/policies/default.json"
+printf '{}\n' > "$PACKAGE_VERIFY_REPO/policies/textquest.json"
 printf 'agents\n' > "$PACKAGE_VERIFY_REPO/AGENTS.md"
 printf '1.0.0\n' > "$PACKAGE_VERIFY_REPO/VERSION"
 printf 'readme\n' > "$PACKAGE_VERIFY_REPO/README.md"
@@ -128,6 +145,9 @@ printf 'license\n' > "$PACKAGE_VERIFY_REPO/LICENSE"
   rm -rf .autoship unintended.tmp
   cp "$SCRIPT_DIR/../../package.json" package.json
   bash "$SCRIPT_DIR/verify-package.sh" >/dev/null
+  package_files=$(npm pack --dry-run --json --ignore-scripts)
+  printf '%s\n' "$package_files" | jq -e '.[0].files | any(.path == "policies/default.json")' >/dev/null || fail "package verification includes default policy JSON"
+  printf '%s\n' "$package_files" | jq -e '.[0].files | any(.path == "policies/textquest.json")' >/dev/null || fail "package verification includes TextQuest policy JSON"
 )
 
 STATE_REPO="$TMP_DIR/repo"
@@ -135,7 +155,7 @@ mkdir -p "$STATE_REPO/.autoship/workspaces/issue-746" "$STATE_REPO/.autoship/wor
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-751"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-752"
 cat > "$STATE_REPO/.autoship/state.json" <<'JSON'
-{"config":{"maxConcurrentAgents":15},"issues":{"issue-746":{"state":"running"},"issue-749":{"state":"running"},"issue-750":{"state":"running"},"issue-751":{"state":"queued"}},"stats":{}}
+{"config":{"maxConcurrentAgents":15,"mergeStrategy":"high_throughput","policyProfile":"textquest"},"issues":{"issue-746":{"state":"running"},"issue-749":{"state":"running"},"issue-750":{"state":"running"},"issue-751":{"state":"queued"}},"stats":{}}
 JSON
 printf 'COMPLETE\n' > "$STATE_REPO/.autoship/workspaces/issue-746/status"
 printf 'BLOCKED\n' > "$STATE_REPO/.autoship/workspaces/issue-749/status"
@@ -166,6 +186,8 @@ printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Queued:    1' >/dev/null || fail "stat
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 0' >/dev/null || fail "status shows completed count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Blocked:   1' >/dev/null || fail "status shows blocked count"
 assert_eq "stuck" "$(jq -r '.issues["issue-750"].state' "$STATE_REPO/.autoship/state.json")" "status monitor refresh marks dead running worker stuck"
+printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Policy:     textquest' >/dev/null || fail "status shows policy profile"
+printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Merge:      high_throughput' >/dev/null || fail "status shows merge strategy"
 
 NO_RUNNING_REPO="$TMP_DIR/no-running-repo"
 mkdir -p "$NO_RUNNING_REPO/.autoship/workspaces/issue-999"
@@ -209,7 +231,7 @@ for _ in 1 2 3 4 5; do
   [[ "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issue-996/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "STUCK" "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issue-996/status")" "runner marks successful worker exit without terminal artifact as stuck"
+assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issue-996/status")" "runner salvages worker exit without terminal artifact when auto-commit was applied"
 if grep -F 'ENV_LEAK' "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_RUNNER.log" >/dev/null 2>&1; then
   fail "runner must unset parent OpenCode session environment before nested opencode run"
 fi
@@ -358,6 +380,77 @@ done
 assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" "runner keeps complete status after auto-committing production changes"
 assert_eq "2" "$(git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" rev-list --count HEAD)" "runner auto-commits worker changes before completion"
 git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" diff --quiet || fail "runner leaves no unstaged worker changes after auto-commit"
+
+CARGO_RUNNER_REPO="$TMP_DIR/cargo-runner-repo"
+mkdir -p "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401" "$CARGO_RUNNER_REPO/hooks/opencode" "$CARGO_RUNNER_REPO/hooks" "$CARGO_RUNNER_REPO/bin"
+git init -q "$CARGO_RUNNER_REPO"
+touch "$CARGO_RUNNER_REPO/Cargo.toml"
+cp "$SCRIPT_DIR/runner.sh" "$CARGO_RUNNER_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/policy.sh" "$CARGO_RUNNER_REPO/hooks/opencode/policy.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$CARGO_RUNNER_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$CARGO_RUNNER_REPO/hooks/capture-failure.sh"
+chmod +x "$CARGO_RUNNER_REPO/hooks/opencode/runner.sh" "$CARGO_RUNNER_REPO/hooks/update-state.sh" "$CARGO_RUNNER_REPO/hooks/capture-failure.sh"
+cat > "$CARGO_RUNNER_REPO/.autoship/state.json" <<'JSON'
+{"issues":{"issue-401":{"state":"queued","model":"opencode/test-free","role":"implementer","task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15,"cargoTargetIsolationThreshold":8}}
+JSON
+printf 'QUEUED\n' > "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status"
+printf 'test prompt\n' > "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' > "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/model"
+cat > "$CARGO_RUNNER_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+case "${CARGO_TARGET_DIR:-}" in
+  */target-isolated) printf 'COMPLETE\n' > status; printf 'cargo isolated\n' > AUTOSHIP_RESULT.md; exit 0 ;;
+  *) printf 'missing cargo isolation\n' >&2; exit 1 ;;
+esac
+SH
+chmod +x "$CARGO_RUNNER_REPO/bin/opencode"
+(
+  cd "$CARGO_RUNNER_REPO"
+  PATH="$CARGO_RUNNER_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' < "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status")" "runner sets isolated CARGO_TARGET_DIR above threshold"
+
+SALVAGE_REPO="$TMP_DIR/salvage-runner-repo"
+mkdir -p "$SALVAGE_REPO/.autoship/workspaces/issue-402" "$SALVAGE_REPO/hooks/opencode" "$SALVAGE_REPO/hooks" "$SALVAGE_REPO/bin"
+git init -q "$SALVAGE_REPO"
+cp "$SCRIPT_DIR/runner.sh" "$SALVAGE_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$SALVAGE_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$SALVAGE_REPO/hooks/capture-failure.sh"
+chmod +x "$SALVAGE_REPO/hooks/opencode/runner.sh" "$SALVAGE_REPO/hooks/update-state.sh" "$SALVAGE_REPO/hooks/capture-failure.sh"
+git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" init -q
+git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" config user.email autoship@example.invalid
+git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" config user.name AutoShip
+mkdir -p "$SALVAGE_REPO/.autoship/workspaces/issue-402/src"
+printf 'base\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/src/lib.rs"
+git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" add src/lib.rs
+git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" commit -q -m initial
+cat > "$SALVAGE_REPO/.autoship/state.json" <<'JSON'
+{"issues":{"issue-402":{"state":"queued","model":"opencode/test-free","role":"implementer","task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15,"truncationSalvage":true}}
+JSON
+printf 'QUEUED\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/status"
+printf 'test prompt\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/model"
+cat > "$SALVAGE_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+printf 'salvaged\n' >> src/lib.rs
+exit 0
+SH
+chmod +x "$SALVAGE_REPO/bin/opencode"
+(
+  cd "$SALVAGE_REPO"
+  PATH="$SALVAGE_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' < "$SALVAGE_REPO/.autoship/workspaces/issue-402/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$SALVAGE_REPO/.autoship/workspaces/issue-402/status")" "runner salvages truncated worker with implementation changes"
+test -s "$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_RESULT.md" || fail "salvage writes AUTOSHIP_RESULT.md"
+assert_eq "2" "$(git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" rev-list --count HEAD)" "salvage commits worker changes"
 
 TESTS_ONLY_REPO="$TMP_DIR/tests-only-runner-repo"
 mkdir -p "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" "$TESTS_ONLY_REPO/hooks/opencode" "$TESTS_ONLY_REPO/hooks" "$TESTS_ONLY_REPO/bin"
@@ -993,6 +1086,37 @@ chmod +x "$SETUP_REPO/bin/opencode"
   jq -e '.roles.lead == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup accepts lead model override via AUTOSHIP_LEAD_MODEL"
 )
 
+OVERRIDE_POLICY_REPO="$TMP_DIR/override-policy-repo"
+mkdir -p "$OVERRIDE_POLICY_REPO/bin"
+cp -R "$SETUP_REPO/autoship" "$OVERRIDE_POLICY_REPO/autoship"
+install_mock_opencode_models_fixture "$OVERRIDE_POLICY_REPO/bin"
+(
+  cd "$OVERRIDE_POLICY_REPO/autoship"
+  AUTOSHIP_CARGO_CONCURRENCY_CAP=6 AUTOSHIP_CARGO_TARGET_ISOLATION_THRESHOLD=11 AUTOSHIP_CARGO_TIMEOUT_SECONDS=75 AUTOSHIP_MERGE_STRATEGY=high_throughput AUTOSHIP_POLICY_PROFILE=textquest PATH="$OVERRIDE_POLICY_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null
+  jq -e '.cargoConcurrencyCap == 6 and .cargoTargetIsolationThreshold == 11 and .cargoTimeoutSeconds == 75 and .mergeStrategy == "high_throughput" and .policyProfile == "textquest"' .autoship/config.json >/dev/null
+) || fail "setup honors burndown policy environment overrides"
+
+POLICY_REPO="$TMP_DIR/policy-repo"
+mkdir -p "$POLICY_REPO/hooks/opencode" "$POLICY_REPO/policies" "$POLICY_REPO/.autoship"
+cp "$SCRIPT_DIR/policy.sh" "$POLICY_REPO/hooks/opencode/policy.sh"
+cp "$SCRIPT_DIR/../../policies/default.json" "$POLICY_REPO/policies/default.json"
+cp "$SCRIPT_DIR/../../policies/textquest.json" "$POLICY_REPO/policies/textquest.json"
+cat > "$POLICY_REPO/.autoship/config.json" <<'JSON'
+{"policyProfile":"textquest","mergeStrategy":"high_throughput","cargoConcurrencyCap":6,"cargoTargetIsolationThreshold":9,"cargoTimeoutSeconds":90,"quotaRouting":false}
+JSON
+assert_eq "textquest" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh profile)" "policy loader reads configured profile"
+assert_eq "6" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value cargoConcurrencyCap)" "policy loader prefers config cargo cap"
+assert_eq "9" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value cargoTargetIsolationThreshold)" "policy loader prefers config target isolation threshold"
+assert_eq "90" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value cargoTimeoutSeconds)" "policy loader prefers config cargo timeout"
+assert_eq "high_throughput" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value mergeStrategy)" "policy loader reads merge strategy"
+assert_eq "false" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value quotaRouting)" "policy loader reads quota routing"
+assert_eq "[self-hosted, Linux, textquest]" "$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh value workflowRunnerDefault)" "policy loader reads TextQuest runner policy"
+policy_json_output=$(cd "$POLICY_REPO" && bash hooks/opencode/policy.sh json)
+assert_eq "6" "$(printf '%s\n' "$policy_json_output" | jq -r '.cargoConcurrencyCap')" "policy json applies config cargo cap override"
+assert_eq "90" "$(printf '%s\n' "$policy_json_output" | jq -r '.cargoTimeoutSeconds')" "policy json applies config cargo timeout override"
+assert_eq "false" "$(printf '%s\n' "$policy_json_output" | jq -r '.quotaRouting')" "policy json applies config quota routing override"
+assert_eq "[self-hosted, Linux, textquest]" "$(printf '%s\n' "$policy_json_output" | jq -r '.workflowRunnerDefault')" "policy json preserves profile policy values"
+
 SELECT_REPO="$TMP_DIR/select-repo"
 mkdir -p "$SELECT_REPO/.autoship" "$SELECT_REPO/hooks/opencode"
 cp "$SCRIPT_DIR/select-model.sh" "$SELECT_REPO/hooks/opencode/select-model.sh"
@@ -1078,7 +1202,32 @@ JSON
 
 ROUTING_LOG_COMPLEX=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log complex 102)
 assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "final_selection: openai/gpt-5.3-codex-spark" && echo "true" || echo "false")" "routing log shows Spark for complex task"
-assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "Spark model selected for complex task" && echo "true" || echo "false")" "routing log shows escalation reason for Spark"
+assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "Spark model excluded by default" && echo "true" || echo "false")" "routing log shows Spark exclusion reason"
+
+TOOLS_REPO="$TMP_DIR/tools-repo"
+mkdir -p "$TOOLS_REPO/bin" "$TOOLS_REPO/.autoship" "$TOOLS_REPO/hooks"
+git init -q "$TOOLS_REPO"
+cp "$SCRIPT_DIR/../detect-tools.sh" "$TOOLS_REPO/hooks/detect-tools.sh"
+cat > "$TOOLS_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+case "$1" in --version) printf 'opencode 1.0\n' ;; *) printf 'ok\n' ;; esac
+SH
+cat > "$TOOLS_REPO/bin/gemini" <<'SH'
+#!/usr/bin/env bash
+printf 'gemini ok\n'
+SH
+cat > "$TOOLS_REPO/bin/codex" <<'SH'
+#!/usr/bin/env bash
+printf 'codex ok\n'
+SH
+chmod +x "$TOOLS_REPO/bin/opencode" "$TOOLS_REPO/bin/gemini" "$TOOLS_REPO/bin/codex"
+TOOLS_JSON=$(cd "$TOOLS_REPO" && PATH="$TOOLS_REPO/bin:$PATH" bash hooks/detect-tools.sh)
+jq -e '.opencode.available == true and .gemini.available == true and .codex.available == true and .codex.requires_bypass_opt_in == true' <<< "$TOOLS_JSON" >/dev/null || fail "detect-tools records opencode, gemini, and codex availability"
+
+cat > "$SELECT_REPO/.autoship/model-routing.json" <<'JSON'
+{"models":[{"id":"openai/gpt-5.3-codex-spark","cost":"selected","strength":95,"max_task_types":["complex"]},{"id":"opencode/free-safe","cost":"free","strength":80,"max_task_types":["complex"]}]}
+JSON
+assert_eq "opencode/free-safe" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh complex 109)" "selector avoids Spark by default"
 
 UPDATE_REPO="$TMP_DIR/update-repo"
 mkdir -p "$UPDATE_REPO/.autoship" "$UPDATE_REPO/bin" "$UPDATE_REPO/hooks"
@@ -1417,5 +1566,97 @@ printf 'v0.0.0\n' > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
 assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'GitHub release tag marker'
 
 bash "$SCRIPT_DIR/test-model-parsing.sh" >/dev/null
+
+PROMPT_REPO="$TMP_DIR/prompt-repo"
+mkdir -p "$PROMPT_REPO/hooks/opencode" "$PROMPT_REPO/hooks" "$PROMPT_REPO/policies" "$PROMPT_REPO/.autoship" "$PROMPT_REPO/bin"
+git init -q "$PROMPT_REPO"
+cp "$SCRIPT_DIR/dispatch.sh" "$PROMPT_REPO/hooks/opencode/dispatch.sh"
+cp "$SCRIPT_DIR/create-worktree.sh" "$PROMPT_REPO/hooks/opencode/create-worktree.sh"
+cp "$SCRIPT_DIR/pr-title.sh" "$PROMPT_REPO/hooks/opencode/pr-title.sh"
+cp "$SCRIPT_DIR/policy.sh" "$PROMPT_REPO/hooks/opencode/policy.sh" || true
+cp "$SCRIPT_DIR/prompt-policy.sh" "$PROMPT_REPO/hooks/opencode/prompt-policy.sh" 2>/dev/null || true
+cp "$SCRIPT_DIR/../update-state.sh" "$PROMPT_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../../policies/default.json" "$PROMPT_REPO/policies/default.json"
+cp "$SCRIPT_DIR/../../policies/textquest.json" "$PROMPT_REPO/policies/textquest.json"
+cat > "$PROMPT_REPO/.autoship/state.json" <<'JSON'
+{"issues":{},"stats":{},"config":{"maxConcurrentAgents":15,"policyProfile":"textquest","cargoTimeoutSeconds":120,"cargoTargetIsolationThreshold":8}}
+JSON
+echo '{"policyProfile":"textquest"}' > "$PROMPT_REPO/.autoship/config.json"
+cat > "$PROMPT_REPO/.autoship/model-routing.json" <<'JSON'
+{"models":[{"id":"opencode/test-free","cost":"free","strength":80,"max_task_types":["medium_code"]}]}
+JSON
+cat > "$PROMPT_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "issue view" ]]; then
+  case "$*" in
+    *title*) printf 'Add field to AppState and update workflow\n' ;;
+    *body*) printf 'Add a field to textquest-web::AppState and a GitHub Actions workflow.\n' ;;
+    *labels*) printf 'web,agent:ready\n' ;;
+  esac
+fi
+SH
+chmod +x "$PROMPT_REPO/bin/gh" "$PROMPT_REPO/hooks/opencode/dispatch.sh" "$PROMPT_REPO/hooks/opencode/create-worktree.sh"
+(
+  cd "$PROMPT_REPO"
+  PATH="$PROMPT_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 321 medium_code >/dev/null
+)
+assert_file_contains "$PROMPT_REPO/.autoship/workspaces/issue-321/AUTOSHIP_PROMPT.md" "Do NOT cd anywhere else" "dispatch prompt includes cwd lock"
+assert_file_contains "$PROMPT_REPO/.autoship/workspaces/issue-321/AUTOSHIP_PROMPT.md" "CARGO_TARGET_DIR" "dispatch prompt includes cargo target isolation guidance"
+assert_file_contains "$PROMPT_REPO/.autoship/workspaces/issue-321/AUTOSHIP_PROMPT.md" "textquest-web/src/test_support.rs:28" "dispatch prompt includes hot fixture registry"
+assert_file_contains "$PROMPT_REPO/.autoship/workspaces/issue-321/AUTOSHIP_PROMPT.md" "[self-hosted, Linux, textquest]" "dispatch prompt includes workflow runner policy"
+
+VERIFY_POLICY_REPO="$TMP_DIR/verify-policy-repo"
+mkdir -p "$VERIFY_POLICY_REPO/hooks/opencode" "$VERIFY_POLICY_REPO/policies" "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501/.github/workflows"
+git init -q "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501"
+cp "$SCRIPT_DIR/policy.sh" "$VERIFY_POLICY_REPO/hooks/opencode/policy.sh"
+cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_POLICY_REPO/hooks/opencode/policy-verify.sh"
+cp "$SCRIPT_DIR/../../policies/default.json" "$VERIFY_POLICY_REPO/policies/default.json"
+cp "$SCRIPT_DIR/../../policies/textquest.json" "$VERIFY_POLICY_REPO/policies/textquest.json"
+cat > "$VERIFY_POLICY_REPO/.autoship/config.json" <<'JSON'
+{"policyProfile":"textquest"}
+JSON
+cat > "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501/.github/workflows/new.yml" <<'YAML'
+name: Bad
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+YAML
+(
+  cd "$VERIFY_POLICY_REPO/.autoship/workspaces/issue-501"
+  git add .github/workflows/new.yml
+  git commit -q -m initial
+)
+if (cd "$VERIFY_POLICY_REPO" && bash hooks/opencode/policy-verify.sh .autoship/workspaces/issue-501 >/dev/null 2>&1); then
+  fail "policy verification should reject ubuntu-latest for TextQuest"
+fi
+
+SANITIZED_FLOW="$TMP_DIR/sanitized-workflow"
+mkdir -p "$SANITIZED_FLOW/.autoship/workspaces/issue-502/.github/workflows" "$SANITIZED_FLOW/policies" "$SANITIZED_FLOW/hooks/opencode"
+git init -q "$SANITIZED_FLOW/.autoship/workspaces/issue-502"
+cp "$SCRIPT_DIR/policy.sh" "$SANITIZED_FLOW/hooks/opencode/policy.sh"
+cp "$SCRIPT_DIR/policy-verify.sh" "$SANITIZED_FLOW/hooks/opencode/policy-verify.sh"
+cp "$SCRIPT_DIR/../../policies/default.json" "$SANITIZED_FLOW/policies/default.json"
+cp "$SCRIPT_DIR/../../policies/textquest.json" "$SANITIZED_FLOW/policies/textquest.json"
+cat > "$SANITIZED_FLOW/.autoship/config.json" <<'JSON'
+{"policyProfile":"textquest"}
+JSON
+cat > "$SANITIZED_FLOW/.autoship/workspaces/issue-502/.github/workflows/good.yml" <<'YAML'
+name: Good
+on: push
+jobs:
+  test:
+    runs-on: [self-hosted, Linux, textquest]
+    steps:
+      - run: true
+YAML
+(
+  cd "$SANITIZED_FLOW/.autoship/workspaces/issue-502"
+  git add .github/workflows/good.yml
+  git commit -q -m initial
+)
+(cd "$SANITIZED_FLOW" && bash hooks/opencode/policy-verify.sh .autoship/workspaces/issue-502 >/dev/null 2>&1) || fail "policy verification should accept self-hosted runner"
 
 echo "OpenCode policy tests passed"

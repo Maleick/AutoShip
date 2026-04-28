@@ -67,6 +67,12 @@ if git -C "$GIT_WORKTREE" rev-parse --verify HEAD~1 >/dev/null 2>&1 && ! git -C 
 fi
 [[ "$has_diff" == true ]] || fail "git diff is empty"
 
+if [[ -x "$SCRIPT_DIR/policy-verify.sh" ]]; then
+  if ! bash "$SCRIPT_DIR/policy-verify.sh" "$GIT_WORKTREE" >> "$LOG_PATH" 2>&1; then
+    fail "policy verification failed"
+  fi
+fi
+
 if [[ -n "$TEST_COMMAND" && "$TEST_COMMAND" != "none" ]]; then
   read -r -a test_cmd_parts <<< "$TEST_COMMAND"
   [[ "${#test_cmd_parts[@]}" -gt 0 ]] || fail "test command is empty"

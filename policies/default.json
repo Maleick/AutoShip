@@ -1,0 +1,20 @@
+{
+  "profile": "default",
+  "cargoConcurrencyCap": 8,
+  "cargoTargetIsolationThreshold": 8,
+  "cargoTimeoutSeconds": 120,
+  "mergeStrategy": "safe",
+  "quotaRouting": true,
+  "workerCwdLock": true,
+  "truncationSalvage": true,
+  "workflowRunnerDefault": "",
+  "titleScopes": {
+    "combat": "combat",
+    "tui": "tui",
+    "web": "web",
+    "ci-cd": "ci"
+  },
+  "hotStructs": {},
+  "knownEnums": [],
+  "overlapClusters": []
+}

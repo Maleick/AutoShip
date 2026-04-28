@@ -1,0 +1,34 @@
+{
+  "profile": "textquest",
+  "extends": "default",
+  "workflowRunnerDefault": "[self-hosted, Linux, textquest]",
+  "hotStructs": {
+    "textquest-web::AppState": [
+      "textquest-web/src/main.rs:1031",
+      "textquest-web/src/main.rs:~1069",
+      "textquest-web/src/test_support.rs:28",
+      "textquest-web/src/api/auto_group.rs:382",
+      "textquest-web/src/api/loot.rs:988",
+      "textquest-web/src/api/session_control.rs:646"
+    ],
+    "textquest-common::SharedStateFrame": [
+      "textquest/src/spawn_watcher.rs:163"
+    ],
+    "textquest-dll::combat::GroupMemberState": [
+      "textquest-dll/src/combat/strategy.rs:1245",
+      "textquest-dll/src/combat/state.rs:1816",
+      "textquest-dll/src/combat/classes/cleric.rs:490",
+      "textquest-dll/src/combat/classes/druid.rs:419",
+      "textquest-dll/src/combat/classes/paladin.rs:676",
+      "textquest-dll/src/combat/classes/shaman.rs:618"
+    ]
+  },
+  "knownEnums": ["MetricValue", "LoginPhase"],
+  "overlapClusters": [
+    {"name": "tui-characters", "keywords": ["Characters tab", "characters_tab", "textquest/src/tui/characters_tab.rs"], "files": ["textquest/src/tui/characters_tab.rs", "textquest/src/tui/app.rs"]},
+    {"name": "tui-map", "keywords": ["map renderer", "textquest/src/tui/ui/map.rs"], "files": ["textquest/src/tui/ui/map.rs"]},
+    {"name": "ae-coordinator", "keywords": ["AeCoordinator"], "files": ["textquest-soul/src/llm/api_client.rs"]},
+    {"name": "dkp-routes", "keywords": ["DKP", "dkp_routes"], "files": ["textquest-web/src/api/dkp_routes.rs"]},
+    {"name": "group-verbs", "keywords": ["group verbs", "formation"], "files": ["textquest-dll/src/group/formation.rs"]}
+  ]
+}

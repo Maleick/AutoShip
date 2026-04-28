@@ -24,6 +24,11 @@ if [[ -z "$LABELS" ]]; then
 fi
 
 labels_lower=$(printf '%s' "$LABELS" | tr '[:upper:]' '[:lower:]')
+scope=""
+if printf '%s' "$labels_lower" | grep -Eq 'combat'; then scope="combat"
+elif printf '%s' "$labels_lower" | grep -Eq 'tui'; then scope="tui"
+elif printf '%s' "$labels_lower" | grep -Eq 'web'; then scope="web"
+fi
 type="feat"
 
 if printf '%s' "$labels_lower" | grep -Eq 'bug|security|p0-critical|p1-high'; then
@@ -32,7 +37,7 @@ elif printf '%s' "$labels_lower" | grep -Eq 'documentation|docs'; then
   type="docs"
 elif printf '%s' "$labels_lower" | grep -Eq 'test|testing'; then
   type="test"
-elif printf '%s' "$labels_lower" | grep -Eq 'ci'; then
+elif printf '%s' "$labels_lower" | grep -Eq 'ci|ci-cd'; then
   type="ci"
 elif printf '%s' "$labels_lower" | grep -Eq 'style'; then
   type="style"
@@ -43,4 +48,8 @@ elif printf '%s' "$labels_lower" | grep -Eq 'chore|infrastructure'; then
 fi
 
 clean_title=$(printf '%s' "$TITLE" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^(feat|fix|docs|style|refactor|test|chore|ci)(\([^)]*\))?:[[:space:]]*//I; s/[[:space:]]*\(#[0-9]+\)$//')
-printf '%s: %s (#%s)\n' "$type" "$clean_title" "$ISSUE"
+if [[ -n "$scope" && "$type" != "docs" && "$type" != "ci" && "$type" != "test" && "$type" != "chore" ]]; then
+  printf '%s(%s): %s (#%s)\n' "$type" "$scope" "$clean_title" "$ISSUE"
+else
+  printf '%s: %s (#%s)\n' "$type" "$clean_title" "$ISSUE"
+fi
