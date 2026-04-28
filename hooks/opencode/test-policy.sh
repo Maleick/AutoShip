@@ -88,7 +88,7 @@ assert_eq "fix: Validate Discord webhook URLs (#2298)" "$fix_title" "bug/securit
 assert_eq "docs: mandate poison recovery pattern (#2296)" "$docs_title" "documentation title uses docs prefix"
 
 PACKAGE_VERIFY_REPO="$TMP_DIR/package-verify-repo"
-mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks/opencode" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills/autoship-setup" "$PACKAGE_VERIFY_REPO/plugins" "$PACKAGE_VERIFY_REPO/.autoship"
+mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks/opencode" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills/autoship-setup" "$PACKAGE_VERIFY_REPO/plugins" "$PACKAGE_VERIFY_REPO/policies" "$PACKAGE_VERIFY_REPO/.autoship"
 cp "$SCRIPT_DIR/../../package.json" "$PACKAGE_VERIFY_REPO/package.json"
 jq '.files += [".autoship", "unintended.tmp"]' "$PACKAGE_VERIFY_REPO/package.json" > "$PACKAGE_VERIFY_REPO/package.json.tmp" && mv "$PACKAGE_VERIFY_REPO/package.json.tmp" "$PACKAGE_VERIFY_REPO/package.json"
 printf 'runtime state\n' > "$PACKAGE_VERIFY_REPO/.autoship/state.json"
@@ -102,6 +102,8 @@ printf 'command\n' > "$PACKAGE_VERIFY_REPO/commands/autoship-setup.md"
 printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-orchestrate.md"
 printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-setup/SKILL.md"
 printf 'plugin\n' > "$PACKAGE_VERIFY_REPO/plugins/autoship.ts"
+printf '{"policy":"default"}\n' > "$PACKAGE_VERIFY_REPO/policies/default.json"
+printf '{"policy":"textquest"}\n' > "$PACKAGE_VERIFY_REPO/policies/textquest.json"
 printf 'agents\n' > "$PACKAGE_VERIFY_REPO/AGENTS.md"
 printf '1.0.0\n' > "$PACKAGE_VERIFY_REPO/VERSION"
 printf 'readme\n' > "$PACKAGE_VERIFY_REPO/README.md"
@@ -164,7 +166,7 @@ printf '%s\n' "$NO_RUNNING_STATUS" | grep -F 'AGENTS (0 active / 15 max)' >/dev/
 printf '%s\n' "$NO_RUNNING_STATUS" | grep -F 'STUCK:     1' >/dev/null || fail "status shows stuck workspace when none are running"
 
 RUNNER_REPO="$TMP_DIR/runner-repo"
-mkdir -p "$RUNNER_REPO/.autoship/workspaces/issue-996" "$RUNNER_REPO/hooks/opencode" "$RUNNER_REPO/hooks" "$RUNNER_REPO/bin"
+mkdir -p "$RUNNER_REPO/.autoship/workspaces/issue-996" "$RUNNER_REPO/.autoship/failures" "$RUNNER_REPO/hooks/opencode" "$RUNNER_REPO/hooks" "$RUNNER_REPO/bin"
 git init -q "$RUNNER_REPO"
 cp "$SCRIPT_DIR/runner.sh" "$RUNNER_REPO/hooks/opencode/runner.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$RUNNER_REPO/hooks/update-state.sh"
@@ -209,9 +211,9 @@ for _ in 1 2 3 4 5; do
   sleep 1
   artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
 done
-assert_eq "1" "$artifact_count" "runner captures a stuck worker failure artifact"
+assert_eq "1" "$artifact_count" "runner captures a salvaged truncation failure artifact"
 artifact_file=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' | head -1)
-jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "stuck" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
+jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "salvaged_truncation" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
 test -s "$RUNNER_REPO/.autoship/workspaces/issue-996/worker.pid" || fail "runner records worker pid for lifecycle monitoring"
 
 RETRY_REPO="$TMP_DIR/retry-limit-repo"
