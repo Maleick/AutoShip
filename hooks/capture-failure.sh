@@ -38,10 +38,10 @@ CATEGORY="${1:-usage}"
 shift
 
 case "$CATEGORY" in
-  stuck|failed_verification|reviewer_rejection|model_failure|e2e_failure) ;;
+  stuck|failed_verification|reviewer_rejection|model_failure|e2e_failure|salvaged_truncation) ;;
   *)
     echo "Usage: $0 <category> <issue-id> [key=value ...]" >&2
-    echo "Categories: stuck, failed_verification, reviewer_rejection, model_failure, e2e_failure" >&2
+    echo "Categories: stuck, failed_verification, reviewer_rejection, model_failure, e2e_failure, salvaged_truncation" >&2
     exit 1
     ;;
 esac
@@ -124,6 +124,9 @@ case "$CATEGORY" in
     ;;
   e2e_failure)
     HOOK="${HOOK:-hooks/opencode/smoke-test.sh}"
+    ;;
+  salvaged_truncation)
+    HOOK="${HOOK:-hooks/opencode/runner.sh}"
     ;;
 esac
 

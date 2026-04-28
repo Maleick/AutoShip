@@ -71,6 +71,18 @@ max_agents="${max_agents:-15}"
 if [[ ! "$max_agents" =~ ^[0-9]+$ ]]; then
   max_agents=15
 fi
+
+# Check system resources and potentially reduce concurrency cap
+if [[ -x "$SCRIPT_DIR/resource-monitor.sh" ]]; then
+  resource_info=$(bash "$SCRIPT_DIR/resource-monitor.sh" "$max_agents" 2>/dev/null || echo '{"load_status":"ok","recommended_max_concurrent":'$max_agents'}')
+  resource_status=$(echo "$resource_info" | jq -r '.load_status // "ok"')
+  recommended_max=$(echo "$resource_info" | jq -r '.recommended_max_concurrent // '$max_agents)
+  if [[ "$resource_status" != "ok" && "$recommended_max" =~ ^[0-9]+$ && "$recommended_max" -lt "$max_agents" ]]; then
+    echo "RESOURCE_${resource_status^^}: CPU/MEM load high, reducing concurrency from $max_agents to $recommended_max" >&2
+    max_agents="$recommended_max"
+  fi
+fi
+
 running=$(jq '[.issues | to_entries[] | select((.value.state // .value.status) == "running")] | length' "$STATE_FILE" 2>/dev/null || echo 0)
 # Validate running is numeric
 if [[ ! "$running" =~ ^[0-9]+$ ]]; then
@@ -124,6 +136,21 @@ resolve_role() {
 
 MODEL=$(resolve_model "$TASK_TYPE" "$ISSUE_NUM" "$MODEL_OVERRIDE")
 ROLE=$(resolve_role "$TASK_TYPE")
+
+# A/B testing: deterministically assign issue to group and optionally override model
+if [[ -x "$SCRIPT_DIR/ab-test.sh" ]]; then
+  ab_group=$(bash "$SCRIPT_DIR/ab-test.sh" assign "$ISSUE_KEY" "$TASK_TYPE" 2>/dev/null || echo "")
+  if [[ -n "$ab_group" && -f "$REPO_ROOT/.autoship/ab-test.json" ]]; then
+    ab_enabled=$(jq -r '.enabled // false' "$REPO_ROOT/.autoship/ab-test.json" 2>/dev/null || echo "false")
+    if [[ "$ab_enabled" == "true" && -z "$MODEL_OVERRIDE" ]]; then
+      ab_model=$(bash "$SCRIPT_DIR/ab-test.sh" select-model "$TASK_TYPE" "$ab_group" 2>/dev/null || echo "")
+      if [[ -n "$ab_model" ]]; then
+        MODEL="$ab_model"
+      fi
+    fi
+  fi
+fi
+
 if [[ -z "$MODEL" ]]; then
   mkdir -p "$WORKSPACE_PATH"
   printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
@@ -182,6 +209,7 @@ $(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUM" --title "$TITLE" --labels 
 EOF
 
 autoship_state_set set-queued "$ISSUE_KEY" agent="$MODEL" model="$MODEL" role="$ROLE" task_type="$TASK_TYPE"
+bash "$SCRIPT_DIR/metrics-collector.sh" record-dispatch "$ISSUE_KEY" "$MODEL" > /dev/null 2>&1 || true
 
 echo "Queued issue #$ISSUE_NUM for $MODEL ($TASK_TYPE, role=$ROLE)"
 [[ -n "$cap_note" ]] && echo "$cap_note"

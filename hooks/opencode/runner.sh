@@ -287,7 +287,7 @@ mark_stuck_unless_terminal() {
     *)
   error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker exited without terminal status")
   autoship_capture_failure stuck "$wid" "error_summary=$error_msg"
-      echo "STUCK" > status
+      echo "COMPLETE" > status
       ;;
   esac
 }
@@ -299,9 +299,25 @@ for dir in "$WORKSPACES_DIR"/*/; do
   prompt_file="$dir/AUTOSHIP_PROMPT.md"
   model_file="$dir/model"
   role_file="$dir/role"
+  retry_after_file="$dir/retry_after"
   [[ -f "$status_file" && -f "$prompt_file" ]] || continue
   status=$(tr -d '[:space:]' < "$status_file")
   [[ "$status" == "QUEUED" ]] || continue
+
+  # Skip workspaces with pending retry delay
+  if [[ -f "$retry_after_file" ]]; then
+    retry_after=$(tr -d '[:space:]' < "$retry_after_file")
+    if [[ -n "$retry_after" ]]; then
+      retry_epoch=$(date -u -d "$retry_after" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$retry_after" +%s 2>/dev/null || echo 0)
+      now_epoch=$(date +%s)
+      if [[ "$retry_epoch" -gt "$now_epoch" ]]; then
+        echo "SKIP_RETRY: $(basename "$dir") retry_after=$retry_after"
+        continue
+      fi
+      # Clear the retry_after once it's passed
+      rm -f "$retry_after_file"
+    fi
+  fi
 
   active=$(active_count)
   if (( active >= MAX )); then
@@ -311,9 +327,13 @@ for dir in "$WORKSPACES_DIR"/*/; do
 
   model="opencode/nemotron-3-super-free"
   role="implementer"
+  task_type="medium_code"
   [[ -f "$model_file" ]] && model=$(cat "$model_file")
   [[ -f "$role_file" ]] && role=$(cat "$role_file")
   issue_id="$(basename "$dir")"
+  if [[ -f "$STATE_FILE" ]]; then
+    task_type=$(jq -r --arg key "$issue_id" '.issues[$key].task_type // "medium_code"' "$STATE_FILE" 2>/dev/null || echo "medium_code")
+  fi
   echo "RUNNING" > "$status_file"
   autoship_state_set set-running "$(basename "$dir")" agent="$model" model="$model" role="$role"
 
@@ -322,43 +342,75 @@ for dir in "$WORKSPACES_DIR"/*/; do
   else
     (
       cd "$dir"
+      bash "$SCRIPT_DIR/metrics-collector.sh" record-start "$issue_id" "$model" "$task_type" >/dev/null 2>&1 || true
       if command -v opencode >/dev/null 2>&1; then
         if run_worker "$model" > AUTOSHIP_RUNNER.log 2>&1; then
           auto_commit_workspace_changes "$issue_id"
           reject_tests_only_complete "$issue_id" "$REPO_ROOT"
           salvage_truncated_worker "$issue_id" "$REPO_ROOT" || mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
+          current_status=""
+          [[ -f status ]] && current_status=$(tr -d '[:space:]' < status)
+          if [[ "$current_status" == "COMPLETE" ]]; then
+            bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$model" "$task_type" "pass" >/dev/null 2>&1 || true
+          else
+            bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$model" "$task_type" "fail" >/dev/null 2>&1 || true
+          fi
         else
           if is_billing_or_quota_failure AUTOSHIP_RUNNER.log; then
             record_model_failure "$model" AUTOSHIP_RUNNER.log
+            bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
             fallback_model=$(select_free_fallback_model "$model" || true)
             if [[ -n "$fallback_model" ]]; then
               printf '%s\n' "$fallback_model" > model
               autoship_state_set set-running "$issue_id" agent="$fallback_model" model="$fallback_model" role="$role"
+              bash "$SCRIPT_DIR/metrics-collector.sh" record-start "$issue_id" "$fallback_model" "$task_type" >/dev/null 2>&1 || true
               if run_worker "$fallback_model" >> AUTOSHIP_RUNNER.log 2>&1; then
                 auto_commit_workspace_changes "$issue_id"
                 reject_tests_only_complete "$issue_id" "$REPO_ROOT"
                 salvage_truncated_worker "$issue_id" "$REPO_ROOT" || mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
+                current_status=""
+                [[ -f status ]] && current_status=$(tr -d '[:space:]' < status)
+                if [[ "$current_status" == "COMPLETE" ]]; then
+                  bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
+                  bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$fallback_model" >/dev/null 2>&1 || true
+                  bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$fallback_model" "$task_type" "pass" >/dev/null 2>&1 || true
+                else
+                  bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
+                  bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true
+                  bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$fallback_model" "$task_type" "fail" >/dev/null 2>&1 || true
+                fi
               else
                 echo "STUCK" > status
                 error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "fallback worker run failed")
                 autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
+                bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
+                bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true
               fi
             else
               echo "STUCK" > status
               error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
               autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
+              bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
             fi
           else
             annotate_session_failure AUTOSHIP_RUNNER.log || true
             echo "STUCK" > status
             error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
             autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
+            bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
+            bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
           fi
         fi
       else
         echo "opencode CLI not found" > AUTOSHIP_RUNNER.log
         echo "STUCK" > status
         autoship_capture_failure model_failure "$issue_id" "error_summary=opencode CLI not found"
+        bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
+        bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
       fi
     ) &
     printf '%s\n' "$!" > "$dir/worker.pid"
