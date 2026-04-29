@@ -193,7 +193,7 @@ create_verified_pr() {
 
   generate_pr_body "$issue"
 
-  git -C "$workspace" add -A -- .
+  git -C "$workspace" add -A -- . ":!.autoship"
   if git -C "$workspace" diff --cached --quiet; then
     return 1
   fi
