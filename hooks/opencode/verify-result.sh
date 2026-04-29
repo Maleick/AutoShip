@@ -64,6 +64,15 @@ if [[ -n "$TEST_COMMAND" && "$TEST_COMMAND" != "none" ]]; then
   fi
 fi
 
+
+if [[ -f "$SCRIPT_DIR/policy-verify.sh" ]]; then
+  if ! bash "$SCRIPT_DIR/policy-verify.sh" "$GIT_WORKTREE" >> "$LOG_PATH" 2>&1; then
+    fail "policy verification failed"
+  fi
+else
+  fail "policy verification script missing"
+fi
+
 reviewer_output=$(mktemp)
 if ! bash "$SCRIPT_DIR/reviewer.sh" "$ISSUE_KEY" "$WORKTREE_PATH" "$RESULT_PATH" "$TEST_COMMAND" > "$reviewer_output" 2>&1; then
   cp "$reviewer_output" "$LOG_PATH" 2>/dev/null || true
