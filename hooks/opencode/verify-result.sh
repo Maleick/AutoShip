@@ -56,7 +56,8 @@ fi
 
 if [[ -n "$TEST_COMMAND" && "$TEST_COMMAND" != "none" ]]; then
   # Validate test_command is a simple command, not a shell injection vector
-  if [[ "$TEST_COMMAND" =~ [;&|] ]]; then
+  local forbidden='[;&|]'
+  if [[ "$TEST_COMMAND" =~ $forbidden ]]; then
     fail "test command contains shell metacharacters"
   fi
   if ! (cd "$GIT_WORKTREE" && bash -c "$TEST_COMMAND") >> "$LOG_PATH" 2>&1; then

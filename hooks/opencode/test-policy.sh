@@ -135,6 +135,7 @@ printf 'license\n' > "$PACKAGE_VERIFY_REPO/LICENSE"
 )
 
 STATE_REPO="$TMP_DIR/repo"
+git init -q "$STATE_REPO"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-746" "$STATE_REPO/.autoship/workspaces/issue-749" "$STATE_REPO/.autoship/workspaces/issue-750"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-751"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-752"
@@ -172,6 +173,7 @@ printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Blocked:   1' >/dev/null || fail "stat
 assert_eq "stuck" "$(jq -r '.issues["issue-750"].state' "$STATE_REPO/.autoship/state.json")" "status monitor refresh marks dead running worker stuck"
 
 NO_RUNNING_REPO="$TMP_DIR/no-running-repo"
+git init -q "$NO_RUNNING_REPO"
 mkdir -p "$NO_RUNNING_REPO/.autoship/workspaces/issue-999"
 cat > "$NO_RUNNING_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-999":{"state":"stuck"}},"stats":{"failed":1},"config":{"maxConcurrentAgents":15}}
@@ -733,6 +735,7 @@ git -C "$VERIFY_HOOK_PASS_REPO" add feature.txt
 git -C "$VERIFY_HOOK_PASS_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_PASS_REPO/hooks/opencode/verify-result.sh"
 chmod +x "$VERIFY_HOOK_PASS_REPO/hooks/opencode/verify-result.sh"
+cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_PASS_REPO/hooks/opencode/policy-verify.sh"
 cat > "$VERIFY_HOOK_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
@@ -762,6 +765,7 @@ git -C "$VERIFY_HOOK_FAIL_REPO" add feature.txt
 git -C "$VERIFY_HOOK_FAIL_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/verify-result.sh"
 chmod +x "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/verify-result.sh"
+cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/policy-verify.sh"
 cat > "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
@@ -793,6 +797,7 @@ git -C "$VERIFY_HOOK_TEST_FAIL_REPO" add feature.txt
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/verify-result.sh"
 chmod +x "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/verify-result.sh"
+cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/policy-verify.sh"
 cat > "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
