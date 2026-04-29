@@ -56,6 +56,22 @@ assert_canonical_inventory() {
 assert_canonical_inventory
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+POLICY_REPO="$TMP_DIR/policy-repo"
+mkdir -p "$POLICY_REPO/.autoship" "$POLICY_REPO/hooks/opencode" "$POLICY_REPO/policies"
+git init -q "$POLICY_REPO"
+cp "$SCRIPT_DIR/policy.sh" "$POLICY_REPO/hooks/opencode/policy.sh"
+cp "$REPO_ROOT/policies/default.json" "$POLICY_REPO/policies/default.json"
+(
+  cd "$POLICY_REPO"
+  printf '{broken json\n' > .autoship/config.json
+  bash hooks/opencode/policy.sh json >/dev/null || fail "policy json falls back when config is malformed"
+  assert_eq "8" "$(bash hooks/opencode/policy.sh value cargoConcurrencyCap)" "policy value falls back when config is malformed"
+  printf '"bad-type"\n' > .autoship/config.json
+  bash hooks/opencode/policy.sh json >/dev/null || fail "policy json falls back when config is non-object"
+  assert_eq "8" "$(bash hooks/opencode/policy.sh value cargoConcurrencyCap)" "policy value falls back when config is non-object"
+)
+
 test -f "$REPO_ROOT/commands/autoship-setup.md" || fail "canonical /autoship-setup command file is installed"
 grep -F '| `/autoship-setup` |' "$REPO_ROOT/README.md" >/dev/null || fail "README public command table includes /autoship-setup"
 grep -F '| `/autoship-setup` |' "$REPO_ROOT/commands/autoship.md" >/dev/null || fail "/autoship command table includes /autoship-setup"

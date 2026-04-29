@@ -40,7 +40,13 @@ policy_json() {
 effective_policy_json() {
   local config_filter='with_entries(select(.key as $key | ["cargoConcurrencyCap", "cargoTargetIsolationThreshold", "cargoTimeoutSeconds", "mergeStrategy", "quotaRouting", "workerCwdLock", "truncationSalvage", "workflowRunnerDefault"] | index($key)))'
   if [[ -f "$CONFIG_FILE" ]]; then
-    policy_json | jq --slurpfile config "$CONFIG_FILE" ". * (\$config[0] | $config_filter)"
+    local config_override
+    config_override=$(jq -c "$config_filter" "$CONFIG_FILE" 2>/dev/null || true)
+    if [[ -n "$config_override" ]]; then
+      policy_json | jq --argjson config "$config_override" '. * $config'
+    else
+      policy_json
+    fi
   else
     policy_json
   fi
