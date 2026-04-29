@@ -109,8 +109,9 @@ run_worker() {
     cargo_target_dir="$PWD/target-isolated"
   fi
   if [[ -n "$cargo_target_dir" ]]; then
-    env CARGO_TARGET_DIR="$cargo_target_dir" \
+    env \
       -u OPENCODE -u OPENCODE_CLIENT -u OPENCODE_PID -u OPENCODE_PROCESS_ROLE -u OPENCODE_RUN_ID -u OPENCODE_SERVER_PASSWORD -u OPENCODE_SERVER_USERNAME \
+      CARGO_TARGET_DIR="$cargo_target_dir" \
       opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
   else
     env \
