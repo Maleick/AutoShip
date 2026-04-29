@@ -6,7 +6,10 @@ set -euo pipefail
 
 # ── Repo root detection ──────────────────────────────────────────
 autoship_repo_root() {
-  git rev-parse --show-toplevel 2>/dev/null || pwd
+  git rev-parse --show-toplevel 2>/dev/null || {
+    echo "Error: not inside a git repository" >&2
+    return 1
+  }
 }
 
 # ── Script directory detection ───────────────────────────────────
