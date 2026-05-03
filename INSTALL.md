@@ -1,6 +1,13 @@
 # Install AutoShip
 
-AutoShip is an OpenCode plugin that turns GitHub issues into verified pull requests. It plans eligible issues, dispatches OpenCode workers, verifies results, and creates pull requests with local runtime state in `.autoship/`.
+AutoShip is a multi-runtime plugin that turns GitHub issues into verified pull requests. It plans eligible issues, dispatches workers (OpenCode or Hermes), verifies results, and creates pull requests with local runtime state in `.autoship/`.
+
+## Supported Runtimes
+
+| Runtime | Type | Max Workers | Label | Setup |
+|---------|------|-------------|-------|-------|
+| **OpenCode** | Interactive CLI | 15 | `agent:ready` | `opencode-autoship install` |
+| **Hermes** | Cron-based | 3 | `autoship:ready-simple` | `bash hooks/hermes/setup.sh` |
 
 ## OpenCode Handoff
 
@@ -12,12 +19,13 @@ Fetch and follow instructions from https://raw.githubusercontent.com/Maleick/Aut
 
 ## Prerequisites
 
-- OpenCode installed and available in your shell.
+- OpenCode installed and available in your shell (for OpenCode runtime).
+- Hermes Agent installed and configured (for Hermes runtime).
 - Node.js 18 or newer with npm, or Bun for one-time package execution.
 - Git installed and available in your shell.
 - GitHub CLI (`gh`) authenticated with access to the target repository.
 - `jq` installed and available on `PATH`.
-- A GitHub repository with issues labeled `agent:ready`.
+- A GitHub repository with issues labeled `agent:ready` (OpenCode) or `autoship:ready-simple` (Hermes).
 
 ## npm Global Install
 
@@ -130,8 +138,33 @@ opencode-autoship install
 ### No Issues Are Planned
 
 - Confirm `gh auth status` succeeds.
-- Confirm the repository has open GitHub issues labeled `agent:ready`.
-- Check `/autoship-plan` before starting `/autoship`.
+- Confirm the repository has open GitHub issues labeled `agent:ready` (OpenCode) or `autoship:ready-simple` (Hermes).
+- Check `/autoship-plan` (OpenCode) or `bash hooks/hermes/plan-issues.sh` (Hermes) before starting.
+
+### Hermes Runtime Issues
+
+- Confirm Hermes CLI is installed: `hermes --version`
+- Confirm `~/.hermes/config.yaml` has a valid provider and model configured.
+- Run `bash hooks/hermes/setup.sh` to verify Hermes detection.
+- Check `bash hooks/hermes/status.sh` for workspace state.
+
+## Hermes Quick Start
+
+```bash
+# 1. Navigate to AutoShip repo
+cd ~/projects/AutoShip
+
+# 2. Setup Hermes runtime
+bash hooks/hermes/setup.sh
+
+# 3. Plan issues for your target repo
+HERMES_TARGET_REPO=your-org/your-repo bash hooks/hermes/plan-issues.sh
+
+# 4. Dispatch an issue to Hermes
+bash hooks/hermes/dispatch.sh <issue-number>
+
+# 5. The Hermes cron will pick up queued issues and implement them
+```
 
 ### Runtime State
 
