@@ -6,12 +6,13 @@ See [AGENT_CATALOG.md](AGENT_CATALOG.md) for the specialized agent roles, inputs
 
 ## Runtime Policy
 
-- OpenCode is the only supported worker runtime.
+- **OpenCode** is the primary supported worker runtime.
+- **Hermes** is supported as an alternative runtime via `hooks/hermes/`.
 - Role models are selected from live `opencode models` inventory and `.autoship/model-routing.json`; do not assume `openai/gpt-5.5` is available or preferred.
 - Prefer capable free models first, then OpenCode Go role models when available; use Kimi/Kimmy 2.6 only through `opencode-go/*` unless the operator explicitly selects a paid Zen/OpenRouter model.
 - `openai/gpt-5.5-fast` is not allowed.
 - Worker models come from live `opencode models` inventory and are routed free-first with deterministic rotation across compatible workers.
-- Default active worker cap is 15.
+- Default active worker cap is 15 (OpenCode), 3 (Hermes subagent limit).
 - Plan `agent:ready` issues in ascending issue-number order (unless `AUTOSHIP_PLAN_ORDER` is set).
 
 ## Available Hooks
@@ -27,6 +28,14 @@ Core orchestration hooks in `hooks/opencode/`:
 - `monitor-ci.sh` - Monitor PR CI checks
 - `auto-merge.sh` - Merge opted-in PRs after CI passes
 - `reconcile-state.sh` - Reconcile state
+
+Hermes runtime hooks in `hooks/hermes/`:
+- `setup.sh` - Discover Hermes capabilities, write `hermes-model-routing.json`
+- `plan-issues.sh` - Plan issues for Hermes dispatch (uses `autoship:ready-simple` label)
+- `dispatch.sh` - Create worktree and write `HERMES_PROMPT.md`
+- `runner.sh` - Execute Hermes workers (delegate_task or cronjob)
+- `status.sh` - Show Hermes runtime status
+- `cronjob-dispatch.sh` - Generate Hermes cronjob specs for queued issues
 
 Safety hooks:
 - `sanitize-issue.sh` - Prompt-injection guardrails (#271)
