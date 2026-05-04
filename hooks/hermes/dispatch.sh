@@ -90,12 +90,17 @@ BODY=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json body --jq '.body' 2>/dev
 LABELS=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
 
 # Determine model using routing config
-MODEL="$(bash "$SCRIPT_DIR/model-router.sh" dispatch_with_routing code simple 2>/dev/null || echo "kimi-k2.6")"
+MODEL_OUTPUT="$(bash "$SCRIPT_DIR/model-router.sh" dispatch_with_routing code simple 2>/dev/null || echo "kimi-k2.6")"
+MODEL="$(echo "$MODEL_OUTPUT" | tail -1)"
 ROLE="implementer"
 
 # Log model selection
 mkdir -p "$AUTOSHIP_DIR/logs"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) issue=$ISSUE_NUM model=$MODEL" >> "$AUTOSHIP_DIR/logs/model-selection.log"
+
+# Write model to workspace
+printf '%s
+' "$MODEL" > "$WORKSPACE_PATH/model"
 
 if [[ "$DRY_RUN" == true ]]; then
   echo "Dry run: would dispatch issue #$ISSUE_NUM to Hermes ($TASK_TYPE)"
