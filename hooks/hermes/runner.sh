@@ -63,10 +63,13 @@ if [[ -n "${1:-}" ]]; then
   ISSUE_NUM=$(echo "$ISSUE_KEY" | sed 's/issue-//')
   
   # Find the worktree path
-  worktree_path=$(git -C "$HERMES_TARGET_REPO_PATH" worktree list --porcelain 2>/dev/null | grep -A1 "autoship/issue-${ISSUE_NUM}$" | head -1 | awk '{print $2}' || echo "")
+  worktree_path=""
+  if [[ -n "${HERMES_TARGET_REPO_PATH:-}" ]]; then
+    worktree_path=$(git -C "$HERMES_TARGET_REPO_PATH" worktree list --porcelain 2>/dev/null | grep -B1 "autoship/issue-${ISSUE_NUM}$" | grep "^worktree " | awk '{print $2}' || echo "")
+  fi
   if [[ -z "$worktree_path" ]]; then
     # Fallback: search common worktree locations
-    for base in "$HERMES_TARGET_REPO_PATH" "$HOME/Projects/TextQuest" "$REPO_ROOT"; do
+    for base in "$HOME/Projects/TextQuest" "$REPO_ROOT" "$HERMES_TARGET_REPO_PATH"; do
       if [[ -d "$base.worktrees/issue-$ISSUE_NUM" ]]; then
         worktree_path="$base.worktrees/issue-$ISSUE_NUM"
         break
@@ -188,3 +191,9 @@ done
 
 wait
 echo "Started $started Hermes workers"
+
+# Auto-cleanup completed worktrees after batch
+if [[ "$started" -gt 0 ]]; then
+  echo "Running worktree cleanup..."
+  bash "$SCRIPT_DIR/cleanup-worktrees.sh" --verbose
+fi
