@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hermes agent dispatch — create worktree and queue issue for Hermes cron execution
+# Hermes agent dispatch — create worktree, write prompt, and dispatch via delegate_task
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -51,6 +51,15 @@ ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
 REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
 
+# Read Hermes max concurrent from config.yaml
+MAX=3
+if [[ -f "$HOME/.hermes/config.yaml" ]]; then
+  config_max=$(grep 'max_concurrent_children' "$HOME/.hermes/config.yaml" | awk '{print $2}' | tr -d '"')
+  if [[ "$config_max" =~ ^[0-9]+$ ]]; then
+    MAX="$config_max"
+  fi
+fi
+
 # Check if Hermes is available
 HERMES_AVAILABLE=false
 if command -v hermes &>/dev/null; then
@@ -66,8 +75,6 @@ if [[ "$HERMES_AVAILABLE" != true ]]; then
   exit 0
 fi
 
-# Check max concurrent (Hermes default: 3)
-MAX=3
 running=$(jq '[.issues | to_entries[] | select((.value.state // .value.status) == "running")] | length' "$STATE_FILE" 2>/dev/null || echo 0)
 if [[ ! "$running" =~ ^[0-9]+$ ]]; then
   running=0
@@ -82,7 +89,6 @@ TITLE=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json title --jq '.title' 2>/
 BODY=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
 LABELS=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
 
-# Hermes uses the provider/model from config.yaml — no per-issue model selection
 MODEL="hermes/default"
 ROLE="implementer"
 
@@ -94,7 +100,7 @@ if [[ "$DRY_RUN" == true ]]; then
   exit 0
 fi
 
-# Create worktree using shared hook (Hermes uses autoship prefix for compatibility)
+# Create worktree using shared hook
 FULL_WORKSPACE_PATH=$(bash "$SCRIPT_DIR/../opencode/create-worktree.sh" "$ISSUE_KEY" "autoship/issue-${ISSUE_NUM}")
 mkdir -p "$WORKSPACE_PATH"
 date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE_PATH/started_at"
@@ -102,11 +108,11 @@ printf 'QUEUED\n' > "$WORKSPACE_PATH/status"
 printf '%s\n' "$MODEL" > "$WORKSPACE_PATH/model"
 printf '%s\n' "$ROLE" > "$WORKSPACE_PATH/role"
 
-# Write Hermes-specific prompt
+# Write Hermes-specific prompt with AutoShip constraints
 cat > "$WORKSPACE_PATH/HERMES_PROMPT.md" <<EOF
-# Hermes Agent Prompt
+# Hermes Agent Prompt — AutoShip Issue #$ISSUE_NUM
 
-## Issue #$ISSUE_NUM: $TITLE
+## Issue: $TITLE
 
 ## Labels
 $LABELS
@@ -114,10 +120,10 @@ $LABELS
 ## Task Type
 $TASK_TYPE
 
-## Selected Model
+## Model
 $MODEL (inherited from ~/.hermes/config.yaml)
 
-## Specialized Role
+## Role
 $ROLE
 
 ## Body
@@ -125,21 +131,23 @@ $BODY
 
 ## Instructions
 - Work only in this worktree: $FULL_WORKSPACE_PATH
-- Implement the issue per its acceptance criteria.
-- Run relevant project checks before finishing.
-- Commit changes on branch hermes/issue-$ISSUE_NUM.
-- Write HERMES_RESULT.md in the worktree.
-- Write COMPLETE, BLOCKED, or STUCK to $FULL_WORKSPACE_PATH/status.
+- Branch: autoship/issue-$ISSUE_NUM
+- Implement per acceptance criteria.
+- Run project checks: cargo fmt --check, cargo clippy, cargo test (macOS-safe only).
+- Commit with conventional format: "feat|fix|docs|refactor(scope): description (#$ISSUE_NUM)".
+- Write HERMES_RESULT.md in worktree root with: status (COMPLETE/BLOCKED/STUCK), files changed, validation results.
+- Update $WORKSPACE_PATH/status to COMPLETE, BLOCKED, or STUCK.
+- If stuck at minute 8, stop and report STUCK with exact status.
 
 ## PR Title
-Use this conventional PR title when creating a PR:
 $(bash "$SCRIPT_DIR/../opencode/pr-title.sh" --issue "$ISSUE_NUM" --title "$TITLE" --labels "$LABELS")
 
-## Hermes-Specific Notes
-- Hermes runs with toolsets: terminal, file, web, delegation
-- One phase per cron run — if interrupted, resume on next run
+## Notes
+- Hermes toolsets: terminal, file, web, delegation
+- One phase per cron run — resume on next if interrupted
 - Use [SILENT] for no-op phases
-- Cargo check before cargo test (orchestrator is Windows-only)
+- Cargo check before cargo test (orchestrator is Windows-only, skip on macOS)
+- Never claim Windows/live EQ validation unless actually performed
 EOF
 
 autoship_state_set set-queued "$ISSUE_KEY" agent="$MODEL" model="$MODEL" role="$ROLE" task_type="$TASK_TYPE"
@@ -147,4 +155,10 @@ autoship_state_set set-queued "$ISSUE_KEY" agent="$MODEL" model="$MODEL" role="$
 echo "Queued issue #$ISSUE_NUM for Hermes ($TASK_TYPE, role=$ROLE)"
 [[ -n "$cap_note" ]] && echo "$cap_note"
 echo "Worktree: $FULL_WORKSPACE_PATH"
-echo "Dispatch via: hermes cronjob or delegate_task"
+echo "Prompt: $WORKSPACE_PATH/HERMES_PROMPT.md"
+
+# If inside Hermes session, immediately dispatch via delegate_task
+if [[ -n "${HERMES_SESSION_ID:-}" ]]; then
+  echo "Hermes session detected — dispatching via delegate_task..."
+  bash "$SCRIPT_DIR/runner.sh" "$ISSUE_KEY"
+fi
