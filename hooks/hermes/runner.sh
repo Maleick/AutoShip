@@ -194,15 +194,17 @@ for status_file in $queued; do
   started=$((started + 1))
 done
 
-wait
 echo "Started $started Hermes workers"
 
-  # Auto-cleanup completed worktrees after batch
-  if [[ "$started" -gt  0 ]]; then
-    echo "Running worktree cleanup..."
-    bash "$SCRIPT_DIR/cleanup-worktrees.sh" --verbose
-    
-    # Auto-prune if thresholds exceeded
-    echo "Checking auto-prune thresholds..."
-    bash "$SCRIPT_DIR/auto-prune.sh" || echo "Auto-prune triggered (thresholds exceeded)"
-  fi
+# Don't wait — let workers run in background
+# The cron will call runner again to check progress
+
+# Auto-cleanup completed worktrees after batch
+if [[ "$started" -gt  0 ]]; then
+  echo "Running worktree cleanup..."
+  bash "$SCRIPT_DIR/cleanup-worktrees.sh" --verbose
+  
+  # Auto-prune if thresholds exceeded
+  echo "Checking auto-prune thresholds..."
+  bash "$SCRIPT_DIR/auto-prune.sh" || echo "Auto-prune triggered (thresholds exceeded)"
+fi
