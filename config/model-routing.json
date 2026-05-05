@@ -2,8 +2,8 @@
   "version": "2026-05-03",
   "runtime": "opencode",
   "dispatch_method": "free_first_rotation",
-  "max_concurrent": 10,
-  "notes": "max_concurrent reduced from 15 to 10 to match Hermes delegation.max_concurrent_children limit. Hermes subagents are the bottleneck, not OpenCode workers.",
+  "max_concurrent": 50,
+  "notes": "max_concurrent increased to 50. Hermes delegation.max_concurrent_children synced to match.",
   "tiers": [
     {
       "name": "zen_free",

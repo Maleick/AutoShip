@@ -50,7 +50,7 @@ if [[ -n "${1:-}" ]]; then
   fi
   
   current_status=$(cat "$status_file" 2>/dev/null || echo "unknown")
-  if [[ "$current_status" != "QUEUED" && "$current_status" != "RUNNING" ]]; then
+  if [[ "$current_status" == "COMPLETE" || "$current_status" == "BLOCKED" ]]; then
     echo "Issue $ISSUE_KEY status=$current_status — not dispatchable"
     exit 0
   fi
@@ -64,14 +64,15 @@ if [[ -n "${1:-}" ]]; then
   
   # Find the worktree path
   worktree_path=""
-  if [[ -n "${HERMES_TARGET_REPO_PATH:-}" ]]; then
+  HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
+  if [[ -n "$HERMES_TARGET_REPO_PATH" ]]; then
     worktree_path=$(git -C "$HERMES_TARGET_REPO_PATH" worktree list --porcelain 2>/dev/null | grep -B1 "autoship/issue-${ISSUE_NUM}$" | grep "^worktree " | awk '{print $2}' || echo "")
   fi
-  if [[ -z "$worktree_path" ]]; then
-    # Fallback: search common worktree locations
-    for base in "$HOME/Projects/TextQuest" "$REPO_ROOT" "$HERMES_TARGET_REPO_PATH"; do
-      if [[ -d "$base.worktrees/issue-$ISSUE_NUM" ]]; then
-        worktree_path="$base.worktrees/issue-$ISSUE_NUM"
+  if [[ -z "$worktree_path" || ! -d "$worktree_path" ]]; then
+    # Fallback: search AutoShip workspace locations
+    for base in "$REPO_ROOT/.autoship/workspaces" "$REPO_ROOT/.worktrees" "$HOME/Projects/AutoShip/.autoship/workspaces"; do
+      if [[ -d "$base/issue-$ISSUE_NUM" ]]; then
+        worktree_path="$base/issue-$ISSUE_NUM"
         break
       fi
     done

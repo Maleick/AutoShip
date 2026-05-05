@@ -2,7 +2,7 @@
   "schema_version": 1,
   "run_id": "run-moryi79o",
   "created_at": "2026-05-05T01:35:29.099Z",
-  "updated_at": "2026-05-05T01:35:39Z",
+  "updated_at": "2026-05-05T03:56:11Z",
   "status": "initialized",
   "mode": "background",
   "goal": "Reduce shellcheck issues across all hooks",
@@ -11,8 +11,8 @@
     "name": "clean_hooks_count",
     "direction": "higher",
     "baseline": 42,
-    "best": 42,
-    "latest": 42
+    "best": "43",
+    "latest": "43"
   },
   "verify": "bash autoresearch-verify.sh",
   "guard": "npm run typecheck && bash -n hooks/opencode/*.sh && bash -n hooks/hermes/*.sh",
@@ -26,8 +26,8 @@
     "state": "/Users/maleick/Projects/AutoShip/.autoresearch/state.json"
   },
   "stats": {
-    "total_iterations": 0,
-    "kept": 0,
+    "total_iterations": 1,
+    "kept": 1,
     "discarded": 0,
     "needs_human": 0,
     "consecutive_discards": 0
@@ -125,6 +125,18 @@
     ]
   },
   "memory": {
-    "hermes_phase": "plan"
+    "hermes_phase": "learn",
+    "hermes_decision": {
+      "iteration": 1,
+      "decision": "keep",
+      "metric_value": "43",
+      "change_summary": "Fix SC1102 in hooks/opencode/status.sh: disambiguate $(( from $( by adding space after $(",
+      "files_changed": [
+        "hooks/opencode/status.sh"
+      ]
+    },
+    "hermes_learnings": [
+      "Iteration 1: Fix SC1102 in hooks/opencode/status.sh \u2192 43"
+    ]
   }
 }
