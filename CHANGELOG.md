@@ -1,3 +1,10 @@
+## [2.4.2](https://github.com/Maleick/AutoShip/compare/v2.4.1...v2.4.2) (2026-05-05)
+
+
+### Bug Fixes
+
+* harden autoship dispatch state ([#354](https://github.com/Maleick/AutoShip/issues/354)) ([1bfef8e](https://github.com/Maleick/AutoShip/commit/1bfef8eab7a339ea0cf8f0f087bbae99070f3b3a))
+
 ## [2.4.1](https://github.com/Maleick/AutoShip/compare/v2.4.0...v2.4.1) (2026-05-05)
 
 ## v2.4.1
