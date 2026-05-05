@@ -239,6 +239,50 @@ arg_value() {
   return 1
 }
 
+valid_task_type() {
+  case "$1" in
+    research | docs | simple_code | medium_code | complex | mechanical | ci_fix | rust_unsafe) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+valid_model_id() {
+  [[ "$1" =~ ^[A-Za-z0-9._:-]+/[A-Za-z0-9._:@+-]+$ || "$1" =~ ^[A-Za-z0-9._:-]+$ ]]
+}
+
+validate_state_fields() {
+  local pair key value
+  for pair in "$@"; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    case "$key" in
+      task_type)
+        if ! valid_task_type "$value"; then
+          echo "Error: invalid task_type: $value" >&2
+          exit 1
+        fi
+        ;;
+      model | agent)
+        if [[ -z "$value" || "$value" =~ ^[0-9]+$ || ! "$value" =~ ^[A-Za-z0-9._:@/+:-]+$ ]]; then
+          echo "Error: invalid $key: $value" >&2
+          exit 1
+        fi
+        ;;
+      role)
+        case "$value" in
+          planner | coordinator | orchestrator | reviewer | lead | implementer | simplifier | tester | docs | release) ;;
+          *)
+            echo "Error: invalid role: $value" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+    esac
+  done
+}
+
+validate_state_fields "$@"
+
 record_failure_retry_state() {
   local issue_id="$1"
   shift

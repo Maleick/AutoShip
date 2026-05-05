@@ -44,6 +44,14 @@ fi
 TASK_TYPE="${POSITIONAL[1]:-medium_code}"
 MODEL_OVERRIDE="${POSITIONAL[2]:-}"
 
+case "$TASK_TYPE" in
+  research | docs | simple_code | medium_code | complex | mechanical | ci_fix | rust_unsafe) ;;
+  *)
+    echo "Error: invalid task type: $TASK_TYPE" >&2
+    exit 1
+    ;;
+esac
+
 REPO_ROOT=$(autoship_repo_root) || exit 1
 cd "$REPO_ROOT"
 
@@ -210,6 +218,7 @@ $(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUM" --title "$TITLE" --labels 
 EOF
 
 autoship_state_set set-queued "$ISSUE_KEY" agent="$MODEL" model="$MODEL" role="$ROLE" task_type="$TASK_TYPE"
+bash "$SCRIPT_DIR/../quota-update.sh" decrement >/dev/null 2>&1 || true
 bash "$SCRIPT_DIR/metrics-collector.sh" record-dispatch "$ISSUE_KEY" "$MODEL" >/dev/null 2>&1 || true
 
 echo "Queued issue #$ISSUE_NUM for $MODEL ($TASK_TYPE, role=$ROLE)"

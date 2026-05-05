@@ -98,17 +98,31 @@ def analyze_task(title: str, labels: list) -> dict:
     }
 
 
+def default_fallback(config: dict) -> str:
+    fallback = config.get("defaultFallback") or config.get("default_fallback")
+    if isinstance(fallback, str) and fallback:
+        return fallback
+
+    for tier in config.get("tiers", []):
+        for model in tier.get("models", []):
+            model_id = model.get("id")
+            if isinstance(model_id, str) and model_id:
+                return model_id
+
+    return ""
+
+
 def get_model_from_tier(tier_name: str, config: dict, usage: dict, task_type: str = "") -> str:
     """Get next model from tier with round-robin and task-aware selection."""
     tiers = config.get("tiers", [])
     tier = next((candidate for candidate in tiers if candidate["name"] == tier_name), None)
 
     if not tier:
-        return "kimi-k2.6"
+        return default_fallback(config)
 
     models = tier.get("models", [])
     if not models:
-        return "kimi-k2.6"
+        return default_fallback(config)
 
     model_ids = [model["id"] for model in models]
 

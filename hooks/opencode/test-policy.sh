@@ -1376,6 +1376,9 @@ chmod +x "$UPDATE_REPO/bin/gh" "$UPDATE_REPO/hooks/update-state.sh"
 (cd "$UPDATE_REPO" && AUTOSHIP_GH_ISSUES_LOG="$UPDATE_REPO/gh-issues.log" PATH="$UPDATE_REPO/bin:$PATH" bash hooks/update-state.sh set-running issue-123 >/dev/null)
 assert_eq "running" "$(jq -r '.issues["issue-123"].state' "$UPDATE_REPO/.autoship/state.json")" "update-state stores normalized issue key"
 assert_eq "123" "$(head -1 "$UPDATE_REPO/gh-issues.log")" "update-state passes numeric issue to gh"
+if (cd "$UPDATE_REPO" && PATH="$UPDATE_REPO/bin:$PATH" bash hooks/update-state.sh set-queued issue-124 task_type=--repo model=123 >/dev/null 2>&1); then
+  fail "update-state rejects invalid task_type and non-string model fields"
+fi
 
 DISPATCH_REPO="$TMP_DIR/dispatch-repo"
 mkdir -p "$DISPATCH_REPO/.autoship" "$DISPATCH_REPO/config" "$DISPATCH_REPO/hooks/opencode" "$DISPATCH_REPO/hooks" "$DISPATCH_REPO/bin"
@@ -1427,6 +1430,64 @@ assert_eq "docs" "$(cat "$DISPATCH_REPO/.autoship/workspaces/issue-456/role")" "
 assert_eq "docs" "$(jq -r '.issues["issue-456"].role' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records specialized role in state"
 assert_eq "free/strong:free" "$(jq -r '.issues["issue-456"].model' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records selected model in state"
 grep -F '## Specialized Role' "$DISPATCH_REPO/.autoship/workspaces/issue-456/AUTOSHIP_PROMPT.md" >/dev/null || fail "dispatch records specialized role in prompt"
+if (cd "$DISPATCH_REPO" && PATH="$DISPATCH_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 457 --repo >/dev/null 2>&1); then
+  fail "dispatch rejects invalid task types before writing state"
+fi
+assert_eq "null" "$(jq -r '.issues["issue-457"] // null' "$DISPATCH_REPO/.autoship/state.json")" "dispatch leaves state unchanged for invalid task type"
+
+QUOTA_REPO="$TMP_DIR/quota-repo"
+mkdir -p "$QUOTA_REPO/.autoship" "$QUOTA_REPO/hooks/opencode" "$QUOTA_REPO/hooks" "$QUOTA_REPO/bin"
+git init -q "$QUOTA_REPO"
+git -C "$QUOTA_REPO" config user.email autoship@example.invalid
+git -C "$QUOTA_REPO" config user.name AutoShip
+git -C "$QUOTA_REPO" remote add origin git@github.com:owner/repo.git
+printf 'base\n' >"$QUOTA_REPO/README.md"
+git -C "$QUOTA_REPO" add README.md
+git -C "$QUOTA_REPO" commit -q -m initial
+cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/resource-monitor.sh" "$QUOTA_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/../update-state.sh" "$SCRIPT_DIR/../quota-update.sh" "$QUOTA_REPO/hooks/"
+cat >"$QUOTA_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{},"stats":{"session_dispatched":262},"config":{"maxConcurrentAgents":20}}
+JSON
+cat >"$QUOTA_REPO/.autoship/model-routing.json" <<'JSON'
+{"models":[{"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["medium_code"]}]}
+JSON
+cat >"$QUOTA_REPO/.autoship/quota.json" <<'JSON'
+{"opencode":{"available":true,"quota_pct":-1,"quota_source":"provider","dispatches":0}}
+JSON
+cp "$DISPATCH_REPO/bin/gh" "$QUOTA_REPO/bin/gh"
+chmod +x "$QUOTA_REPO/bin/gh" "$QUOTA_REPO/hooks/opencode/dispatch.sh" "$QUOTA_REPO/hooks/opencode/create-worktree.sh" "$QUOTA_REPO/hooks/opencode/select-model.sh" "$QUOTA_REPO/hooks/opencode/pr-title.sh" "$QUOTA_REPO/hooks/opencode/resource-monitor.sh" "$QUOTA_REPO/hooks/update-state.sh" "$QUOTA_REPO/hooks/quota-update.sh"
+(
+  cd "$QUOTA_REPO"
+  PATH="$QUOTA_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 458 medium_code >/dev/null
+)
+assert_eq "263" "$(jq -r '.opencode.dispatches' "$QUOTA_REPO/.autoship/quota.json")" "dispatch syncs quota dispatch counter from state stats before incrementing"
+
+ROUTER_REPO="$TMP_DIR/router-repo"
+mkdir -p "$ROUTER_REPO/.autoship" "$ROUTER_REPO/config" "$ROUTER_REPO/hooks/hermes"
+cp "$SCRIPT_DIR/../hermes/model-router.py" "$ROUTER_REPO/hooks/hermes/model-router.py"
+cat >"$ROUTER_REPO/config/model-routing.json" <<'JSON'
+{"defaultFallback":"configured/fallback","tiers":[{"name":"zen_free","models":[{"id":"configured/free","capabilities":["code"]}]}]}
+JSON
+router_model=$(cd "$ROUTER_REPO" && python3 hooks/hermes/model-router.py "Fix small bug" '[]')
+assert_eq "configured/free" "$router_model" "Hermes router selects configured model IDs instead of hardcoded fallbacks"
+cat >"$ROUTER_REPO/config/model-routing.json" <<'JSON'
+{"defaultFallback":"configured/fallback","tiers":[]}
+JSON
+router_fallback=$(cd "$ROUTER_REPO" && python3 hooks/hermes/model-router.py "Implement parity feature" '[]')
+assert_eq "configured/fallback" "$router_fallback" "Hermes router uses configured defaultFallback when no tier matches"
+
+CAPTURE_REPO="$TMP_DIR/capture-repo"
+mkdir -p "$CAPTURE_REPO/hooks/lib" "$CAPTURE_REPO/hooks"
+git init -q "$CAPTURE_REPO"
+cp "$SCRIPT_DIR/../lib/common.sh" "$CAPTURE_REPO/hooks/lib/common.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$CAPTURE_REPO/hooks/capture-failure.sh"
+(
+  cd "$CAPTURE_REPO"
+  source hooks/lib/common.sh
+  autoship_capture_failure model_failure issue-999 error_summary=boom
+)
+test -d "$CAPTURE_REPO/.autoship/failures" || fail "common capture helper uses root-level capture-failure.sh"
 
 FIXTURE_REPO="$TMP_DIR/fixture-pipeline-repo"
 mkdir -p "$FIXTURE_REPO/.autoship" "$FIXTURE_REPO/config" "$FIXTURE_REPO/hooks/opencode" "$FIXTURE_REPO/hooks" "$FIXTURE_REPO/bin"
