@@ -121,7 +121,7 @@ if [[ -n "${1:-}" ]]; then
     if command -v gtimeout &>/dev/null; then
       TIMEOUT_CMD="gtimeout"
     fi
-    $TIMEOUT_CMD 600 hermes chat --prompt "$workspace_dir/HERMES_PROMPT.md" --workdir "$worktree_path" || {
+    $TIMEOUT_CMD 600 hermes chat -q "$(cat "$workspace_dir/HERMES_PROMPT.md")" --worktree --quiet || {
       exit_code=$?
       if [[ $exit_code -eq 124 ]]; then
         echo "TIMEOUT: $ISSUE_KEY exceeded 10 minutes"
@@ -135,7 +135,7 @@ if [[ -n "${1:-}" ]]; then
       exit 0
     }
     
-    # Check result
+    # Check result using absolute path
     result_status=$(cat "$workspace_dir/status" 2>/dev/null || echo "unknown")
     echo "Result: $ISSUE_KEY = $result_status"
     
