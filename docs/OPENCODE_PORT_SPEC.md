@@ -16,7 +16,7 @@ AutoShip supports OpenCode as its only worker runtime.
 - Complex tasks require a sufficiently strong compatible worker; otherwise `select-model.sh` falls back to the configured orchestrator model as an advisor.
 - Go-provider and Spark models are allowed when selected and can win if they are the best configured fit for the task.
 - `openai/gpt-5.5-fast` is not allowed.
-- Worker concurrency defaults to 15 active workspaces.
+- Worker concurrency defaults to 20 active workspaces.
 
 ## Pipeline
 

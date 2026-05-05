@@ -68,10 +68,10 @@ MAX=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$S
 if [[ -z "$MAX" && -f "$AUTOSHIP_DIR/config.json" ]]; then
   MAX=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
 fi
-MAX="${MAX:-15}"
+MAX="${MAX:-20}"
 # Validate MAX is numeric
 if [[ ! "$MAX" =~ ^[0-9]+$ ]]; then
-  MAX=15
+  MAX=20
 fi
 DRY_RUN="${AUTOSHIP_RUNNER_DRY_RUN:-false}"
 

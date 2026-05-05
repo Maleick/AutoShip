@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AUTOSHIP_DIR=".autoship"
 ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
 CONFIG_FILE="$AUTOSHIP_DIR/config.json"
-MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-15}"
+MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-20}"
 SELECTED_MODELS="${AUTOSHIP_MODELS:-}"
 REFRESH_MODELS="${AUTOSHIP_REFRESH_MODELS:-0}"
 ROLE_OVERRIDES_PROVIDED=0
@@ -29,7 +29,7 @@ AutoShip OpenCode setup wizard.
 
 OPTIONS:
   --no-tui              Run in non-interactive mode (skip prompts)
-  --max-agents N        Set max concurrent agents (default: 15)
+  --max-agents N        Set max concurrent agents (default: 20)
   --labels LABEL,...   Comma-separated labels to monitor (default: agent:ready)
   --refresh-models     Force refresh model inventory from OpenCode
   --planner-model MODEL Set planner/coordinator/orchestrator/reviewer/lead model (default: live free-first model)

@@ -78,7 +78,7 @@ Uptime:       Xh Ym
 Phase:        N/M (checkpoint: yes/no)
 
 ───────────────────────────────────────────
-AGENTS (N active / 15 max)
+AGENTS (N active / 20 max)
 ───────────────────────────────────────────
   [OpenCode] #42 — Fix login validation    (12m)
   [OpenCode] #45 — Add rate limiting       (8m)

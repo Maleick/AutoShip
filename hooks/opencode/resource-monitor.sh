@@ -64,8 +64,8 @@ mem_pct=$(get_mem_pct)
 [[ "$mem_pct" =~ ^[0-9]+(\.[0-9]+)?$ ]] || mem_pct=0
 
 # Determine load status and recommended concurrency
-current_max="${1:-15}"
-[[ "$current_max" =~ ^[0-9]+$ ]] || current_max=15
+current_max="${1:-20}"
+[[ "$current_max" =~ ^[0-9]+$ ]] || current_max=20
 
 # Reduce concurrency cap if CPU or memory > 80%
 load_status="ok"

@@ -12,7 +12,7 @@ See [AGENT_CATALOG.md](AGENT_CATALOG.md) for the specialized agent roles, inputs
 - Prefer capable free models first, then OpenCode Go role models when available; use Kimi/Kimmy 2.6 only through `opencode-go/*` unless the operator explicitly selects a paid Zen/OpenRouter model.
 - `openai/gpt-5.5-fast` is not allowed.
 - Worker models come from live `opencode models` inventory and are routed free-first with deterministic rotation across compatible workers.
-- Default active worker cap is 15 (OpenCode), 3 (Hermes subagent limit).
+- Default active worker cap is 20 for both OpenCode and Hermes.
 - Plan `agent:ready` issues in ascending issue-number order (unless `AUTOSHIP_PLAN_ORDER` is set).
 
 ## Available Hooks

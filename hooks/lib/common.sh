@@ -57,7 +57,7 @@ autoship_max_agents() {
     max=$(autoship_config_value "max_agents" "")
   fi
   if [[ -z "$max" || ! "$max" =~ ^[0-9]+$ ]]; then
-    max=15
+    max=20
   fi
   printf '%s\n' "$max"
 }

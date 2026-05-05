@@ -66,10 +66,10 @@ max_agents=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // emp
 if [[ -z "$max_agents" && -f "$AUTOSHIP_DIR/config.json" ]]; then
   max_agents=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
 fi
-max_agents="${max_agents:-15}"
+max_agents="${max_agents:-20}"
 # Validate max_agents is numeric
 if [[ ! "$max_agents" =~ ^[0-9]+$ ]]; then
-  max_agents=15
+  max_agents=20
 fi
 
 # Check system resources and potentially reduce concurrency cap
@@ -78,7 +78,8 @@ if [[ -x "$SCRIPT_DIR/resource-monitor.sh" ]]; then
   resource_status=$(echo "$resource_info" | jq -r '.load_status // "ok"')
   recommended_max=$(echo "$resource_info" | jq -r '.recommended_max_concurrent // '$max_agents)
   if [[ "$resource_status" != "ok" && "$recommended_max" =~ ^[0-9]+$ && "$recommended_max" -lt "$max_agents" ]]; then
-    echo "RESOURCE_${resource_status^^}: CPU/MEM load high, reducing concurrency from $max_agents to $recommended_max" >&2
+    resource_label=$(printf '%s' "$resource_status" | tr '[:lower:]' '[:upper:]')
+    echo "RESOURCE_${resource_label}: CPU/MEM load high, reducing concurrency from $max_agents to $recommended_max" >&2
     max_agents="$recommended_max"
   fi
 fi

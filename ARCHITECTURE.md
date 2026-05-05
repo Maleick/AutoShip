@@ -10,8 +10,8 @@ specialized shell scripts and TypeScript types.
 
 | Runtime | Directory | Max Workers | Dispatch Method | Target Label |
 |---------|-----------|-------------|-----------------|--------------|
-| **OpenCode** | `hooks/opencode/` | 15 | Interactive CLI | `agent:ready` |
-| **Hermes** | `hooks/hermes/` | 3 | Cronjob / `delegate_task` | `autoship:ready-simple` |
+| **OpenCode** | `hooks/opencode/` | 20 | Interactive CLI | `agent:ready` |
+| **Hermes** | `hooks/hermes/` | 20 | Cronjob / `delegate_task` | `autoship:ready-simple` |
 
 ## System Architecture
 
