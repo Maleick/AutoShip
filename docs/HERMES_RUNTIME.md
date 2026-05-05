@@ -125,3 +125,11 @@ This document catalogs every `HERMES_*` environment variable referenced by the A
 - **Config variables** (`HERMES_TARGET_REPO`, `HERMES_TARGET_REPO_PATH`, `HERMES_LABELS`) use Bash parameter expansion (`${VAR:-default}`) so they can be overridden per-invocation without editing hook source.
 - **Max concurrent** is *not* controlled by an environment variable; it is read from `~/.hermes/config.yaml` (`max_concurrent_children`) by `dispatch.sh` and `runner.sh`.
 - The generated `HERMES_PROMPT.md` instructs the Hermes agent to use `git push`, `gh pr create`, and `gh issue close` commands; these instructions are literal text in the prompt, not environment-driven.
+
+---
+
+## Quick Reference
+
+For a compact table of **all** Hermes and AutoShip environment variables (including pruning thresholds and directory paths), see:
+
+**`hooks/hermes/ENVIRONMENT_VARIABLES.md`**
