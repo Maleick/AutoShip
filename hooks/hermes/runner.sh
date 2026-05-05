@@ -26,7 +26,7 @@ fi
 REPO_ROOT=$(autoship_repo_root) || exit 1
 cd "$REPO_ROOT"
 
-AUTOSHIP_DIR=".autoship"
+AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 
 # Read Hermes max concurrent from config.yaml
