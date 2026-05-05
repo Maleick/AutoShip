@@ -194,10 +194,15 @@ for status_file in $queued; do
     continue
   fi
   
-  # Dispatch this single issue with setsid to detach from terminal
+  # Dispatch this single issue, detached from terminal
   # Log to workspace log file for debugging
   log_file="$workspace_dir/runner.log"
-  setsid bash "$0" "$issue_key" > "$log_file" 2>&1 &
+  if command -v setsid &>/dev/null; then
+    setsid bash "$0" "$issue_key" > "$log_file" 2>&1 &
+  else
+    # macOS fallback: use nohup + subshell + redirect to detach
+    (nohup bash "$0" "$issue_key" > "$log_file" 2>&1 &) &
+  fi
   
   started=$((started + 1))
 done
