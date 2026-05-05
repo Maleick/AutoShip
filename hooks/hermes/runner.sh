@@ -195,7 +195,9 @@ for status_file in $queued; do
   fi
   
   # Dispatch this single issue with setsid to detach from terminal
-  setsid bash "$0" "$issue_key" > /dev/null 2>&1 &
+  # Log to workspace log file for debugging
+  log_file="$workspace_dir/runner.log"
+  setsid bash "$0" "$issue_key" > "$log_file" 2>&1 &
   
   started=$((started + 1))
 done
