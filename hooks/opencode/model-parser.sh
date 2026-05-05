@@ -73,7 +73,7 @@ default_role_model() {
     return 0
   fi
 
-  preferred=$(printf '%s\n' "$available_model_ids" | grep -Ei 'gpt-5\.5|gpt-5\.3-codex-spark' | head -1 || true)
+  preferred=$(printf '%s\n' "$available_model_ids" | grep -Ei 'gpt-5\.5|gpt-5\.3-spark' | head -1 || true)
   if [[ -n "$preferred" ]]; then
     printf '%s\n' "$preferred"
     return 0

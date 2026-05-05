@@ -40,7 +40,7 @@
       "cost": "subscription",
       "models": [
         { "id": "kimi-k2.6", "name": "KIMI K2.6", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "Kimi subscription fallback" },
-        { "id": "gpt-5.5", "name": "GPT 5.5", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "OpenAI Codex fallback" }
+        { "id": "gpt-5.5", "name": "GPT 5.5", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "OpenAI fallback" }
       ],
       "rotation": "round_robin",
       "fallback_on": []
