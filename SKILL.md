@@ -91,11 +91,17 @@ At the end of each work phase, the user expects:
 
 This is now standard procedure for all repos under `~/Projects/`.
 
-**Model Routing** (added commit `dc9e1f6`):
+**Model Routing** (added commit `dc9e1f6`, rebuilt 2026-05-04):
 - `dispatch.sh` calls `model-router.sh` to select tier based on `config/model-routing.json`
+- **Intelligent routing**: Python router analyzes issue title + labels to determine complexity, domain, and task type
+- Complex/parity tasks → go_paid (DeepSeek V4 Pro)
+- Simple audits → zen_free fast (GPT 5 Nano)
+- Medium implementations → zen_free balanced (Nemotron 3 Super)
 - Free Zen models first → Go DeepSeek → Hermes fallback
 - Logs model selection to `.autoship/logs/model-selection.log`
 - Round-robin rotation across models in each tier
+
+**Critical bug fixed**: `auto-prune.sh` used `ls -1` which counts files inside workspaces, not directories. This caused it to report 30+ workspaces when only 10 existed, leading to premature pruning of QUEUED issues. Fixed with `find -type d`.
 
 **Worktree Cleanup** (added PR #317, commit `3e88b9`):
 - `runner.sh` auto-calls `cleanup-worktrees.sh` after each batch dispatch
@@ -117,19 +123,6 @@ This is now standard procedure for all repos under `~/Projects/`.
 If you encounter old stubs, update AutoShip: `cd ~/Projects/AutoShip && git pull origin main`
 
 **User Preference**: All AutoShip improvements must be made in `~/Projects/AutoShip` repo and submitted as PRs (or direct to main if explicitly approved). Do not bake AutoShip logic into this Hermes skill — keep skills as thin wrappers.
-
-## Intelligent Model Routing (2026-05-04)
-
-AutoShip now analyzes issue title + labels to select optimal model tier:
-
-| Task Signal | Tier | Model | Why |
-|-------------|------|-------|-----|
-| Complex/parity/architect | go_paid | DeepSeek V4 Pro | Smartest for hard problems |
-| Simple audit/cleanup/dead_code | zen_free | GPT 5 Nano | Fast, cheap |
-| Medium implementation | zen_free | Nemotron 3 Super | Balanced strength |
-| domain:combat/nav labels | go_paid | DeepSeek V4 Pro | Game logic needs smarts |
-
-Router lives in `hooks/hermes/model-router.sh` (Python). Replaced blind round-robin that assigned everything to `big-pickle`.
 
 **Skill sync**: This skill is symlinked to `~/Projects/AutoShip` for live updates. Do not copy SKILL.md manually.
 
