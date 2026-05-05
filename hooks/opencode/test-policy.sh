@@ -1215,7 +1215,14 @@ if [[ "$1" == "models" ]]; then
 fi
 echo '1.0.0'
 SH
-chmod +x "$SETUP_REPO/bin/opencode"
+cat >"$SETUP_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "auth status" ]]; then
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
 (
   cd "$SETUP_REPO/autoship"
   rm -f config/model-routing.json .autoship/model-routing.json .autoship/config.json
