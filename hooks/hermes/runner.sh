@@ -194,9 +194,8 @@ for status_file in $queued; do
     continue
   fi
   
-  # Dispatch this single issue
-  nohup bash "$0" "$issue_key" > /dev/null 2>&1 &
-  disown
+  # Dispatch this single issue with setsid to detach from terminal
+  setsid bash "$0" "$issue_key" > /dev/null 2>&1 &
   
   started=$((started + 1))
 done
