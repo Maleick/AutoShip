@@ -1,3 +1,10 @@
+## [2.4.1](https://github.com/Maleick/AutoShip/compare/v2.4.0...v2.4.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* sync package version for CLI ([#353](https://github.com/Maleick/AutoShip/issues/353)) ([3debb00](https://github.com/Maleick/AutoShip/commit/3debb00615276a8885c389ecc43dfa1b8dddbc40))
+
 # [2.4.0](https://github.com/Maleick/AutoShip/compare/v2.3.0...v2.4.0) (2026-05-05)
 
 ## v2.4.0
