@@ -53,6 +53,6 @@
     { "rule": "If go_paid tier also unavailable, fall back to hermes_fallback" },
     { "rule": "Never use openai/gpt-5.5-fast" },
     { "rule": "Track usage per model in .autoship/usage-log.json" },
-    { "rule": "Hermes subagent limit is 10 concurrent children" }
+    { "rule": "Hermes default active worker cap is 20" }
   ]
 }

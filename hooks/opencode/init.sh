@@ -82,7 +82,7 @@ if [[ ! -f "$STATE_FILE" ]]; then
         blocked: 0
       },
       config: {
-        maxConcurrentAgents: 15
+        maxConcurrentAgents: 20
       }
     }' >"$STATE_FILE"
   echo "Initialized $STATE_FILE"
@@ -95,7 +95,7 @@ else
      .stats.session_completed = 0 |
      .platform = "opencode" |
      .autoship_version = $ver |
-     .config.maxConcurrentAgents = (.config.maxConcurrentAgents // 15)' \
+     .config.maxConcurrentAgents = (.config.maxConcurrentAgents // 20)' \
     "$STATE_FILE" >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   echo "Refreshed $STATE_FILE"
 fi
@@ -141,14 +141,14 @@ load_routing_config() {
   local routing_file="$AUTOSHIP_DIR/routing.json"
   local model_routing_file="$AUTOSHIP_DIR/model-routing.json"
   local autoship_md="AUTOSHIP.md"
-  local DEFAULT_ROUTING='{"routing":{"research":["opencode"],"docs":["opencode"],"simple_code":["opencode"],"medium_code":["opencode"],"complex":["opencode"],"mechanical":["opencode"],"ci_fix":["opencode"],"rust_unsafe":["opencode"]},"max_concurrent_agents":15}'
+  local DEFAULT_ROUTING='{"routing":{"research":["opencode"],"docs":["opencode"],"simple_code":["opencode"],"medium_code":["opencode"],"complex":["opencode"],"mechanical":["opencode"],"ci_fix":["opencode"],"rust_unsafe":["opencode"]},"max_concurrent_agents":20}'
   write_model_routing() {
     if [[ -f "$model_routing_file" ]] && jq -e '(.models // []) | length > 0' "$model_routing_file" >/dev/null 2>&1; then
       return 0
     fi
     rm -f "$model_routing_file"
     if command -v opencode >/dev/null 2>&1 && [[ -x "$SCRIPT_DIR/setup.sh" ]]; then
-      AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-15}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
+      AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-20}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
     fi
     if [[ ! -f "$model_routing_file" ]]; then
       jq -n '{defaultFallback: null, models: []}' >"$model_routing_file"

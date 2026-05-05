@@ -44,7 +44,7 @@ ROUTING='{
     "local"
   ],
   "dispatch_method": "cronjob",
-  "max_concurrent": 3,
+  "max_concurrent": 20,
   "notes": "Hermes uses the provider/model configured in ~/.hermes/config.yaml"
 }'
 
@@ -53,7 +53,7 @@ echo "$ROUTING" | jq . >"$AUTOSHIP_DIR/hermes-model-routing.json"
 echo "Hermes runtime configured:"
 echo "  CLI available: $HERMES_AVAILABLE"
 echo "  Active session: $HERMES_ACTIVE"
-echo "  Max concurrent: 3 (Hermes subagent limit)"
+echo "  Max concurrent: 20"
 echo "  Routing file: $AUTOSHIP_DIR/hermes-model-routing.json"
 
 # Update main model-routing.json to include Hermes if it exists

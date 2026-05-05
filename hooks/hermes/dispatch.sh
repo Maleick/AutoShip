@@ -60,7 +60,7 @@ fi
 BASE_BRANCH="${BASE_BRANCH:-main}"
 
 # Read Hermes max concurrent from config.yaml
-MAX=3
+MAX=20
 if [[ -f "$HOME/.hermes/config.yaml" ]]; then
   config_max=$(grep 'max_concurrent_children' "$HOME/.hermes/config.yaml" | awk '{print $2}' | tr -d '"')
   if [[ "$config_max" =~ ^[0-9]+$ ]]; then

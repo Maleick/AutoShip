@@ -6,8 +6,8 @@ AutoShip is a multi-runtime plugin that turns GitHub issues into verified pull r
 
 | Runtime | Type | Max Workers | Label | Setup |
 |---------|------|-------------|-------|-------|
-| **OpenCode** | Interactive CLI | 15 | `agent:ready` | `opencode-autoship install` |
-| **Hermes** | Cron-based | 3 | `autoship:ready-simple` | `bash hooks/hermes/setup.sh` |
+| **OpenCode** | Interactive CLI | 20 | `agent:ready` | `opencode-autoship install` |
+| **Hermes** | Cron-based | 20 | `autoship:ready-simple` | `bash hooks/hermes/setup.sh` |
 
 ## OpenCode Handoff
 

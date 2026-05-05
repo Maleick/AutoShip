@@ -45,8 +45,8 @@ AutoShip is the multi-runtime plugin for solo maintainers who want their GitHub 
 
 - Reads open GitHub issues labeled `agent:ready` (OpenCode) or `autoship:ready-simple` (Hermes)
 - Plans work in ascending issue-number order
-- Dispatches **OpenCode** workers up to 15 concurrent
-- Dispatches **Hermes** subagents up to 3 concurrent via cronjobs
+- Dispatches **OpenCode** workers up to 20 concurrent
+- Dispatches **Hermes** workers up to 20 concurrent via cronjobs
 - Verifies completed work before PR creation
 - Creates PRs with conventional commit titles
 - Tracks local state in `.autoship/`
@@ -132,7 +132,7 @@ bash hooks/hermes/dispatch.sh <issue-number>
 ```
 
 Hermes-specific configuration:
-- **Max concurrent**: 3 (Hermes subagent limit)
+- **Max concurrent**: 20
 - **Target label**: `autoship:ready-simple`
 - **Dispatch method**: Cronjob with 15-minute intervals
 - **Worktrees**: Created in `.autoship/workspaces/issue-<number>/`
@@ -141,8 +141,8 @@ AutoShip also loads committed policy profiles from `policies/`. Policies enrich 
 
 ## Defaults
 
-- **OpenCode** max active workers: `15`
-- **Hermes** max active workers: `3` (subagent limit)
+- **OpenCode** max active workers: `20`
+- **Hermes** max active workers: `20`
 - Queue ordering: lowest issue number first
 - Model routing (OpenCode): ranked free OpenCode models first, with deterministic rotation across compatible workers
 - Model routing (Hermes): inherits from `~/.hermes/config.yaml`, no per-issue selection
@@ -159,8 +159,8 @@ AutoShip also loads committed policy profiles from `policies/`. Policies enrich 
 flowchart LR
     A[GitHub issues<br/>agent:ready / autoship:ready-simple] --> B[configured planner]
     B --> C{Runtime}
-    C -->|OpenCode| D[OpenCode worker<br/>free-first rotated pool<br/>max 15]
-    C -->|Hermes| H[Hermes subagent<br/>cron-based dispatch<br/>max 3]
+    C -->|OpenCode| D[OpenCode worker<br/>free-first rotated pool<br/>max 20]
+    C -->|Hermes| H[Hermes worker<br/>cron-based dispatch<br/>max 20]
     D --> E[configured reviewer]
     H --> E
     E -->|pass| F[Pull request]

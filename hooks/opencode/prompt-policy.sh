@@ -9,7 +9,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 CARGO_TIMEOUT="$("$REPO_ROOT/hooks/opencode/policy.sh" value cargoTimeoutSeconds 2>/dev/null)" || CARGO_TIMEOUT="120"
 CARGO_THRESHOLD="$("$REPO_ROOT/hooks/opencode/policy.sh" value cargoTargetIsolationThreshold 2>/dev/null)" || CARGO_THRESHOLD="8"
-MAX_AGENTS="$(jq -r '.config.maxConcurrentAgents // .maxConcurrentAgents // .max_agents // 15' .autoship/state.json .autoship/config.json 2>/dev/null | head -1)"
+MAX_AGENTS="$(jq -r '.config.maxConcurrentAgents // .maxConcurrentAgents // .max_agents // 20' .autoship/state.json .autoship/config.json 2>/dev/null | head -1)"
 TEXT="$(printf '%s\n%s\n%s\n' "$ISSUE_TITLE" "$ISSUE_BODY" "$ISSUE_LABELS")"
 
 cat <<EOF

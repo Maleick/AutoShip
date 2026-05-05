@@ -31,7 +31,7 @@ bash hooks/hermes/setup.sh
 This creates `.autoship/hermes-model-routing.json` with:
 - `available` — whether `hermes` CLI is on `$PATH`
 - `active_session` — whether running inside a Hermes session (detected via `HERMES_SESSION_ID`, `HERMES_CWD`, or `HERMES_PROVIDER`)
-- `max_concurrent` — hard cap of 3 (Hermes subagent limit)
+- `max_concurrent` — default active Hermes worker cap of 20
 - `dispatch_method` — `cronjob`
 
 ### 1.3 GitHub CLI (`gh`) Authentication
@@ -221,7 +221,7 @@ bash hooks/hermes/setup.sh
 
 **Symptom:** `dispatch.sh` prints `CAP_REACHED: N active / 3 max`.
 
-**Fix:** Wait for running jobs to finish, or increase `max_concurrent_children` in `~/.hermes/config.yaml` (not recommended above 3 for Hermes subagent stability).
+**Fix:** Wait for running jobs to finish, or adjust `max_concurrent_children` in `~/.hermes/config.yaml` for the host's capacity.
 
 ### 6.4 Timeout / STUCK Issues
 

@@ -148,7 +148,7 @@ The routing config lives in `config/model-routing.json` (committed), not `.autos
 
 ## Constraints
 
-- Worker cap: 15 (OpenCode), 10 (Hermes subagent limit)
+- Worker cap: 20 for both OpenCode and Hermes
 - Plan `agent:ready` issues in ascending issue-number order
 - Never use `openai/gpt-5.5-fast`
 - Prefer free models first, then OpenCode Go roles

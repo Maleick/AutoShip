@@ -42,10 +42,10 @@ max=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$S
 if [[ -z "$max" && -f "$AUTOSHIP_DIR/config.json" ]]; then
   max=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
 fi
-max="${max:-15}"
+max="${max:-20}"
 # Validate max is numeric
 if [[ ! "$max" =~ ^[0-9]+$ ]]; then
-  max=15
+  max=20
 fi
 repo=$(jq -r '.repo // "unknown"' "$STATE_FILE")
 active=0
