@@ -32,7 +32,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "verify:pack": "bash hooks/opencode/verify-package.sh",
-    "prepack": "tsc",
+    "prepack": "node scripts/sync-version.mjs && tsc",
     "prepublishOnly": "bash hooks/opencode/verify-package.sh"
   },
   "keywords": [

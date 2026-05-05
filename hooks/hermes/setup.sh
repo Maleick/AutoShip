@@ -39,7 +39,7 @@ ROUTING='{
   "providers": [
     "nous",
     "openrouter",
-    "openai-codex",
+    "openai",
     "kimi-coding",
     "local"
   ],

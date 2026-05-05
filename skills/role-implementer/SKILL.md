@@ -2,7 +2,7 @@
 name: role-implementer
 description: Implementer role — writes code to implement features or fixes
 platform: opencode
-tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "Codex_Codex"]
+tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
 ---
 
 # Implementer Role — OpenCode

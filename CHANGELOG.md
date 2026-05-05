@@ -1,5 +1,7 @@
 # [2.4.0](https://github.com/Maleick/AutoShip/compare/v2.3.0...v2.4.0) (2026-05-05)
 
+## v2.4.0
+
 
 ### Features
 

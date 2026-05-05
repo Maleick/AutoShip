@@ -65,13 +65,13 @@ def compatible:
   and (circuit_open(.id) | not);
 def cost_score:
   if .cost == "free" then 100
-  elif (.id | test("(^|/)gpt-5\\.3-codex-spark$|spark"; "i")) then 85
+  elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then 85
   elif (.id | startswith("opencode-go/")) then 80
   elif (.cost // "") == "selected" then 70
   else 50 end;
 def reason:
   if .cost == "free" then "free model selected by default"
-  elif (.id | test("(^|/)gpt-5\\.3-codex-spark$|spark"; "i")) then "Spark model selected for complex task suitability"
+  elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then "Spark model selected for complex task suitability"
   elif (.cost // "") == "selected" then "operator-selected model for task"
   else "model selected as fallback" end;
 def scored_model:
@@ -137,7 +137,7 @@ jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "
     and (circuit_open(.id) | not);
   def cost_score:
     if .cost == "free" then 100
-    elif (.id | test("(^|/)gpt-5\\.3-codex-spark$|spark"; "i")) then 85
+    elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then 85
     elif (.id | startswith("opencode-go/")) then 80
     elif (.cost // "") == "selected" then 70
     else 50 end;

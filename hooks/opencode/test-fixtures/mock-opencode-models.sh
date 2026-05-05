@@ -6,7 +6,7 @@ mock_opencode_models_inventory() {
     'opencode/nemotron-3-super-free' \
     'opencode/minimax-m2.5-free' \
     'openai/gpt-5.5' \
-    'openai/gpt-5.3-codex-spark'
+    'openai/gpt-5.3-spark'
 }
 
 install_mock_opencode_models_fixture() {
@@ -22,7 +22,7 @@ if [[ "${1:-}" == "models" ]]; then
     'opencode/nemotron-3-super-free' \
     'opencode/minimax-m2.5-free' \
     'openai/gpt-5.5' \
-    'openai/gpt-5.3-codex-spark'
+    'openai/gpt-5.3-spark'
   exit 0
 fi
 

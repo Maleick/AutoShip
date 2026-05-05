@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# detect-tools.sh — Detect OpenCode first-party model availability.
+# detect-tools.sh — Detect supported local worker tool availability.
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 QUOTA_FILE="${REPO_ROOT}/.autoship/quota.json"
@@ -22,9 +22,7 @@ probe_command() {
 
 opencode_json=$(probe_command opencode --version)
 gemini_json=$(probe_command gemini --version)
-codex_json=$(probe_command codex --version | jq '. + {requires_bypass_opt_in:true}')
-
-json=$(jq -n --argjson opencode "$opencode_json" --argjson gemini "$gemini_json" --argjson codex "$codex_json" '{opencode:$opencode,gemini:$gemini,codex:$codex}')
+json=$(jq -n --argjson opencode "$opencode_json" --argjson gemini "$gemini_json" '{opencode:$opencode,gemini:$gemini}')
 
 echo "$json"
 
