@@ -93,8 +93,10 @@ LABELS=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels --jq '[.labels[
 if [[ -n "$MODEL_OVERRIDE" ]]; then
   MODEL="$MODEL_OVERRIDE"
 else
-  MODEL_OUTPUT="$(bash "$SCRIPT_DIR/model-router.sh" dispatch_with_routing code simple 2>/dev/null || echo "kimi-k2.6")"
-  MODEL="$(echo "$MODEL_OUTPUT" | tail -1)"
+  # Pass issue title and labels to intelligent router
+  LABELS_JSON=$(echo "$LABELS" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip().split(',')))" 2>/dev/null || echo "[]")
+  MODEL_OUTPUT="$(python3 "$SCRIPT_DIR/model-router.sh" "$TITLE" "$LABELS_JSON" "$TASK_TYPE" 2>/dev/null || echo "kimi-k2.6")"
+  MODEL="$MODEL_OUTPUT"
 fi
 ROLE="implementer"
 
