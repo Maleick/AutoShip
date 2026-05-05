@@ -7,6 +7,7 @@ set -euo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 QUOTA_FILE="$REPO_ROOT/.autoship/quota.json"
+STATE_FILE="$REPO_ROOT/.autoship/state.json"
 
 ensure_init() {
   mkdir -p "$(dirname "$QUOTA_FILE")"
@@ -30,7 +31,14 @@ case "$cmd" in
     ;;
   decrement)
     ensure_init
-    jq '.opencode.dispatches = ((.opencode.dispatches // 0) + 1)' "$QUOTA_FILE" >"$QUOTA_FILE.tmp" && mv "$QUOTA_FILE.tmp" "$QUOTA_FILE"
+    state_dispatches=0
+    if [[ -f "$STATE_FILE" ]]; then
+      state_dispatches=$(jq -r '.stats.session_dispatched // .stats.total_dispatched_all_time // 0' "$STATE_FILE" 2>/dev/null || echo 0)
+    fi
+    [[ "$state_dispatches" =~ ^[0-9]+$ ]] || state_dispatches=0
+    jq --argjson state_dispatches "$state_dispatches" \
+      '.opencode.dispatches = (((.opencode.dispatches // 0) as $current | if $current > $state_dispatches then $current else $state_dispatches end) + 1)' \
+      "$QUOTA_FILE" >"$QUOTA_FILE.tmp" && mv "$QUOTA_FILE.tmp" "$QUOTA_FILE"
     echo "Recorded OpenCode dispatch"
     ;;
   stuck)
