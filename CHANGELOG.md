@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.2.0
+
+- Release metadata bump for v2.2.0.
+
 ## v2.0.11
 
 - Consolidate shared runtime configuration lookup for worker concurrency across dispatch, runner, and status scripts.
