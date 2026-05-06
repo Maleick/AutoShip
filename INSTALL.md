@@ -158,7 +158,7 @@ opencode-autoship install
 If `bash hooks/opencode/setup.sh` fails with "opencode is required" on Windows, use the PowerShell script instead:
 
 ```powershell
-.\\hooks\\opencode\\setup.ps1
+.\hooks\opencode\setup.ps1
 ```
 
 The bash setup script cannot access the PowerShell-based `opencode` CLI. The PowerShell script handles Windows model discovery and config generation natively.
