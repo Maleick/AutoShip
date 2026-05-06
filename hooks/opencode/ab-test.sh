@@ -111,7 +111,7 @@ case "$action" in
             .
           end
         ]
-      ' "$ROUTING_FILE" "$AB_TEST_FILE" > "$tmp" && mv "$tmp" "$ROUTING_FILE"
+      ' "$ROUTING_FILE" "$AB_TEST_FILE" >"$tmp" && mv "$tmp" "$ROUTING_FILE"
     fi
 
     ;;

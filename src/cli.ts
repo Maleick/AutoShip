@@ -22,8 +22,35 @@ import type { AutoshipConfig, DoctorCheck } from "./types.ts";
 
 interface Config {
   plugin?: string[];
+  command?: Record<string, CommandConfig>;
+  enabled_providers?: string[];
+  disabled_providers?: string[];
   [key: string]: unknown;
 }
+
+interface CommandConfig {
+  description: string;
+  template: string;
+  agent: string;
+  subtask: boolean;
+}
+
+const AUTOSHIP_COMMANDS: Record<string, Omit<CommandConfig, "template">> = {
+  autoship: { description: "Start AutoShip orchestration", agent: "build", subtask: false },
+  "autoship-setup": { description: "Configure AutoShip model routing and first-run setup", agent: "build", subtask: false },
+  "autoship-status": { description: "Show AutoShip orchestration status", agent: "build", subtask: false },
+  "autoship-stop": { description: "Gracefully stop AutoShip orchestration", agent: "build", subtask: false },
+  "autoship-plan": { description: "Dry-run AutoShip issue dispatch planning", agent: "planner", subtask: true },
+  "autoship-apply": { description: "Apply a proposed AutoShip workspace by creating its PR", agent: "build", subtask: false },
+  "autoship-audit": { description: "Audit AutoShip local state against GitHub", agent: "planner", subtask: true },
+  "autoship-cancel": { description: "Cancel an AutoShip issue workspace", agent: "build", subtask: false },
+  "autoship-clean": { description: "Clean terminal AutoShip workspaces", agent: "build", subtask: false },
+  "autoship-dashboard": { description: "Show AutoShip dashboard metrics", agent: "build", subtask: false },
+  "autoship-retry": { description: "Retry a blocked or stuck AutoShip issue", agent: "build", subtask: false },
+};
+
+const ENABLED_PROVIDERS = ["kimi-for-coding", "nvidia", "openai", "opencode", "opencode-go", "openrouter"];
+const DISABLED_PROVIDERS = ["github-copilot"];
 
 type InstallItem =
   | { src: string; dest: string; content?: never }
@@ -168,6 +195,15 @@ async function install() {
   }
 
   config.plugin = plugins;
+  config.command = { ...(config.command ?? {}) };
+  for (const [name, command] of Object.entries(AUTOSHIP_COMMANDS)) {
+    config.command[name] = {
+      ...command,
+      template: `{file:commands/${name}.md}\n\n$ARGUMENTS`,
+    };
+  }
+  config.enabled_providers = ENABLED_PROVIDERS;
+  config.disabled_providers = DISABLED_PROVIDERS;
   await saveConfig(configPath, config);
 
   console.log(`\nSuccessfully installed opencode-autoship ${VERSION}`);

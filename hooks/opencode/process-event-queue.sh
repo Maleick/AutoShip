@@ -266,7 +266,7 @@ verify_and_create_pr() {
   local workspace model task_type ab_outcome default_task_type="medium_code"
   workspace="$WORKSPACES_DIR/$issue"
   model=""
-  [[ -f "$workspace/model" ]] && model=$(tr -d '[:space:]' < "$workspace/model")
+  [[ -f "$workspace/model" ]] && model=$(tr -d '[:space:]' <"$workspace/model")
   if [[ -n "$model" ]]; then
     task_type="$default_task_type"
     if [[ -f "$AUTOSHIP_DIR/state.json" ]]; then
