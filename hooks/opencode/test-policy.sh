@@ -527,6 +527,44 @@ done
 assert_eq "STUCK" "$(tr -d '[:space:]' <"$SESSION_REPO/.autoship/workspaces/issue-997/status")" "runner marks session failures stuck"
 grep -F 'OpenCode returned Session not found' "$SESSION_REPO/.autoship/workspaces/issue-997/AUTOSHIP_RUNNER.log" >/dev/null || fail "runner explains OpenCode session failures"
 
+NO_STATUS_REPO="$TMP_DIR/no-status-runner-repo"
+mkdir -p "$NO_STATUS_REPO/.autoship/workspaces/issue-358" "$NO_STATUS_REPO/.autoship/failures" "$NO_STATUS_REPO/hooks/opencode" "$NO_STATUS_REPO/hooks" "$NO_STATUS_REPO/bin"
+git init -q "$NO_STATUS_REPO"
+cp "$SCRIPT_DIR/runner.sh" "$NO_STATUS_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$NO_STATUS_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$NO_STATUS_REPO/hooks/capture-failure.sh"
+chmod +x "$NO_STATUS_REPO/hooks/opencode/runner.sh" "$NO_STATUS_REPO/hooks/update-state.sh" "$NO_STATUS_REPO/hooks/capture-failure.sh"
+# Initialise workspace as its own git repo with one commit and no remotes so
+# salvage_truncated_worker cannot apply (no base ref, no non-runtime changes).
+git -C "$NO_STATUS_REPO/.autoship/workspaces/issue-358" init -q
+git -C "$NO_STATUS_REPO/.autoship/workspaces/issue-358" config user.email autoship@example.invalid
+git -C "$NO_STATUS_REPO/.autoship/workspaces/issue-358" config user.name AutoShip
+mkdir -p "$NO_STATUS_REPO/.autoship/workspaces/issue-358/src"
+printf 'base\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/src/lib.rs"
+git -C "$NO_STATUS_REPO/.autoship/workspaces/issue-358" add src/lib.rs
+git -C "$NO_STATUS_REPO/.autoship/workspaces/issue-358" commit -q -m initial
+cat >"$NO_STATUS_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-358":{"state":"queued","model":"opencode/test-free","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf 'QUEUED\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/status"
+printf 'test prompt\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/model"
+cat >"$NO_STATUS_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+# Worker exits successfully without writing any terminal status marker.
+exit 0
+SH
+chmod +x "$NO_STATUS_REPO/bin/opencode"
+(
+  cd "$NO_STATUS_REPO"
+  PATH="$NO_STATUS_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' <"$NO_STATUS_REPO/.autoship/workspaces/issue-358/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "STUCK" "$(tr -d '[:space:]' <"$NO_STATUS_REPO/.autoship/workspaces/issue-358/status")" "runner marks STUCK when worker exits 0 without terminal status and salvage does not apply"
+
 MONITOR_REPO="$TMP_DIR/monitor-repo"
 mkdir -p "$MONITOR_REPO/.autoship/workspaces/issue-997" "$MONITOR_REPO/hooks/opencode" "$MONITOR_REPO/hooks"
 git init -q "$MONITOR_REPO"

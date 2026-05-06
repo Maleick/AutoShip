@@ -315,7 +315,7 @@ mark_stuck_unless_terminal() {
     *)
       error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker exited without terminal status")
       autoship_capture_failure stuck "$wid" "error_summary=$error_msg"
-      echo "COMPLETE" >status
+      echo "STUCK" >status
       ;;
   esac
 }
