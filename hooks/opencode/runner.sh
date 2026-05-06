@@ -354,11 +354,9 @@ for dir in "$WORKSPACES_DIR"/*/; do
           if [[ "$current_status" == "COMPLETE" ]]; then
             bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$model" >/dev/null 2>&1 || true
             bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$model" >/dev/null 2>&1 || true
-            bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$model" "$task_type" "pass" >/dev/null 2>&1 || true
           else
             bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
             bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
-            bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$model" "$task_type" "fail" >/dev/null 2>&1 || true
           fi
         else
           if is_billing_or_quota_failure AUTOSHIP_RUNNER.log; then
@@ -378,11 +376,9 @@ for dir in "$WORKSPACES_DIR"/*/; do
                 if [[ "$current_status" == "COMPLETE" ]]; then
                   bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
                   bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$fallback_model" >/dev/null 2>&1 || true
-                  bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$fallback_model" "$task_type" "pass" >/dev/null 2>&1 || true
                 else
                   bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
                   bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true
-                  bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue_id" "$fallback_model" "$task_type" "fail" >/dev/null 2>&1 || true
                 fi
               else
                 echo "STUCK" > status

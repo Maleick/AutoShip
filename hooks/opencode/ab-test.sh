@@ -94,8 +94,6 @@ case "$action" in
       })
     ' "$AB_TEST_FILE" > "$tmp" && mv "$tmp" "$AB_TEST_FILE"
 
-    # Auto-adjust model scores based on performance
-    bash "$0" adjust-scores >/dev/null 2>&1 || true
     ;;
 
   adjust-scores)
@@ -112,7 +110,7 @@ case "$action" in
           ($ab.performance[$m.id].total // 1) as $total |
           ($passes / $total) as $rate |
           .ab_score = ($rate * 100 | floor) |
-          .strength = ((.strength // 0) + (.ab_score // 0))
+          .strength = (.strength // 0)
         else
           .
         end
