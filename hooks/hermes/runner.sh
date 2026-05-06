@@ -32,7 +32,12 @@ REPO_ROOT=$(autoship_repo_root) || exit 1
 cd "$REPO_ROOT"
 
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
-WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
+# Allow overriding workspaces directory via HERMES_TARGET_REPO_PATH
+if [[ -n "${HERMES_TARGET_REPO_PATH:-}" && -d "$HERMES_TARGET_REPO_PATH/.autoship/workspaces" ]]; then
+  WORKSPACES_DIR="$HERMES_TARGET_REPO_PATH/.autoship/workspaces"
+else
+  WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
+fi
 
 # Read Hermes max concurrent from config.yaml; allow AutoShip runs to cap lower.
 MAX="${HERMES_MAX_WORKERS:-20}"
@@ -74,8 +79,8 @@ if [[ -n "${1:-}" ]]; then
     worktree_path=$(git -C "$HERMES_TARGET_REPO_PATH" worktree list --porcelain 2>/dev/null | grep -B1 "autoship/issue-${ISSUE_NUM}$" | grep "^worktree " | awk '{print $2}' || echo "")
   fi
   if [[ -z "$worktree_path" || ! -d "$worktree_path" ]]; then
-    # Fallback: search AutoShip workspace locations
-    for base in "$REPO_ROOT/.autoship/workspaces" "$REPO_ROOT/.worktrees" "$HOME/Projects/AutoShip/.autoship/workspaces"; do
+    # Fallback: search AutoShip workspace locations — include HERMES_TARGET_REPO_PATH workspaces
+    for base in "$REPO_ROOT/.autoship/workspaces" "$REPO_ROOT/.worktrees" "$HOME/Projects/AutoShip/.autoship/workspaces" "$HERMES_TARGET_REPO_PATH/.autoship/workspaces"; do
       if [[ -d "$base/issue-$ISSUE_NUM" ]]; then
         worktree_path="$base/issue-$ISSUE_NUM"
         break
@@ -143,16 +148,16 @@ The bridge writes PowerShell scripts to Windows temp and executes via cmd.exe /c
 Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (lib.exe).
 "
         # Append bridge instructions to prompt file temporarily
-        cp "$workspace_dir/HERMES_PROMPT.md" "$workspace_dir/HERMES_PROMPT.md.bak"
-        echo "$bridge_instructions" >> "$workspace_dir/HERMES_PROMPT.md"
+        cp "$prompt_file" "$workspace_dir/prompt.bak"
+        echo "$bridge_instructions" >> "$prompt_file"
       fi
     fi
     
-    "$TIMEOUT_CMD" "$HERMES_WORKER_TIMEOUT_SECONDS" hermes chat "${HERMES_MODEL_ARGS[@]}" -q "$(cat "$workspace_dir/HERMES_PROMPT.md")" --worktree --quiet || {
+    "$TIMEOUT_CMD" "$HERMES_WORKER_TIMEOUT_SECONDS" hermes chat "${HERMES_MODEL_ARGS[@]}" -q "$(cat "$prompt_file")" --worktree --quiet || {
       exit_code=$?
       # Restore original prompt if we modified it
-      if [[ -f "$workspace_dir/HERMES_PROMPT.md.bak" ]]; then
-        mv "$workspace_dir/HERMES_PROMPT.md.bak" "$workspace_dir/HERMES_PROMPT.md"
+      if [[ -f "$workspace_dir/prompt.bak" ]]; then
+        mv "$workspace_dir/prompt.bak" "$prompt_file"
       fi
       if [[ $exit_code -eq 124 ]]; then
         echo "TIMEOUT: $ISSUE_KEY exceeded ${HERMES_WORKER_TIMEOUT_SECONDS}s"
@@ -167,8 +172,8 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     }
     
     # Restore original prompt if we modified it
-    if [[ -f "$workspace_dir/HERMES_PROMPT.md.bak" ]]; then
-      mv "$workspace_dir/HERMES_PROMPT.md.bak" "$workspace_dir/HERMES_PROMPT.md"
+    if [[ -f "$workspace_dir/prompt.bak" ]]; then
+      mv "$workspace_dir/prompt.bak" "$prompt_file"
     fi
 
     # Check result using absolute path
@@ -227,8 +232,20 @@ for status_file in $queued; do
   workspace_dir=$(dirname "$status_file")
   issue_key=$(basename "$workspace_dir")
 
-  if [[ ! -f "$workspace_dir/HERMES_PROMPT.md" ]]; then
+  if [[ -f "$workspace_dir/HERMES_PROMPT.md" ]]; then
+    prompt_file="$workspace_dir/HERMES_PROMPT.md"
+  elif [[ -f "$workspace_dir/AUTOSHIP_PROMPT.md" ]]; then
+    prompt_file="$workspace_dir/AUTOSHIP_PROMPT.md"
+  else
     continue
+  fi
+
+  # Check if this is a Windows-target repo (has .cargo/config.toml with x86_64-pc-windows-msvc)
+  is_windows_repo=false
+  if [[ -f "$workspace_dir/.cargo/config.toml" ]]; then
+    if grep -q "x86_64-pc-windows-msvc" "$workspace_dir/.cargo/config.toml" 2>/dev/null; then
+      is_windows_repo=true
+    fi
   fi
 
   # Dispatch this single issue, detached from terminal
