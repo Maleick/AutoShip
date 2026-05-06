@@ -1,6 +1,6 @@
 {
   "name": "opencode-autoship",
-  "version": "2.2.0",
+  "version": "2.4.10",
   "description": "Turn backlog into reviewed PRs with an OpenCode issue-to-PR orchestration plugin.",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,6 +21,8 @@
     "skills",
     "plugins",
     "policies",
+    "INSTALL.md",
+    ".opencode/INSTALL.md",
     "AGENTS.md",
     "VERSION",
     "README.md",
@@ -30,7 +32,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "verify:pack": "bash hooks/opencode/verify-package.sh",
-    "prepack": "tsc"
+    "prepack": "node scripts/sync-version.mjs && tsc",
+    "prepublishOnly": "bash hooks/opencode/verify-package.sh"
   },
   "keywords": [
     "opencode",
@@ -49,7 +52,14 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/node": "^20.0.0",
+    "semantic-release": "^25.0.3",
     "typescript": "^5.0.0"
   },
   "engines": {

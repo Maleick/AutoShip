@@ -21,7 +21,7 @@ fi
 
 if awk -v quota="$quota" -v threshold="$threshold" 'BEGIN { exit !(quota >= threshold && quota >= 0) }'; then
   tmp=$(mktemp)
-  jq '.paused = true | .pause_reason = "quota guardrail"' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  jq '.paused = true | .pause_reason = "quota guardrail"' "$STATE_FILE" >"$tmp" && mv "$tmp" "$STATE_FILE"
   echo "AutoShip paused: quota ${quota}% >= ${threshold}%"
   exit 1
 fi

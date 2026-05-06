@@ -22,7 +22,7 @@ AutoShip is OpenCode-only.
 
 ## Defaults
 
-- Active worker cap: 15
+- Active worker cap: 20
 - Queue ordering: lowest issue number first
 - Default worker pool: ranked currently available free models
 - Explicit worker models: allowed if present in the current OpenCode model list

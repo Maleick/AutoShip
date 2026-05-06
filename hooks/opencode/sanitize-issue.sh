@@ -12,7 +12,7 @@ log_flagged() {
   local pattern="$2"
   local timestamp
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  echo "[$timestamp] issue=$issue_num pattern='$pattern'" >> "$SANITIZE_LOG"
+  echo "[$timestamp] issue=$issue_num pattern='$pattern'" >>"$SANITIZE_LOG"
 }
 
 sanitize_issue_body() {
@@ -43,7 +43,7 @@ sanitize_issue_body() {
     fi
   done
 
-  if LC_ALL=C grep -q '[^[:print:][:space:]]' <<< "$sanitized"; then
+  if LC_ALL=C grep -q '[^[:print:][:space:]]' <<<"$sanitized"; then
     log_flagged "$issue_num" "control_characters"
     sanitized=$(echo "$sanitized" | tr -cd '[:print:]\n\t' || true)
   fi

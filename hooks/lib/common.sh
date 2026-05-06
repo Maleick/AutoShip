@@ -2,6 +2,7 @@
 # lib/common.sh — Lightweight shared utilities for AutoShip hooks
 # Sourced by hooks that need common functionality
 # Minimal dependencies: bash 3.2+, jq (optional)
+set -euo pipefail
 
 # Only initialize if not already loaded
 [[ -n "${_AUTOSHIP_COMMON_LOADED:-}" ]] && return 0
@@ -39,7 +40,7 @@ autoship_config_value() {
   repo_root="$(autoship_repo_root 2>/dev/null || true)"
   local state_file="$repo_root/.autoship/state.json"
   local config_file="$repo_root/.autoship/config.json"
-  
+
   if [[ -f "$state_file" ]]; then
     value=$(jq -r --arg key "$key" '.config[$key] // empty' "$state_file" 2>/dev/null || true)
   fi
@@ -57,7 +58,7 @@ autoship_max_agents() {
     max=$(autoship_config_value "max_agents" "")
   fi
   if [[ -z "$max" || ! "$max" =~ ^[0-9]+$ ]]; then
-    max=15
+    max=20
   fi
   printf '%s\n' "$max"
 }
@@ -110,15 +111,15 @@ autoship_capture_failure() {
 autoship_resolve_model() {
   local task_type="$1" issue_num="$2" override="${3:-}"
   local script_dir repo_root routing_file
-  
+
   if [[ -n "$override" ]]; then
     printf '%s\n' "$override"
     return 0
   fi
-  
+
   repo_root="$(autoship_repo_root 2>/dev/null || true)"
-  routing_file="$repo_root/.autoship/model-routing.json"
-  
+  routing_file="$repo_root/config/model-routing.json"
+
   if [[ -f "$routing_file" ]]; then
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../opencode" && pwd 2>/dev/null || true)"
     if [[ -x "$script_dir/select-model.sh" ]]; then
@@ -134,13 +135,13 @@ autoship_resolve_model() {
 # Returns: role name via stdout
 autoship_resolve_role() {
   case "$1" in
-    docs|documentation) printf '%s\n' docs ;;
-    review|code_review) printf '%s\n' reviewer ;;
-    test|tests|ci_fix) printf '%s\n' tester ;;
+    docs | documentation) printf '%s\n' docs ;;
+    review | code_review) printf '%s\n' reviewer ;;
+    test | tests | ci_fix) printf '%s\n' tester ;;
     release) printf '%s\n' release ;;
-    simplify|refactor) printf '%s\n' simplifier ;;
-    plan|planning) printf '%s\n' planner ;;
-    lead|orchestration|coordination) printf '%s\n' lead ;;
+    simplify | refactor) printf '%s\n' simplifier ;;
+    plan | planning) printf '%s\n' planner ;;
+    lead | orchestration | coordination) printf '%s\n' lead ;;
     *) printf '%s\n' implementer ;;
   esac
 }

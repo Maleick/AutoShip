@@ -27,13 +27,13 @@ autoship_require_cmd() {
 }
 
 # ── Standard paths ──────────────────────────────────────────────
-autoship_autoship_dir()  { printf '%s/.autoship\n' "$(autoship_repo_root)"; }
-autoship_state_file()    { printf '%s/.autoship/state.json\n' "$(autoship_repo_root)"; }
-autoship_ledger_file()   { printf '%s/.autoship/token-ledger.json\n' "$(autoship_repo_root)"; }
-autoship_workspaces_dir(){ printf '%s/.autoship/workspaces\n' "$(autoship_repo_root)"; }
-autoship_event_queue()   { printf '%s/.autoship/event-queue.json\n' "$(autoship_repo_root)"; }
-autoship_routing_file()  { printf '%s/.autoship/model-routing.json\n' "$(autoship_repo_root)"; }
-autoship_history_file()  { printf '%s/.autoship/model-history.json\n' "$(autoship_repo_root)"; }
+autoship_autoship_dir() { printf '%s/.autoship\n' "$(autoship_repo_root)"; }
+autoship_state_file() { printf '%s/.autoship/state.json\n' "$(autoship_repo_root)"; }
+autoship_ledger_file() { printf '%s/.autoship/token-ledger.json\n' "$(autoship_repo_root)"; }
+autoship_workspaces_dir() { printf '%s/.autoship/workspaces\n' "$(autoship_repo_root)"; }
+autoship_event_queue() { printf '%s/.autoship/event-queue.json\n' "$(autoship_repo_root)"; }
+autoship_routing_file() { printf '%s/config/model-routing.json\n' "$(autoship_repo_root)"; }
+autoship_history_file() { printf '%s/.autoship/model-history.json\n' "$(autoship_repo_root)"; }
 
 # ── Thin state update wrapper ───────────────────────────────────
 # Callers should prefer this over hardcoding update-state.sh paths.

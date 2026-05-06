@@ -4,10 +4,10 @@ Use this checklist from a clean checkout on the release branch. Commands are wri
 
 ## Inputs
 
-Set the release version once. `VERSION` includes the `v` prefix; `PACKAGE_VERSION` is plain semver for `package.json` and npm.
+Set the release version once. `VERSION` includes the `v` prefix; `PACKAGE_VERSION` is plain semver for `package.json`, `package-lock.json`, and npm.
 
 ```bash
-export VERSION=v2.0.3
+export VERSION=vX.Y.Z
 export PACKAGE_VERSION=${VERSION#v}
 ```
 
@@ -30,13 +30,14 @@ The `git status --short` output should be empty, unless the only changes are int
 
 ## Update Release Files
 
-Update `VERSION` and the package version. There is no lockfile in this repository; if one is added later, update it in the same release commit.
+Update `VERSION`, `package.json`, and `package-lock.json` together.
 
 ```bash
 printf '%s\n' "$VERSION" > VERSION
 npm version "$PACKAGE_VERSION" --no-git-tag-version
 test "$(cat VERSION)" = "$VERSION"
 node -e "const pkg=require('./package.json'); if (pkg.version !== process.env.PACKAGE_VERSION) { throw new Error(pkg.version + ' !== ' + process.env.PACKAGE_VERSION); }"
+node -e "const lock=require('./package-lock.json'); if (lock.version !== process.env.PACKAGE_VERSION || lock.packages[''].version !== process.env.PACKAGE_VERSION) { throw new Error('package-lock.json version mismatch'); }"
 ```
 
 Update `CHANGELOG.md` manually so the top entry is `## $VERSION` and summarizes user-visible release changes. Then verify the heading exists.
@@ -69,6 +70,8 @@ const files = new Set(pack.files.map((file) => file.path));
 const required = [
   'dist/index.js',
   'dist/cli.js',
+  'INSTALL.md',
+  '.opencode/INSTALL.md',
   'hooks/opencode/install.sh',
   'commands/autoship.md',
   'skills/autoship-orchestrate/SKILL.md',
@@ -91,7 +94,7 @@ Commit the release edits and create the tag only after all verification passes.
 
 ```bash
 git status --short
-git add VERSION package.json CHANGELOG.md
+git add VERSION package.json package-lock.json CHANGELOG.md
 git commit -m "chore: release $VERSION"
 git tag -a "$VERSION" -m "$VERSION"
 ```
@@ -101,7 +104,7 @@ git tag -a "$VERSION" -m "$VERSION"
 Publish the npm package from the same commit used for the tag. This is the canonical package for the long-term global install path documented as `npm install -g opencode-autoship`.
 
 ```bash
-npm install --package-lock=false
+npm ci
 npm publish --access public
 ```
 
@@ -110,7 +113,8 @@ If npm prompts with a browser authentication URL, complete the npm CLI auth flow
 Remove local publish artifacts after publishing if they were created only for the release:
 
 ```bash
-rm -rf node_modules dist package-lock.json
+test -f package.json && test -d hooks/opencode
+rm -rf node_modules dist
 ```
 
 `bunx opencode-autoship install` is the one-time/no-global path. It resolves the same npm package but does not leave the CLI installed on PATH.
@@ -148,7 +152,7 @@ cd -
 rm -rf "$tmpdir"
 ```
 
-Verify the repository installer can sync the GitHub release assets.
+Verify the package installer copies the packaged assets.
 
 ```bash
 config_dir=$(mktemp -d)

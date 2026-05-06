@@ -2,7 +2,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 for dep in jq gh; do
   if ! command -v "$dep" >/dev/null 2>&1; then
     echo "Error: $dep is required" >&2
@@ -33,7 +32,7 @@ fi
 "$SCRIPT_DIR/sync-release.sh"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
-  jq -n --arg plugin "$PLUGIN_URL" '{plugin: [$plugin]}' > "$CONFIG_FILE"
+  jq -n --arg plugin "$PLUGIN_URL" '{plugin: [$plugin]}' >"$CONFIG_FILE"
 else
   jq --arg plugin "$PLUGIN_URL" '
     if has("plugin") and (.plugin | type != "array") then
@@ -41,7 +40,7 @@ else
     else
       .plugin = ((.plugin // []) | if index($plugin) then . else . + [$plugin] end)
     end
-  ' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+  ' "$CONFIG_FILE" >"$CONFIG_FILE.tmp"
   mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
 fi
 

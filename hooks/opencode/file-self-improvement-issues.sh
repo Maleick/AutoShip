@@ -8,7 +8,10 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 
 REPORT_FILE="${1:-$REPO_ROOT/.autoship/reports/self-improvement.md}"
 
-[[ -f "$REPORT_FILE" ]] || { echo "No report found at $REPORT_FILE" >&2; exit 1; }
+[[ -f "$REPORT_FILE" ]] || {
+  echo "No report found at $REPORT_FILE" >&2
+  exit 1
+}
 
 extract_section() {
   local heading="$1"
@@ -21,12 +24,13 @@ extract_section() {
 
 affected="$(extract_section '## Affected Files' | sed '/^[[:space:]]*$/d' | head -20)"
 
-extract_section '## Candidate Acceptance Criteria' |
-  sed -n 's/^- //p' |
-  while IFS= read -r criterion; do
+extract_section '## Candidate Acceptance Criteria' \
+  | sed -n 's/^- //p' \
+  | while IFS= read -r criterion; do
     [[ -n "$criterion" ]] || continue
     title="AutoShip self-improvement: ${criterion}"
-    body="$(cat <<EOF
+    body="$(
+      cat <<EOF
 Generated from AutoShip self-improvement report.
 
 ## Root Cause Evidence
@@ -39,7 +43,7 @@ ${affected:-No affected files listed.}
 ## Candidate Acceptance Criteria
 - ${criterion}
 EOF
-)"
+    )"
 
     gh issue create \
       --title "$title" \

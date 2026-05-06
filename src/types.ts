@@ -192,16 +192,10 @@ export interface ToolStatus {
 export interface StateConfig {
   /** Maximum concurrent worker agents (default: `15`). */
   maxConcurrentAgents: number;
-  /** Legacy alias for `maxConcurrentAgents`. */
-  max_concurrent_agents?: number;
   /** Maximum retry attempts per issue (default: `3`). */
   maxRetries?: number;
-  /** Legacy alias for `maxRetries`. */
-  max_retries?: number;
   /** Worker stall timeout in milliseconds (default: `900000`). */
   workerTimeoutMs?: number;
-  /** Legacy alias for `workerTimeoutMs`. */
-  stall_timeout_ms?: number;
   /** Cargo target isolation threshold. */
   cargoTargetIsolationThreshold?: number;
   /** Whether to salvage truncated workers. */
@@ -299,16 +293,8 @@ export interface AutoshipConfig {
   runtime: string;
   /** Maximum concurrent agents (duplicated from state for consumer convenience). */
   maxConcurrentAgents: number;
-  /** Legacy alias. */
-  max_agents?: number;
   /** Labels to monitor (default: `["agent:ready"]`). */
   labels: string[];
-  /** Frontier role model IDs (legacy, prefer `model-routing.json`). */
-  plannerModel?: string;
-  coordinatorModel?: string;
-  orchestratorModel?: string;
-  reviewerModel?: string;
-  leadModel?: string;
   /** Full list of configured model IDs. */
   models: string[];
   /** Whether model refresh was requested during setup. */

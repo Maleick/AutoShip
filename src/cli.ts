@@ -7,6 +7,7 @@ import {
   copyFile,
   readdir,
   stat,
+  lstat,
   access,
 } from "node:fs/promises";
 import { resolve, join } from "node:path";
@@ -14,7 +15,8 @@ import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
-const VERSION = (await readFile(join(PACKAGE_ROOT, "VERSION"), "utf8")).trim();
+const packageJson = JSON.parse(await readFile(join(PACKAGE_ROOT, "package.json"), "utf8")) as { version?: string };
+const VERSION = `v${packageJson.version ?? "0.0.0"}`;
 
 import type { AutoshipConfig, DoctorCheck } from "./types.ts";
 
@@ -22,6 +24,10 @@ interface Config {
   plugin?: string[];
   [key: string]: unknown;
 }
+
+type InstallItem =
+  | { src: string; dest: string; content?: never }
+  | { content: string; dest: string; src?: never };
 
 function resolveConfigDir(): string {
   if (process.env.OPENCODE_CONFIG_DIR) {
@@ -46,16 +52,39 @@ function resolveProjectAutoshipDir(): string {
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {
+  const srcStat = await lstat(src);
+  if (srcStat.isSymbolicLink()) {
+    throw new Error(`Refusing to copy symlinked package asset: ${src}`);
+  }
+  await assertWritablePath(dest, "OpenCode asset");
   await mkdir(dest, { recursive: true });
   const entries = await readdir(src);
   for (const entry of entries) {
     const srcPath = join(src, entry);
     const destPath = join(dest, entry);
+    const linkStat = await lstat(srcPath);
+    if (linkStat.isSymbolicLink()) {
+      throw new Error(`Refusing to copy symlinked package asset: ${srcPath}`);
+    }
     const st = await stat(srcPath);
     if (st.isDirectory()) {
       await copyDir(srcPath, destPath);
     } else {
+      await assertWritablePath(destPath, "OpenCode asset");
       await copyFile(srcPath, destPath);
+    }
+  }
+}
+
+async function assertWritablePath(path: string, label: string): Promise<void> {
+  try {
+    const st = await lstat(path);
+    if (st.isSymbolicLink()) {
+      throw new Error(`Refusing to write symlinked ${label}: ${path}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
     }
   }
 }
@@ -74,6 +103,7 @@ async function loadConfig(path: string): Promise<Config> {
 }
 
 async function saveConfig(path: string, config: Config): Promise<void> {
+  await assertWritablePath(path, "OpenCode config");
   await writeFile(path, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
@@ -83,27 +113,43 @@ async function install() {
 
   console.log(`Installing opencode-autoship ${VERSION} to ${configDir}`);
 
+  await assertWritablePath(configDir, "OpenCode config root");
+  await assertWritablePath(autoshipDir, "OpenCode asset root");
   await mkdir(autoshipDir, { recursive: true });
 
-  const items = [
+  const items: InstallItem[] = [
     { src: join(PACKAGE_ROOT, "hooks"), dest: join(autoshipDir, "hooks") },
     { src: join(PACKAGE_ROOT, "commands"), dest: join(autoshipDir, "commands") },
     { src: join(PACKAGE_ROOT, "skills"), dest: join(autoshipDir, "skills") },
     { src: join(PACKAGE_ROOT, "plugins"), dest: join(autoshipDir, "plugins") },
     { src: join(PACKAGE_ROOT, "AGENTS.md"), dest: join(autoshipDir, "AGENTS.md") },
-    { src: join(PACKAGE_ROOT, "VERSION"), dest: join(autoshipDir, "VERSION") },
+    { content: `${VERSION}\n`, dest: join(autoshipDir, "VERSION") },
   ];
 
   for (const item of items) {
     try {
+      if (item.content !== undefined) {
+        await assertWritablePath(item.dest, "OpenCode asset");
+        await writeFile(item.dest, item.content, "utf8");
+        continue;
+      }
+      const linkStat = await lstat(item.src);
+      if (linkStat.isSymbolicLink()) {
+        throw new Error(`Refusing to copy symlinked package asset: ${item.src}`);
+      }
       const st = await stat(item.src);
       if (st.isDirectory()) {
         await copyDir(item.src, item.dest);
       } else {
+        await assertWritablePath(item.dest, "OpenCode asset");
         await copyFile(item.src, item.dest);
       }
-    } catch {
-      console.warn(`Warning: ${item.src} not found, skipping`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        console.warn(`Warning: ${item.src} not found, skipping`);
+        continue;
+      }
+      throw error;
     }
   }
 

@@ -25,13 +25,14 @@ fi
 REPO_ROOT="$(autoship_repo_root)"
 
 AUTOSHIP_DIR=".autoship"
+STATE_FILE="$AUTOSHIP_DIR/state.json"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 EVENT_QUEUE="$AUTOSHIP_DIR/event-queue.json"
 LOCK_FILE="$AUTOSHIP_DIR/event-queue.lock"
 
 [[ ! -d "$WORKSPACES_DIR" ]] && exit 0
 mkdir -p "$AUTOSHIP_DIR"
-[[ -f "$EVENT_QUEUE" ]] || printf '[]\n' > "$EVENT_QUEUE"
+[[ -f "$EVENT_QUEUE" ]] || printf '[]\n' >"$EVENT_QUEUE"
 
 emit_event() {
   local type="$1"
@@ -46,10 +47,10 @@ emit_event() {
     --arg issue "$issue" \
     --arg status "$status" \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      '{type: $type, issue: $issue, priority: 2, data: {status: $status}, queued_at: $ts}')
+    '{type: $type, issue: $issue, priority: 2, data: {status: $status}, queued_at: $ts}')
 
   write_event() {
-    jq --argjson evt "$event" '. + [$evt]' "$EVENT_QUEUE" > "${EVENT_QUEUE}.tmp" 2>/dev/null
+    jq --argjson evt "$event" '. + [$evt]' "$EVENT_QUEUE" >"${EVENT_QUEUE}.tmp" 2>/dev/null
     mv "${EVENT_QUEUE}.tmp" "$EVENT_QUEUE" 2>/dev/null || true
     touch "$marker" 2>/dev/null || true
   }
@@ -101,12 +102,12 @@ check_stalled() {
     timeout_ms=900000
   fi
   timeout_secs=$((timeout_ms / 1000))
-  (( timeout_secs > 0 )) || timeout_secs=900
+  ((timeout_secs > 0)) || timeout_secs=900
 
-  if (( elapsed > timeout_secs )); then
+  if ((elapsed > timeout_secs)); then
     local current_status=$(cat "$status_file" 2>/dev/null || echo "")
     if [[ "$current_status" == "RUNNING" ]]; then
-      echo "STUCK" > "$status_file"
+      echo "STUCK" >"$status_file"
       autoship_capture_failure timeout "$key" "error_summary=worker exceeded ${timeout_secs}s runtime"
       emit_event "stuck" "$key" "STUCK"
     fi
@@ -117,7 +118,7 @@ is_worker_live() {
   local pid_file="$1/worker.pid"
   [[ -s "$pid_file" ]] || return 0
   local pid
-  pid=$(tr -d '[:space:]' < "$pid_file")
+  pid=$(tr -d '[:space:]' <"$pid_file")
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   kill -0 "$pid" 2>/dev/null
 }
@@ -139,10 +140,10 @@ reconcile_exited_worker() {
   is_worker_live "$dir" && return 0
 
   if has_fresh_result "$dir"; then
-    echo "COMPLETE" > "$status_file"
+    echo "COMPLETE" >"$status_file"
     emit_event "verify" "$key" "COMPLETE"
   else
-    echo "STUCK" > "$status_file"
+    echo "STUCK" >"$status_file"
     autoship_capture_failure dead_worker "$key" "error_summary=worker process exited without fresh result"
     emit_event "stuck" "$key" "STUCK"
   fi
@@ -151,6 +152,7 @@ reconcile_exited_worker() {
 for dir in "$WORKSPACES_DIR"/*/; do
   [[ -d "$dir" ]] || continue
   key=$(basename "$dir")
+  [[ "$key" =~ ^issue-[0-9]+$ ]] || continue
   status_file="$dir/status"
 
   [[ ! -f "$status_file" ]] && continue

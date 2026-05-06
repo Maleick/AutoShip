@@ -5,7 +5,7 @@ AUTOSHIP_LOG_DIR="${AUTOSHIP_LOG_DIR:-.autoship/logs}"
 AUTOSHIP_LOG_FILE="${AUTOSHIP_LOG_FILE:-$AUTOSHIP_LOG_DIR/events.jsonl}"
 
 json_escape() {
-  jq -Rsa . <<< "${1:-}"
+  jq -Rsa . <<<"${1:-}"
 }
 
 autoship_log() {
@@ -20,7 +20,7 @@ autoship_log() {
     --arg event "$event" \
     --arg issue "$issue" \
     --arg message "$message" \
-    '{timestamp:$ts,event:$event,issue:$issue,message:$message}' >> "$AUTOSHIP_LOG_FILE"
+    '{timestamp:$ts,event:$event,issue:$issue,message:$message}' >>"$AUTOSHIP_LOG_FILE"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

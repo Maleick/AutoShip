@@ -18,7 +18,7 @@ AutoShip is an autonomous GitHub issue → pull request pipeline. It reads open 
 
 ## Concurrency
 
-- Default active worker cap: 15.
+- Default active worker cap: 20.
 - `runner.sh` enforces the cap before starting queued workspaces.
 - Dispatch can queue beyond the active cap; queued work starts when capacity is available.
 - `AUTOSHIP_PLAN_ORDER` can switch planning from ascending to `cadence`, `updated`, or `descending`.

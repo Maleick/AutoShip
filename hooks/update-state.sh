@@ -37,7 +37,6 @@ if [[ -z "${AUTOSHIP_STATE_LOCKED:-}" ]]; then
   # No lock mechanism available -- proceed without locking
 fi
 
-
 if [[ ! -f "$STATE_FILE" ]]; then
   echo "Error: $STATE_FILE not found. Run init.sh first." >&2
   exit 1
@@ -89,7 +88,7 @@ manage_labels() {
 
   # Remove old labels first
   for old_label in "${remove_labels[@]}"; do
-      if gh label list --repo "$repo_slug" --json name --jq ".[].name" 2>/dev/null | grep -q "^${old_label}$"; then
+    if gh label list --repo "$repo_slug" --json name --jq ".[].name" 2>/dev/null | grep -q "^${old_label}$"; then
       gh issue edit "$issue_id" --repo "$repo_slug" --remove-label "$old_label" 2>/dev/null || true
     fi
   done
@@ -136,7 +135,7 @@ append_ledger_record() {
       || echo 0)
     now_epoch=$(date -u +%s)
     if [[ "$start_epoch" -gt 0 && "$now_epoch" -ge "$start_epoch" ]]; then
-      duration_ms=$(( (now_epoch - start_epoch) * 1000 ))
+      duration_ms=$(((now_epoch - start_epoch) * 1000))
     fi
   fi
 
@@ -170,7 +169,7 @@ append_ledger_record() {
        then .sessions[-1].issues += [$r]
        else .
        end' \
-      "$ledger" > "$tmp" && mv "$tmp" "$ledger"
+      "$ledger" >"$tmp" && mv "$tmp" "$ledger"
   }
 
   if command -v flock >/dev/null 2>&1; then
@@ -185,8 +184,8 @@ append_ledger_record() {
   elif command -v lockf >/dev/null 2>&1; then
     local record_tmp
     record_tmp=$(mktemp)
-    chmod 600 "$record_tmp"   # close TOCTOU window before writing record data
-    printf '%s' "$record" > "$record_tmp"
+    chmod 600 "$record_tmp" # close TOCTOU window before writing record data
+    printf '%s' "$record" >"$record_tmp"
     # Pass paths as positional args ($1, $2) to avoid shell injection from special chars in paths
     lockf -k "$lock" bash -c '
       ledger="$1" record_tmp="$2"
@@ -220,7 +219,12 @@ TMP_FILES=()
 cleanup() { for f in "${TMP_FILES[@]+"${TMP_FILES[@]}"}"; do rm -f "$f"; done; }
 trap cleanup EXIT
 
-make_tmp() { local t; t=$(mktemp); TMP_FILES+=("$t"); echo "$t"; }
+make_tmp() {
+  local t
+  t=$(mktemp)
+  TMP_FILES+=("$t")
+  echo "$t"
+}
 
 arg_value() {
   local wanted="$1"
@@ -234,6 +238,50 @@ arg_value() {
   done
   return 1
 }
+
+valid_task_type() {
+  case "$1" in
+    research | docs | simple_code | medium_code | complex | mechanical | ci_fix | rust_unsafe) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+valid_model_id() {
+  [[ "$1" =~ ^[A-Za-z0-9._:-]+/[A-Za-z0-9._:@+-]+$ || "$1" =~ ^[A-Za-z0-9._:-]+$ ]]
+}
+
+validate_state_fields() {
+  local pair key value
+  for pair in "$@"; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    case "$key" in
+      task_type)
+        if ! valid_task_type "$value"; then
+          echo "Error: invalid task_type: $value" >&2
+          exit 1
+        fi
+        ;;
+      model | agent)
+        if [[ -z "$value" || "$value" =~ ^[0-9]+$ || ! "$value" =~ ^[A-Za-z0-9._:@/+:-]+$ ]]; then
+          echo "Error: invalid $key: $value" >&2
+          exit 1
+        fi
+        ;;
+      role)
+        case "$value" in
+          planner | coordinator | orchestrator | reviewer | lead | implementer | simplifier | tester | docs | release) ;;
+          *)
+            echo "Error: invalid role: $value" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+    esac
+  done
+}
+
+validate_state_fields "$@"
 
 record_failure_retry_state() {
   local issue_id="$1"
@@ -252,7 +300,7 @@ record_failure_retry_state() {
   terminal=false
   retry_eligible=true
   escalation_reason=$(arg_value escalation_reason "$@" || true)
-  if (( attempt >= retry_limit )); then
+  if ((attempt >= retry_limit)); then
     terminal=true
     retry_eligible=false
     escalation_reason="${escalation_reason:-retry limit reached}"
@@ -300,7 +348,7 @@ record_failure_retry_state() {
      .issues[$id].escalation_reason = $reason |
      .issues[$id].failure_evidence = $evidence |
      if $terminal then .issues[$id].terminal_failed_at = $now else . end' \
-    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    "$STATE_FILE" >"$tmp" && mv "$tmp" "$STATE_FILE"
 }
 
 # Map action to state, stat counter, and GitHub labels
@@ -319,7 +367,7 @@ case "$ACTION" in
     ;;
   set-running)
     NEW_STATE="running"
-    STAT_KEY="dispatched"  # signals: increment session_dispatched + total_dispatched_all_time
+    STAT_KEY="dispatched" # signals: increment session_dispatched + total_dispatched_all_time
     ADD_LABEL="autoship:in-progress"
     REMOVE_LABELS=("autoship:blocked" "autoship:paused" "autoship:done")
     ;;
@@ -331,7 +379,7 @@ case "$ACTION" in
     ;;
   set-completed)
     NEW_STATE="completed"
-    STAT_KEY="completed"  # signals: increment session_completed + total_completed_all_time
+    STAT_KEY="completed" # signals: increment session_completed + total_completed_all_time
     ADD_LABEL=""
     REMOVE_LABELS=()
     ;;
@@ -349,7 +397,7 @@ case "$ACTION" in
     ;;
   set-merged)
     NEW_STATE="merged"
-    STAT_KEY="completed"  # signals: increment session_completed + total_completed_all_time
+    STAT_KEY="completed" # signals: increment session_completed + total_completed_all_time
     ADD_LABEL="autoship:done"
     REMOVE_LABELS=("autoship:in-progress" "autoship:blocked" "autoship:paused")
     ;;
@@ -382,7 +430,7 @@ if [[ -z "$CURRENT" ]]; then
   TMP=$(make_tmp)
   jq --arg id "$ISSUE_ID" --arg now "$NOW" \
     '.issues[$id] = {"state": "unclaimed", "complexity": "medium", "agent": "", "attempt": 1, "worktree": "", "started_at": $now, "attempts_history": []}' \
-    "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+    "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
 fi
 
 # Special handling for retries in set-running: preserve original started_at as first_started_at
@@ -401,35 +449,35 @@ if [[ "$NEW_STATE" == "running" ]]; then
     TMP=$(make_tmp)
     jq --arg key "$ISSUE_ID" \
       ".issues[\$key].first_started_at = (.issues[\$key].first_started_at // .issues[\$key].started_at) | .issues[\$key].started_at = (now | todate)" \
-      "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+      "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
   fi
 fi
 
 # For set-merged: assert title and agent are present (enrich from GitHub if absent)
 if [[ "$ACTION" == "set-merged" ]]; then
   ISSUE_NUMBER=$(echo "$ISSUE_ID" | grep -o '[0-9]*')
-  
+
   TITLE=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].title // ""' "$STATE_FILE")
   AGENT=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].agent // ""' "$STATE_FILE")
-  
+
   if [[ -z "$TITLE" ]]; then
     TITLE=$(gh issue view "$ISSUE_NUMBER" --json title --jq '.title' 2>/dev/null || echo '(unknown)')
   fi
   if [[ -z "$AGENT" ]]; then
     AGENT="direct"
   fi
-  
+
   # Update state with title and agent
   TMP=$(make_tmp)
   jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" --arg title "$TITLE" --arg agent "$AGENT" \
     '.issues[$id].state = $state | .updated_at = $now | .issues[$id].title = $title | .issues[$id].agent = $agent' \
-    "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+    "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
 else
   # Standard state update
   TMP=$(make_tmp)
   jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" \
     '.issues[$id].state = $state | .updated_at = $now' \
-    "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+    "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
 fi
 # Increment stat counters if applicable.
 # "dispatched" → session_dispatched + total_dispatched_all_time
@@ -442,18 +490,18 @@ if [[ -n "$STAT_KEY" ]]; then
       jq '
         .stats.session_dispatched        = ((.stats.session_dispatched        // 0) + 1) |
         .stats.total_dispatched_all_time = ((.stats.total_dispatched_all_time // 0) + 1)
-      ' "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+      ' "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
       ;;
     completed)
       jq '
         .stats.session_completed        = ((.stats.session_completed        // 0) + 1) |
         .stats.total_completed_all_time = ((.stats.total_completed_all_time // 0) + 1)
-      ' "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+      ' "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
       ;;
     *)
       jq --arg key "$STAT_KEY" \
         '.stats[$key] = ((.stats[$key] // 0) + 1)' \
-        "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+        "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
       ;;
   esac
 fi
@@ -484,7 +532,7 @@ for pair in "$@"; do
           || true
       )
       if [[ -n "$PR_ISSUE" && "$PR_ISSUE" != "$ISSUE_NUMBER" ]]; then
-        echo "WARN: PR #$VALUE body references #$PR_ISSUE but expected #$ISSUE_NUMBER — possible transposition" >> "$REPO_ROOT/.autoship/poll.log"
+        echo "WARN: PR #$VALUE body references #$PR_ISSUE but expected #$ISSUE_NUMBER — possible transposition" >>"$REPO_ROOT/.autoship/poll.log"
       fi
     fi
   fi
@@ -499,11 +547,11 @@ for pair in "$@"; do
   if printf '%s\n' "$VALUE" | jq -e '.' >/dev/null 2>&1; then
     jq --arg id "$ISSUE_ID" --arg key "$KEY" --argjson val "$VALUE" \
       '.issues[$id][$key] = $val' \
-      "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+      "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
   else
     jq --arg id "$ISSUE_ID" --arg key "$KEY" --arg val "$VALUE" \
       '.issues[$id][$key] = $val' \
-      "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+      "$STATE_FILE" >"$TMP" && mv "$TMP" "$STATE_FILE"
   fi
 
 done

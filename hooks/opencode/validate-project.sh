@@ -14,8 +14,14 @@ detect_commands() {
   elif [[ -f pyproject.toml ]]; then
     test_cmd="pytest"
   elif [[ -f Cargo.toml ]]; then
-    test_cmd="cargo test"
-    build_cmd="cargo build"
+    # Detect if .cargo/config.toml forces a non-native target
+    if [[ -f .cargo/config.toml ]] && grep -q 'target.*x86_64-pc-windows-msvc' .cargo/config.toml 2>/dev/null; then
+      test_cmd="cargo test --target x86_64-unknown-linux-gnu"
+      build_cmd="cargo build --target x86_64-unknown-linux-gnu"
+    else
+      test_cmd="cargo test"
+      build_cmd="cargo build"
+    fi
   fi
   jq -n --arg test "$test_cmd" --arg build "$build_cmd" '{testCommand:$test,buildCommand:$build}'
 }

@@ -19,7 +19,7 @@ log_heartbeat() {
 exponential_backoff() {
   local attempt="$1"
   local delay=$((GH_RETRY_BASE_DELAY * (2 ** (attempt - 1))))
-  if (( delay > GH_RETRY_MAX_DELAY )); then
+  if ((delay > GH_RETRY_MAX_DELAY)); then
     delay=$GH_RETRY_MAX_DELAY
   fi
   echo "$delay"
@@ -31,7 +31,7 @@ gh_retry() {
   local output
   local error_output
 
-  while (( attempt <= GH_RETRY_MAX_ATTEMPTS )); do
+  while ((attempt <= GH_RETRY_MAX_ATTEMPTS)); do
     log_heartbeat "$attempt" "executing: gh $*"
 
     set +e
@@ -39,7 +39,7 @@ gh_retry() {
     exit_code=$?
     set -e
 
-    if (( exit_code == 0 )); then
+    if ((exit_code == 0)); then
       echo "$output"
       return 0
     fi
@@ -66,7 +66,7 @@ gh_retry() {
         ;;
     esac
 
-    if (( attempt < GH_RETRY_MAX_ATTEMPTS )); then
+    if ((attempt < GH_RETRY_MAX_ATTEMPTS)); then
       local delay
       delay=$(exponential_backoff "$attempt")
       log_heartbeat "$attempt" "failed with exit $exit_code, retrying in ${delay}s..."

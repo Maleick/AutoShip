@@ -25,8 +25,14 @@ REPO_ROOT="$(autoship_repo_root)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo) REPO_ROOT="$2"; shift 2 ;;
-    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+    --repo)
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -34,7 +40,10 @@ AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 
-[[ -f "$STATE_FILE" ]] || { echo "No state file at $STATE_FILE" >&2; exit 1; }
+[[ -f "$STATE_FILE" ]] || {
+  echo "No state file at $STATE_FILE" >&2
+  exit 1
+}
 [[ -d "$WORKSPACES_DIR" ]] || exit 0
 
 tmp=$(mktemp)
@@ -45,13 +54,28 @@ for dir in "$WORKSPACES_DIR"/*/; do
   key=$(basename "$dir")
   status_file="$dir/status"
   [[ -f "$status_file" ]] || continue
-  status=$(tr -d '[:space:]' < "$status_file")
+  status=$(tr -d '[:space:]' <"$status_file")
   case "$status" in
-    COMPLETE) new_state="verifying"; action="set-verifying" ;;
-    BLOCKED) new_state="blocked"; action="set-blocked" ;;
-    STUCK) new_state="stuck"; action="set-stuck" ;;
-    RUNNING) new_state="running"; action="set-running" ;;
-    QUEUED) new_state="queued"; action="set-queued" ;;
+    COMPLETE)
+      new_state="verifying"
+      action="set-verifying"
+      ;;
+    BLOCKED)
+      new_state="blocked"
+      action="set-blocked"
+      ;;
+    STUCK)
+      new_state="stuck"
+      action="set-stuck"
+      ;;
+    RUNNING)
+      new_state="running"
+      action="set-running"
+      ;;
+    QUEUED)
+      new_state="queued"
+      action="set-queued"
+      ;;
     *) continue ;;
   esac
 
@@ -80,13 +104,13 @@ for dir in "$WORKSPACES_DIR"/*/; do
   fi
 
   jq --arg key "$key" \
-     --arg state "$new_state" \
-     --arg status "$status" \
-     --argjson has_result "$has_result" \
-     --argjson has_uncommitted "$has_uncommitted" \
-     --arg current "$current_state" \
-     --argjson increment_stats "$increment_stats" \
-     '.issues[$key] = ((.issues[$key] // {}) + {
+    --arg state "$new_state" \
+    --arg status "$status" \
+    --argjson has_result "$has_result" \
+    --argjson has_uncommitted "$has_uncommitted" \
+    --arg current "$current_state" \
+    --argjson increment_stats "$increment_stats" \
+    '.issues[$key] = ((.issues[$key] // {}) + {
        state: $state,
        workspace_status: $status,
        has_result: $has_result,
@@ -99,7 +123,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
          .stats.blocked = ((.stats.blocked // 0) + 1)
        elif $increment_stats and $current != $state and $state == "stuck" then
          .stats.failed = ((.stats.failed // 0) + 1)
-       else . end' "$tmp" > "$tmp.next"
+       else . end' "$tmp" >"$tmp.next"
   mv "$tmp.next" "$tmp"
 done
 

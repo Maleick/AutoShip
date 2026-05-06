@@ -1,0 +1,2 @@
+timestamp	iteration	decision	metric_value	verify_status	guard_status	hypothesis	change_summary	labels	note
+2026-05-06T13:24:50.994Z	1	keep	61	pass	pass		Remove unused REPO_ROOT assignment from hooks/opencode/install.sh to resolve its sole SC2034 ShellCheck issue		

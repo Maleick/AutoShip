@@ -25,9 +25,9 @@ default_free_models() {
   while IFS= read -r model; do
     [[ -z "$model" ]] && continue
     if is_free_model "$model"; then
-      printf '%s\t%s\n' "$(free_model_rank "$model")" "$model" >> "$ranked_models"
+      printf '%s\t%s\n' "$(free_model_rank "$model")" "$model" >>"$ranked_models"
     fi
-  done <<< "$available_model_ids"
+  done <<<"$available_model_ids"
   result=$(sort -t $'\t' -k1,1nr -k2,2 "$ranked_models" | cut -f2 | paste -sd ',' -)
   rm -f "$ranked_models"
   printf '%s\n' "$result"
@@ -73,7 +73,7 @@ default_role_model() {
     return 0
   fi
 
-  preferred=$(printf '%s\n' "$available_model_ids" | grep -Ei 'gpt-5\.5|gpt-5\.3-codex-spark' | head -1 || true)
+  preferred=$(printf '%s\n' "$available_model_ids" | grep -Ei 'gpt-5\.5|gpt-5\.3-spark' | head -1 || true)
   if [[ -n "$preferred" ]]; then
     printf '%s\n' "$preferred"
     return 0
@@ -89,15 +89,15 @@ free_model_rank() {
 
   case "$model" in
     *nemotron-3-super*) score=95 ;;
-    *kimi*k2.6*|*kimi-2.6*) score=94 ;;
+    *kimi*k2.6* | *kimi-2.6*) score=94 ;;
     *gpt-oss-120b*) score=92 ;;
     *gpt-5-nano*) score=90 ;;
     *llama-3.3-70b*) score=88 ;;
     *big-pickle*) score=86 ;;
     *minimax-m2.5*) score=84 ;;
-    *qwen*|*glm*|*kimi*|*mimo*) score=80 ;;
-    *gemma-3-27b*|*gemma-4-31b*) score=72 ;;
-    *mistral*|*devstral*) score=68 ;;
+    *qwen* | *glm* | *kimi* | *mimo*) score=80 ;;
+    *gemma-3-27b* | *gemma-4-31b*) score=72 ;;
+    *mistral* | *devstral*) score=68 ;;
     *ling*) score=62 ;;
     *hy3*) score=56 ;;
   esac
@@ -128,7 +128,7 @@ find_missing_models() {
     if ! printf '%s\n' "$available_model_ids" | grep -qxF "$model"; then
       printf '%s\n' "$model"
     fi
-  done <<< "$requested" | awk '!seen[$0]++'
+  done <<<"$requested" | awk '!seen[$0]++'
 }
 
 classify_models() {
@@ -142,7 +142,7 @@ classify_models() {
     else
       printf '%s:selected\n' "$model"
     fi
-  done <<< "$models"
+  done <<<"$models"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

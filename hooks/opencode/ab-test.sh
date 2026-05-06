@@ -3,11 +3,11 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 AB_TEST_FILE="$REPO_ROOT/.autoship/ab-test.json"
-ROUTING_FILE="$REPO_ROOT/.autoship/model-routing.json"
+ROUTING_FILE="$REPO_ROOT/config/model-routing.json"
 
 mkdir -p "$(dirname "$AB_TEST_FILE")"
 
-[[ -f "$AB_TEST_FILE" ]] || cat > "$AB_TEST_FILE" <<'JSON'
+[[ -f "$AB_TEST_FILE" ]] || cat >"$AB_TEST_FILE" <<'JSON'
 {
   "groups": {"A": [], "B": []},
   "performance": {},
@@ -29,13 +29,13 @@ case "$action" in
     # Deterministic assignment based on issue number hash
     issue_num=$(echo "$issue_key" | sed 's/issue-//')
     hash=$(printf '%s' "$issue_key" | cksum | awk '{print $1}')
-    group=$(( hash % 2 == 0 ? 0 : 1 ))
+    group=$((hash % 2 == 0 ? 0 : 1))
     group_name=$(if [[ "$group" -eq 0 ]]; then echo "A"; else echo "B"; fi)
 
     tmp=$(mktemp)
     jq --arg issue "$issue_key" --arg group "$group_name" --arg task "$task_type" '
       .groups[$group] = ((.groups[$group] // []) + [{issue: $issue, task_type: $task, assigned_at: now | todateiso8601}])
-    ' "$AB_TEST_FILE" > "$tmp" && mv "$tmp" "$AB_TEST_FILE"
+    ' "$AB_TEST_FILE" >"$tmp" && mv "$tmp" "$AB_TEST_FILE"
 
     echo "$group_name"
     ;;
@@ -92,7 +92,7 @@ case "$action" in
         pass: (((.performance[$model][$task].pass // 0) | tonumber) + (if $outcome == "pass" then 1 else 0 end)),
         fail: (((.performance[$model][$task].fail // 0) | tonumber) + (if $outcome == "fail" then 1 else 0 end))
       })
-    ' "$AB_TEST_FILE" > "$tmp" && mv "$tmp" "$AB_TEST_FILE"
+    ' "$AB_TEST_FILE" >"$tmp" && mv "$tmp" "$AB_TEST_FILE"
 
     # Auto-adjust model scores based on performance
     bash "$0" adjust-scores >/dev/null 2>&1 || true
@@ -117,7 +117,7 @@ case "$action" in
           .
         end
       ]
-    ' "$ROUTING_FILE" "$AB_TEST_FILE" > "$tmp" && mv "$tmp" "$ROUTING_FILE"
+    ' "$ROUTING_FILE" "$AB_TEST_FILE" >"$tmp" && mv "$tmp" "$ROUTING_FILE"
     ;;
 
   status)

@@ -4,7 +4,7 @@ set -euo pipefail
 WORKTREE_PATH="${1:?Worktree path required}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 POLICY_JSON=$(bash "$SCRIPT_DIR/policy.sh" json)
-runner=$(jq -r '.workflowRunnerDefault // empty' <<< "$POLICY_JSON")
+runner=$(jq -r '.workflowRunnerDefault // empty' <<<"$POLICY_JSON")
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2

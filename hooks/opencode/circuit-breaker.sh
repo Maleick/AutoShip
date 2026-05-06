@@ -6,7 +6,7 @@ CIRCUIT_FILE="$REPO_ROOT/.autoship/circuit-breaker.json"
 
 mkdir -p "$(dirname "$CIRCUIT_FILE")"
 
-[[ -f "$CIRCUIT_FILE" ]] || printf '{"models":{},"global_disabled_until":null}\n' > "$CIRCUIT_FILE"
+[[ -f "$CIRCUIT_FILE" ]] || printf '{"models":{},"global_disabled_until":null}\n' >"$CIRCUIT_FILE"
 
 action="${1:-}"
 shift || true
@@ -27,7 +27,7 @@ case "$action" in
       else
         .
       end
-    ' "$CIRCUIT_FILE" > "$tmp" && mv "$tmp" "$CIRCUIT_FILE"
+    ' "$CIRCUIT_FILE" >"$tmp" && mv "$tmp" "$CIRCUIT_FILE"
     ;;
 
   record-success)
@@ -41,12 +41,15 @@ case "$action" in
       else
         .
       end
-    ' "$CIRCUIT_FILE" > "$tmp" && mv "$tmp" "$CIRCUIT_FILE"
+    ' "$CIRCUIT_FILE" >"$tmp" && mv "$tmp" "$CIRCUIT_FILE"
     ;;
 
   is-open)
     model="${1:-}"
-    [[ -z "$model" ]] && { echo "true"; exit 0; }
+    [[ -z "$model" ]] && {
+      echo "true"
+      exit 0
+    }
     now_epoch=$(date +%s)
     disabled_until=$(jq -r --arg model "$model" --argjson now "$now_epoch" '
       if .models[$model] then

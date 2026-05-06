@@ -5,14 +5,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AUTOSHIP_DIR=".autoship"
 ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
 CONFIG_FILE="$AUTOSHIP_DIR/config.json"
-MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-15}"
+MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-20}"
 SELECTED_MODELS="${AUTOSHIP_MODELS:-}"
 REFRESH_MODELS="${AUTOSHIP_REFRESH_MODELS:-0}"
-PLANNER_MODEL="${AUTOSHIP_PLANNER_MODEL:-openai/gpt-5.5}"
-COORDINATOR_MODEL="${AUTOSHIP_COORDINATOR_MODEL:-$PLANNER_MODEL}"
-ORCHESTRATOR_MODEL="${AUTOSHIP_ORCHESTRATOR_MODEL:-$PLANNER_MODEL}"
-REVIEWER_MODEL="${AUTOSHIP_REVIEWER_MODEL:-$PLANNER_MODEL}"
-LEAD_MODEL="${AUTOSHIP_LEAD_MODEL:-$PLANNER_MODEL}"
+ROLE_OVERRIDES_PROVIDED=0
+PLANNER_MODEL="${AUTOSHIP_PLANNER_MODEL:-}"
+COORDINATOR_MODEL="${AUTOSHIP_COORDINATOR_MODEL:-}"
+ORCHESTRATOR_MODEL="${AUTOSHIP_ORCHESTRATOR_MODEL:-}"
+REVIEWER_MODEL="${AUTOSHIP_REVIEWER_MODEL:-}"
+LEAD_MODEL="${AUTOSHIP_LEAD_MODEL:-}"
 LABELS="${AUTOSHIP_LABELS:-agent:ready}"
 
 NO_TUI=0
@@ -28,10 +29,12 @@ AutoShip OpenCode setup wizard.
 
 OPTIONS:
   --no-tui              Run in non-interactive mode (skip prompts)
-  --max-agents N        Set max concurrent agents (default: 15)
+  --max-agents N        Set max concurrent agents (default: 20)
   --labels LABEL,...   Comma-separated labels to monitor (default: agent:ready)
   --refresh-models     Force refresh model inventory from OpenCode
-  --planner-model MODEL Set planner/coordinator/orchestrator/reviewer/lead model (default: openai/gpt-5.5)
+  --planner-model MODEL Set planner/coordinator/orchestrator/reviewer/lead model (default: live free-first model)
+  --orchestrator-model MODEL Set orchestrator model separately (default: same as planner)
+  --reviewer-model MODEL Set reviewer model separately (default: same as planner)
   --lead-model MODEL   Set lead model separately (default: same as planner)
   --worker-models MODELS Comma-separated worker models (default: auto-detect free)
   -h, --help           Show this help message
@@ -50,7 +53,9 @@ ENVIRONMENT VARIABLES:
   AUTOSHIP_MAX_AGENTS       Max concurrent agents
   AUTOSHIP_MODELS          Comma-separated worker models
   AUTOSHIP_REFRESH_MODELS  Set to 1 to force refresh
-  AUTOSHIP_PLANNER_MODEL   Planner model (default: openai/gpt-5.5)
+  AUTOSHIP_PLANNER_MODEL   Planner model (default: live free-first model)
+  AUTOSHIP_ORCHESTRATOR_MODEL Orchestrator model (default: same as planner)
+  AUTOSHIP_REVIEWER_MODEL  Reviewer model (default: same as planner)
   AUTOSHIP_LEAD_MODEL    Lead model (default: same as planner)
   AUTOSHIP_LABELS          Comma-separated labels (default: agent:ready)
   GH_TOKEN                 GitHub token (for gh auth)
@@ -66,7 +71,10 @@ parse_args() {
         shift
         ;;
       --max-agents)
-        [[ $# -ge 2 ]] || { echo "Error: --max-agents requires a value" >&2; usage 2; }
+        [[ $# -ge 2 ]] || {
+          echo "Error: --max-agents requires a value" >&2
+          usage 2
+        }
         MAX_AGENTS="$2"
         shift 2
         ;;
@@ -75,7 +83,10 @@ parse_args() {
         shift
         ;;
       --labels)
-        [[ $# -ge 2 ]] || { echo "Error: --labels requires a value" >&2; usage 2; }
+        [[ $# -ge 2 ]] || {
+          echo "Error: --labels requires a value" >&2
+          usage 2
+        }
         LABELS="$2"
         shift 2
         ;;
@@ -88,7 +99,11 @@ parse_args() {
         shift
         ;;
       --planner-model)
-        [[ $# -ge 2 ]] || { echo "Error: --planner-model requires a value" >&2; usage 2; }
+        [[ $# -ge 2 ]] || {
+          echo "Error: --planner-model requires a value" >&2
+          usage 2
+        }
+        ROLE_OVERRIDES_PROVIDED=1
         PLANNER_MODEL="$2"
         COORDINATOR_MODEL="$2"
         ORCHESTRATOR_MODEL="$2"
@@ -97,6 +112,7 @@ parse_args() {
         shift 2
         ;;
       --planner-model=*)
+        ROLE_OVERRIDES_PROVIDED=1
         PLANNER_MODEL="${1#*=}"
         COORDINATOR_MODEL="$PLANNER_MODEL"
         ORCHESTRATOR_MODEL="$PLANNER_MODEL"
@@ -105,16 +121,52 @@ parse_args() {
         shift
         ;;
       --lead-model)
-        [[ $# -ge 2 ]] || { echo "Error: --lead-model requires a value" >&2; usage 2; }
+        [[ $# -ge 2 ]] || {
+          echo "Error: --lead-model requires a value" >&2
+          usage 2
+        }
+        ROLE_OVERRIDES_PROVIDED=1
         LEAD_MODEL="$2"
         shift 2
         ;;
       --lead-model=*)
+        ROLE_OVERRIDES_PROVIDED=1
         LEAD_MODEL="${1#*=}"
         shift
         ;;
+      --orchestrator-model)
+        [[ $# -ge 2 ]] || {
+          echo "Error: --orchestrator-model requires a value" >&2
+          usage 2
+        }
+        ROLE_OVERRIDES_PROVIDED=1
+        ORCHESTRATOR_MODEL="$2"
+        shift 2
+        ;;
+      --orchestrator-model=*)
+        ROLE_OVERRIDES_PROVIDED=1
+        ORCHESTRATOR_MODEL="${1#*=}"
+        shift
+        ;;
+      --reviewer-model)
+        [[ $# -ge 2 ]] || {
+          echo "Error: --reviewer-model requires a value" >&2
+          usage 2
+        }
+        ROLE_OVERRIDES_PROVIDED=1
+        REVIEWER_MODEL="$2"
+        shift 2
+        ;;
+      --reviewer-model=*)
+        ROLE_OVERRIDES_PROVIDED=1
+        REVIEWER_MODEL="${1#*=}"
+        shift
+        ;;
       --worker-models)
-        [[ $# -ge 2 ]] || { echo "Error: --worker-models requires a value" >&2; usage 2; }
+        [[ $# -ge 2 ]] || {
+          echo "Error: --worker-models requires a value" >&2
+          usage 2
+        }
         SELECTED_MODELS="$2"
         shift 2
         ;;
@@ -122,7 +174,7 @@ parse_args() {
         SELECTED_MODELS="${1#*=}"
         shift
         ;;
-      -h|--help)
+      -h | --help)
         usage 0
         ;;
       --)
@@ -143,8 +195,8 @@ parse_args() {
 
 parse_args "$@"
 
-if [[ "$NO_TUI" -eq 0 && -t 0 ]]; then
-  echo "Running in interactive mode. Use --no-tui for non-interactive."
+if [[ -n "${AUTOSHIP_PLANNER_MODEL:-}${AUTOSHIP_COORDINATOR_MODEL:-}${AUTOSHIP_ORCHESTRATOR_MODEL:-}${AUTOSHIP_REVIEWER_MODEL:-}${AUTOSHIP_LEAD_MODEL:-}" ]]; then
+  ROLE_OVERRIDES_PROVIDED=1
 fi
 
 mkdir -p "$AUTOSHIP_DIR"
@@ -153,11 +205,11 @@ if [[ "$REFRESH_MODELS" == "1" ]]; then
   rm -f "$ROUTING_FILE" "$CONFIG_FILE"
 fi
 
-if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" ]]; then
+if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" && "$ROLE_OVERRIDES_PROVIDED" -eq 0 ]]; then
   if jq -e '(.models // []) | length > 0' "$ROUTING_FILE" >/dev/null 2>&1; then
     if [[ ! -f "$CONFIG_FILE" ]]; then
       jq -n --argjson max "$MAX_AGENTS" --arg labels "$LABELS" \
-        '{runtime: "opencode", maxConcurrentAgents: $max, max_agents: $max, models: [], labels: ($labels | split(",")), refreshModels: false}' > "$CONFIG_FILE"
+        '{runtime: "opencode", maxConcurrentAgents: $max, max_agents: $max, models: [], labels: ($labels | split(",")), refreshModels: false, policyProfile: "default", cargoConcurrencyCap: 8, cargoTargetIsolationThreshold: 8, cargoTimeoutSeconds: 120, mergeStrategy: "safe", quotaRouting: true, workerCwdLock: true, truncationSalvage: true, workflowRunnerDefault: ""}' >"$CONFIG_FILE"
     fi
     echo "AutoShip OpenCode setup already configured"
     echo "Model routing preserved: $ROUTING_FILE"
@@ -192,7 +244,26 @@ if [[ -z "$SELECTED_MODELS" ]]; then
   SELECTED_MODELS=$(default_free_models "$available_model_ids")
 fi
 
-reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL"
+DEFAULT_ROLE_MODEL=$(default_role_model "$available_model_ids")
+PLANNER_MODEL="${PLANNER_MODEL:-$DEFAULT_ROLE_MODEL}"
+COORDINATOR_MODEL="${COORDINATOR_MODEL:-$PLANNER_MODEL}"
+ORCHESTRATOR_MODEL="${ORCHESTRATOR_MODEL:-$PLANNER_MODEL}"
+REVIEWER_MODEL="${REVIEWER_MODEL:-$PLANNER_MODEL}"
+LEAD_MODEL="${LEAD_MODEL:-$PLANNER_MODEL}"
+
+if [[ "$NO_TUI" -eq 0 && -t 0 ]]; then
+  echo "Running in interactive mode. Use --no-tui for non-interactive."
+  printf 'Orchestrator model [%s]: ' "$ORCHESTRATOR_MODEL" >&2
+  if IFS= read -r prompted_orchestrator; then
+    [[ -n "$prompted_orchestrator" ]] && ORCHESTRATOR_MODEL="$prompted_orchestrator"
+  fi
+  printf 'Reviewer model [%s]: ' "$REVIEWER_MODEL" >&2
+  if IFS= read -r prompted_reviewer; then
+    [[ -n "$prompted_reviewer" ]] && REVIEWER_MODEL="$prompted_reviewer"
+  fi
+fi
+
+reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL,$LEAD_MODEL"
 
 if [[ -z "$SELECTED_MODELS" ]]; then
   echo "Error: no free OpenCode models found. Set AUTOSHIP_MODELS to choose models explicitly." >&2
@@ -316,11 +387,20 @@ with open(config_path, "w", encoding="utf-8") as f:
         "models": models,
         "labels": labels_list,
         "refreshModels": int(os.environ.get("AUTOSHIP_REFRESH_MODELS", "0")) == 1,
+        "policyProfile": "default",
+        "cargoConcurrencyCap": 8,
+        "cargoTargetIsolationThreshold": 8,
+        "cargoTimeoutSeconds": 120,
+        "mergeStrategy": "safe",
+        "quotaRouting": True,
+        "workerCwdLock": True,
+        "truncationSalvage": True,
+        "workflowRunnerDefault": "",
     }, f, indent=2)
     f.write("\n")
 PY
 
-date -u +%Y-%m-%dT%H:%M:%SZ > "$AUTOSHIP_DIR/.onboarded"
+date -u +%Y-%m-%dT%H:%M:%SZ >"$AUTOSHIP_DIR/.onboarded"
 echo "AutoShip OpenCode setup complete"
 echo "Configured models: $SELECTED_MODELS"
 echo "Max agents: $MAX_AGENTS"

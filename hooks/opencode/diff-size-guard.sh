@@ -78,22 +78,22 @@ check_diff_size() {
 get_diff_summary() {
   local worktree_dir="${1:-.}"
   cd "$worktree_dir"
-  
+
   local stats
   local has_changes=false
-  
+
   if git diff --quiet 2>/dev/null; then
     stats="no changes"
   else
     stats=$(git diff --stat HEAD 2>/dev/null || git diff --stat 2>/dev/null || echo "error reading diff")
     has_changes=true
   fi
-  
+
   local fileschanged=0
   if [[ "$has_changes" == "true" ]]; then
     fileschanged=$(git diff --name-only 2>/dev/null | wc -l | tr -d ' ' || echo "0")
   fi
-  
+
   jq -n \
     --arg stats "$stats" \
     --argjson files "$fileschanged" \

@@ -42,7 +42,7 @@ extract_criteria() {
         oos_lines+=("$line")
       fi
     fi
-  done <<< "$body"
+  done <<<"$body"
 
   if echo "$body" | grep -Ei 'test|verify|evidence|check' >/dev/null 2>&1; then
     test_req="true"
@@ -106,17 +106,26 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   case "$COMMAND" in
     extract)
       BODY="${1:-}"
-      [[ -z "$BODY" ]] && { echo "Usage: $0 extract <body>"; exit 1; }
+      [[ -z "$BODY" ]] && {
+        echo "Usage: $0 extract <body>"
+        exit 1
+      }
       extract_criteria "$BODY"
       ;;
     prompt)
       JSON="${1:-}"
-      [[ -z "$JSON" ]] && { echo "Usage: $0 prompt <json>"; exit 1; }
+      [[ -z "$JSON" ]] && {
+        echo "Usage: $0 prompt <json>"
+        exit 1
+      }
       criteria_to_prompt "$JSON"
       ;;
     *)
       BODY="${1:-}"
-      [[ -z "$BODY" ]] && { echo "Usage: $0 <command> [args...]"; exit 1; }
+      [[ -z "$BODY" ]] && {
+        echo "Usage: $0 <command> [args...]"
+        exit 1
+      }
       extract_criteria "$BODY"
       ;;
   esac

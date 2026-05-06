@@ -6,7 +6,7 @@ METRICS_FILE="$REPO_ROOT/.autoship/metrics.json"
 
 mkdir -p "$(dirname "$METRICS_FILE")"
 
-[[ -f "$METRICS_FILE" ]] || printf '{"models":{},"sessions":[],"aggregated":{"total_dispatched":0,"total_completed":0,"total_failed":0,"total_blocked":0,"avg_completion_time_ms":0,"total_tokens_used":0}}\n' > "$METRICS_FILE"
+[[ -f "$METRICS_FILE" ]] || printf '{"models":{},"sessions":[],"aggregated":{"total_dispatched":0,"total_completed":0,"total_failed":0,"total_blocked":0,"avg_completion_time_ms":0,"total_tokens_used":0}}\n' >"$METRICS_FILE"
 
 action="${1:-}"
 shift || true
@@ -20,7 +20,7 @@ case "$action" in
     tmp=$(mktemp)
     jq --arg issue "$issue_key" --arg model "$model" --arg task "$task_type" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
       .sessions += [{issue: $issue, model: $model, task_type: $task, started_at: $now}]
-    ' "$METRICS_FILE" > "$tmp" && mv "$tmp" "$METRICS_FILE"
+    ' "$METRICS_FILE" >"$tmp" && mv "$tmp" "$METRICS_FILE"
     ;;
 
   record-complete)
@@ -47,7 +47,7 @@ case "$action" in
         total_duration_ms: (((.models[$model].total_duration_ms // 0) | tonumber) + (($session.duration_ms // 0) | tonumber))
       }) |
       .aggregated.total_completed = ((.aggregated.total_completed // 0) + 1)
-    ' "$METRICS_FILE" > "$tmp" && mv "$tmp" "$METRICS_FILE"
+    ' "$METRICS_FILE" >"$tmp" && mv "$tmp" "$METRICS_FILE"
     ;;
 
   record-failure)
@@ -67,7 +67,7 @@ case "$action" in
         fail: (((.models[$model].fail // 0) | tonumber) + 1)
       }) |
       .aggregated.total_failed = ((.aggregated.total_failed // 0) + 1)
-    ' "$METRICS_FILE" > "$tmp" && mv "$tmp" "$METRICS_FILE"
+    ' "$METRICS_FILE" >"$tmp" && mv "$tmp" "$METRICS_FILE"
     ;;
 
   record-blocked)
@@ -77,7 +77,7 @@ case "$action" in
     tmp=$(mktemp)
     jq --arg issue "$issue_key" --arg model "${model:-unknown}" '
       .aggregated.total_blocked = ((.aggregated.total_blocked // 0) + 1)
-    ' "$METRICS_FILE" > "$tmp" && mv "$tmp" "$METRICS_FILE"
+    ' "$METRICS_FILE" >"$tmp" && mv "$tmp" "$METRICS_FILE"
     ;;
 
   record-dispatch)
@@ -87,7 +87,7 @@ case "$action" in
     tmp=$(mktemp)
     jq --arg issue "$issue_key" --arg model "$model" '
       .aggregated.total_dispatched = ((.aggregated.total_dispatched // 0) + 1)
-    ' "$METRICS_FILE" > "$tmp" && mv "$tmp" "$METRICS_FILE"
+    ' "$METRICS_FILE" >"$tmp" && mv "$tmp" "$METRICS_FILE"
     ;;
 
   get)

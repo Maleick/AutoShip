@@ -21,6 +21,19 @@ Thumbs.db
 
 # Local code analysis caches
 .code-review-graph/
+graphify-out/
+.autoresearch/
+AUTORESEARCH_FINDINGS.md
+autoresearch-memory.md
+__pycache__/
+*.py[cod]
+
+# Dependencies
+node_modules/
+
+# Local OpenCode configuration/plugins
+.opencode/opencode.json
+.opencode/plugins/
 
 # Local implementation worktrees
 .worktrees/
@@ -29,7 +42,6 @@ Thumbs.db
 *.bak
 
 # AutoShip runtime artifacts (generated per-run, not source)
-.autoship/
 AUTOSHIP_RESULT.md
 AUTOSHIP_PROMPT.md
 
@@ -41,3 +53,5 @@ AUTOSHIP_PROMPT.md
 credentials.json
 service-account*.json
 CLAUDE.md
+# AutoShip runtime state (not ignored — contains model routing)
+.autoship/

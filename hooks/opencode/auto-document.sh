@@ -8,9 +8,12 @@ ARCHITECTURE_FILE="$REPO_ROOT/ARCHITECTURE.md"
 
 mkdir -p "$DOCS_DIR"
 
-[[ -f "$SRC_FILE" ]] || { echo "Source file not found: $SRC_FILE" >&2; exit 1; }
+[[ -f "$SRC_FILE" ]] || {
+  echo "Source file not found: $SRC_FILE" >&2
+  exit 1
+}
 
-cat > "$DOCS_DIR/API.md" <<'HEADER'
+cat >"$DOCS_DIR/API.md" <<'HEADER'
 # AutoShip API Documentation
 
 Generated automatically from `src/types.ts`.
@@ -97,12 +100,12 @@ awk '
     print ""
     next
   }
-' "$SRC_FILE" >> "$DOCS_DIR/API.md"
+' "$SRC_FILE" >>"$DOCS_DIR/API.md"
 
 echo "Generated $DOCS_DIR/API.md"
 
 # Generate or update ARCHITECTURE.md
-cat > "$ARCHITECTURE_FILE" <<'EOF'
+cat >"$ARCHITECTURE_FILE" <<'EOF'
 # AutoShip Architecture
 
 ## Overview
@@ -172,7 +175,7 @@ specialized shell scripts and TypeScript types.
 
 - \`hooks/opencode/select-model.sh\` — Selects the best model for a task type
 - \`hooks/opencode/setup.sh\` — Generates model-routing.json from live OpenCode models
-- \`.autoship/model-routing.json\` — Role assignments, pools, and model configurations
+- \`config/model-routing.json\` — Role assignments, pools, and model configurations
 
 ### Reliability Features
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { mkdir, writeFile, readFile, copyFile, readdir, lstat, access, } from "node:fs/promises";
+import { mkdir, writeFile, readFile, copyFile, readdir, stat, lstat, access, } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
-const VERSION = (await readFile(join(PACKAGE_ROOT, "VERSION"), "utf8")).trim();
+const packageJson = JSON.parse(await readFile(join(PACKAGE_ROOT, "package.json"), "utf8"));
+const VERSION = `v${packageJson.version ?? "0.0.0"}`;
 function resolveConfigDir() {
     if (process.env.OPENCODE_CONFIG_DIR) {
         return process.env.OPENCODE_CONFIG_DIR;
@@ -29,79 +30,64 @@ function resolveProjectAutoshipDir() {
 async function copyDir(src, dest) {
     const srcStat = await lstat(src);
     if (srcStat.isSymbolicLink()) {
-        throw new Error(`Refusing to copy symlinked source directory: ${src}`);
+        throw new Error(`Refusing to copy symlinked package asset: ${src}`);
     }
-    if (!srcStat.isDirectory()) {
-        throw new Error(`Expected source directory but found non-directory: ${src}`);
-    }
-    try {
-        const destStat = await lstat(dest);
-        if (destStat.isSymbolicLink()) {
-            throw new Error(`Refusing to write through symlinked path: ${dest}`);
-        }
-    }
-    catch (error) {
-        if (error.code !== "ENOENT") {
-            throw error;
-        }
-    }
+    await assertWritablePath(dest, "OpenCode asset");
     await mkdir(dest, { recursive: true });
     const entries = await readdir(src);
     for (const entry of entries) {
         const srcPath = join(src, entry);
         const destPath = join(dest, entry);
-        const st = await lstat(srcPath);
-        if (st.isSymbolicLink()) {
-            throw new Error(`Refusing to copy symlinked source path: ${srcPath}`);
+        const linkStat = await lstat(srcPath);
+        if (linkStat.isSymbolicLink()) {
+            throw new Error(`Refusing to copy symlinked package asset: ${srcPath}`);
         }
+        const st = await stat(srcPath);
         if (st.isDirectory()) {
             await copyDir(srcPath, destPath);
         }
         else {
-            try {
-                const destStat = await lstat(destPath);
-                if (destStat.isSymbolicLink()) {
-                    throw new Error(`Refusing to write through symlinked path: ${destPath}`);
-                }
-            }
-            catch (error) {
-                if (error.code !== "ENOENT") {
-                    throw error;
-                }
-            }
+            await assertWritablePath(destPath, "OpenCode asset");
             await copyFile(srcPath, destPath);
+        }
+    }
+}
+async function assertWritablePath(path, label) {
+    try {
+        const st = await lstat(path);
+        if (st.isSymbolicLink()) {
+            throw new Error(`Refusing to write symlinked ${label}: ${path}`);
+        }
+    }
+    catch (error) {
+        if (error.code !== "ENOENT") {
+            throw error;
         }
     }
 }
 async function loadConfig(path) {
     try {
-        return JSON.parse(await readFile(path, "utf8"));
-    }
-    catch (error) {
-        if (error.code !== "ENOENT") {
-            throw error;
+        const raw = await readFile(path, "utf8");
+        const parsed = JSON.parse(raw);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            return {};
         }
+        return parsed;
+    }
+    catch {
         return {};
     }
 }
 async function saveConfig(path, config) {
-    try {
-        const existing = await lstat(path);
-        if (existing.isSymbolicLink()) {
-            throw new Error(`Refusing to write through symlinked config file: ${path}`);
-        }
-    }
-    catch (error) {
-        if (error.code !== "ENOENT") {
-            throw error;
-        }
-    }
+    await assertWritablePath(path, "OpenCode config");
     await writeFile(path, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 async function install() {
     const configDir = resolveConfigDir();
     const autoshipDir = join(configDir, ".autoship");
     console.log(`Installing opencode-autoship ${VERSION} to ${configDir}`);
+    await assertWritablePath(configDir, "OpenCode config root");
+    await assertWritablePath(autoshipDir, "OpenCode asset root");
     await mkdir(autoshipDir, { recursive: true });
     const items = [
         { src: join(PACKAGE_ROOT, "hooks"), dest: join(autoshipDir, "hooks") },
@@ -109,37 +95,34 @@ async function install() {
         { src: join(PACKAGE_ROOT, "skills"), dest: join(autoshipDir, "skills") },
         { src: join(PACKAGE_ROOT, "plugins"), dest: join(autoshipDir, "plugins") },
         { src: join(PACKAGE_ROOT, "AGENTS.md"), dest: join(autoshipDir, "AGENTS.md") },
-        { src: join(PACKAGE_ROOT, "VERSION"), dest: join(autoshipDir, "VERSION") },
+        { content: `${VERSION}\n`, dest: join(autoshipDir, "VERSION") },
     ];
     for (const item of items) {
         try {
-            const st = await lstat(item.src);
-            if (st.isSymbolicLink()) {
-                throw new Error(`Refusing to install symlinked package asset: ${item.src}`);
+            if (item.content !== undefined) {
+                await assertWritablePath(item.dest, "OpenCode asset");
+                await writeFile(item.dest, item.content, "utf8");
+                continue;
             }
+            const linkStat = await lstat(item.src);
+            if (linkStat.isSymbolicLink()) {
+                throw new Error(`Refusing to copy symlinked package asset: ${item.src}`);
+            }
+            const st = await stat(item.src);
             if (st.isDirectory()) {
                 await copyDir(item.src, item.dest);
             }
             else {
-                try {
-                    const destStat = await lstat(item.dest);
-                    if (destStat.isSymbolicLink()) {
-                        throw new Error(`Refusing to write through symlinked path: ${item.dest}`);
-                    }
-                }
-                catch (error) {
-                    if (error.code !== "ENOENT") {
-                        throw error;
-                    }
-                }
+                await assertWritablePath(item.dest, "OpenCode asset");
                 await copyFile(item.src, item.dest);
             }
         }
         catch (error) {
-            if (error.code !== "ENOENT") {
-                throw error;
+            if (error.code === "ENOENT") {
+                console.warn(`Warning: ${item.src} not found, skipping`);
+                continue;
             }
-            console.warn(`Warning: ${item.src} not found, skipping`);
+            throw error;
         }
     }
     const configPath = join(configDir, "opencode.json");
@@ -152,8 +135,6 @@ async function install() {
     if (!plugins.includes(newPlugin)) {
         plugins = [...plugins, newPlugin];
     }
-    plugins = plugins.filter((p) => typeof p === "string" &&
-        !p.includes("autoship.ts"));
     config.plugin = plugins;
     await saveConfig(configPath, config);
     console.log(`\nSuccessfully installed opencode-autoship ${VERSION}`);
@@ -197,38 +178,16 @@ async function doctor() {
         checks.push({ name: "config", status: "PASS", message: "Config file exists" });
     }
     catch {
-        checks.push({ name: "config", status: "WARN", message: "Project .autoship/config.json not found; run /autoship-setup before dispatch" });
+        checks.push({ name: "config", status: "FAIL", message: "Project .autoship/config.json not found; run /autoship-setup" });
+        hasFailure = true;
     }
     try {
         await access(join(projectAutoshipDir, "model-routing.json"));
         checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
     }
     catch {
-        checks.push({ name: "model-routing", status: "WARN", message: "Project .autoship/model-routing.json not found; run /autoship-setup before dispatch" });
-    }
-    for (const tool of ["gh", "git", "jq", "opencode"]) {
-        try {
-            execSync(`command -v ${tool}`, { stdio: "ignore", shell: "/bin/sh" });
-            checks.push({ name: `tool-${tool}`, status: "PASS", message: `${tool} is available` });
-        }
-        catch {
-            checks.push({ name: `tool-${tool}`, status: "FAIL", message: `${tool} is not available in PATH` });
-            hasFailure = true;
-        }
-    }
-    try {
-        const configPath = join(projectAutoshipDir, "config.json");
-        const config = JSON.parse(await readFile(configPath, "utf8"));
-        const maxAgents = Number(config.maxConcurrentAgents ?? config.max_agents ?? 0);
-        if (maxAgents > 0 && maxAgents <= 15) {
-            checks.push({ name: "worker-cap", status: "PASS", message: `Worker cap is ${maxAgents}` });
-        }
-        else {
-            checks.push({ name: "worker-cap", status: "WARN", message: `Worker cap ${maxAgents || "unset"} is outside recommended range 1-15` });
-        }
-    }
-    catch {
-        checks.push({ name: "worker-cap", status: "WARN", message: "Unable to validate worker cap" });
+        checks.push({ name: "model-routing", status: "FAIL", message: "Project .autoship/model-routing.json not found; run /autoship-setup" });
+        hasFailure = true;
     }
     try {
         await access(join(autoshipDir, "hooks"));

@@ -70,7 +70,7 @@ while [[ $# -gt 0 ]]; do
       RUN_LINT=true
       shift
       ;;
-    -h|--help)
+    -h | --help)
       print_usage
       exit 0
       ;;
@@ -98,6 +98,16 @@ run_syntax_check() {
     fi
   done
   for script in "$HOOKS_DIR/opencode"/*.sh; do
+    [[ -f "$script" ]] || continue
+    local output
+    output=$(bash -n "$script" 2>&1) || true
+    if [[ -n "$output" ]]; then
+      echo "FAIL: syntax check failed for $script" >&2
+      echo "$output" | head -5 >&2
+      syntax_failed=1
+    fi
+  done
+  for script in "$HOOKS_DIR/hermes"/*.sh; do
     [[ -f "$script" ]] || continue
     local output
     output=$(bash -n "$script" 2>&1) || true
@@ -139,7 +149,7 @@ run_smoke_check() {
 run_lint_check() {
   echo "=== Shell lint/format check ==="
   if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck "$HOOKS_DIR"/*.sh "$HOOKS_DIR/opencode"/*.sh || FAILED=1
+    shellcheck -S error "$HOOKS_DIR"/*.sh "$HOOKS_DIR/opencode"/*.sh || FAILED=1
   else
     echo "WARN: shellcheck not installed; skipping" >&2
   fi

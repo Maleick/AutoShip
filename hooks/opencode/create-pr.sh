@@ -41,7 +41,7 @@ canonical_file() {
 
 is_runtime_artifact() {
   case "$1" in
-    .autoship|.autoship/*|AUTOSHIP_PROMPT.md|AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|BLOCKED_REASON.txt|model|role|routing-log.txt|started_at|status|worker.pid)
+    .autoship | .autoship/* | AUTOSHIP_PROMPT.md | AUTOSHIP_RESULT.md | AUTOSHIP_RUNNER.log | BLOCKED_REASON.txt | model | role | routing-log.txt | started_at | status | worker.pid)
       return 0
       ;;
   esac
@@ -52,12 +52,34 @@ implementation_changes() {
   git -C "$WORKTREE_PATH" status --porcelain | while IFS= read -r line; do
     path="${line#???}"
     case "$line" in
-      R*|C*) path="${path#* -> }" ;;
+      R* | C*) path="${path#* -> }" ;;
     esac
     if ! is_runtime_artifact "$path"; then
       printf '%s\n' "$path"
     fi
   done
+}
+
+base_ref_for_worktree() {
+  for ref in origin/main origin/master HEAD~1 main master; do
+    if git -C "$WORKTREE_PATH" rev-parse --verify "$ref" >/dev/null 2>&1; then
+      printf '%s\n' "$ref"
+      return 0
+    fi
+  done
+  return 1
+}
+
+committed_implementation_changes() {
+  local base_ref path
+  base_ref=$(base_ref_for_worktree || true)
+  [[ -n "$base_ref" ]] || return 0
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if ! is_runtime_artifact "$path"; then
+      printf '%s\n' "$path"
+    fi
+  done < <(git -C "$WORKTREE_PATH" diff --name-only "$base_ref"...HEAD 2>/dev/null || git -C "$WORKTREE_PATH" diff --name-only "$base_ref" HEAD 2>/dev/null || true)
 }
 
 if [[ ! -d "$WORKTREE_PATH" ]]; then
@@ -87,25 +109,31 @@ case "$REAL_RESULT" in
 esac
 
 CHANGED_PATHS=$(implementation_changes)
-if [[ -z "$CHANGED_PATHS" ]]; then
+COMMITTED_PATHS=$(committed_implementation_changes)
+if [[ -z "$CHANGED_PATHS" && -z "$COMMITTED_PATHS" ]]; then
   echo "VERDICT: FAIL - git diff is empty"
   exit 1
 fi
 
 ISSUE_NUMBER="${ISSUE_KEY#issue-}"
-TITLE=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUMBER")
+# Determine target repo from state file or default to current repo
+REPO_SLUG=$(jq -r '.repo // empty' "$REPO_ROOT/.autoship/state.json" 2>/dev/null || echo "")
+if [[ -z "$REPO_SLUG" ]]; then
+  REPO_SLUG=$(git remote get-url origin 2>/dev/null | sed -E 's#^.+[:/]([^/]+/[^/]+)(\.git)?$#\1#' | sed 's/\.git$//')
+fi
+TITLE=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUMBER" --repo "$REPO_SLUG")
 BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT
 CRITERIA_FILE="$WORKTREE_PATH/acceptance-criteria.json"
 if [[ -x "$SCRIPT_DIR/pr-body.sh" ]]; then
-  bash "$SCRIPT_DIR/pr-body.sh" "$ISSUE_NUMBER" "$RESULT_PATH" "$CRITERIA_FILE" > "$BODY_FILE"
+  bash "$SCRIPT_DIR/pr-body.sh" "$ISSUE_NUMBER" "$RESULT_PATH" "$CRITERIA_FILE" >"$BODY_FILE"
 else
   {
     printf '## Summary\n'
     cat "$RESULT_PATH"
     printf '\n\nCloses #%s\n\n' "$ISSUE_NUMBER"
     printf 'Dispatched by AutoShip.\n'
-  } > "$BODY_FILE"
+  } >"$BODY_FILE"
 fi
 
 if [[ "$MODE" != "live" && "${AUTOSHIP_ENABLE_PR_CREATE:-false}" != "true" ]]; then
@@ -118,12 +146,14 @@ fi
 
 (
   cd "$WORKTREE_PATH"
-  while IFS= read -r path; do
-    [[ -n "$path" ]] || continue
-    git add -- "$path"
-  done <<< "$CHANGED_PATHS"
-  if ! git diff --cached --quiet; then
-    git commit -m "$TITLE" -m "Closes #$ISSUE_NUMBER" -m "Dispatched by AutoShip."
+  if [[ -n "$CHANGED_PATHS" ]]; then
+    while IFS= read -r path; do
+      [[ -n "$path" ]] || continue
+      git add -- "$path"
+    done <<<"$CHANGED_PATHS"
+    if ! git diff --cached --quiet; then
+      git commit -m "$TITLE" -m "Closes #$ISSUE_NUMBER" -m "Dispatched by AutoShip."
+    fi
   fi
 )
 
@@ -134,8 +164,8 @@ PR_URL=$(gh pr create \
   --head "autoship/issue-$ISSUE_NUMBER")
 
 issue_meta=$(gh issue view "$ISSUE_NUMBER" --json labels,milestone 2>/dev/null || echo '{}')
-labels=$(jq -r '[.labels[].name? | select(. != "agent:ready")] | join(",")' <<< "$issue_meta" 2>/dev/null || true)
-milestone=$(jq -r '.milestone.title // empty' <<< "$issue_meta" 2>/dev/null || true)
+labels=$(jq -r '[.labels[].name? | select(. != "agent:ready")] | join(",")' <<<"$issue_meta" 2>/dev/null || true)
+milestone=$(jq -r '.milestone.title // empty' <<<"$issue_meta" 2>/dev/null || true)
 if [[ -n "$labels" ]]; then
   gh pr edit "$PR_URL" --add-label "$labels" >/dev/null 2>&1 || true
 fi

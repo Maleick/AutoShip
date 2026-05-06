@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { readFileSync } from "node:fs";
-import type { PluginServer } from "./types";
+import type { PluginServer } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,4 +22,4 @@ export async function server(): Promise<PluginServer> {
   };
 }
 
-export * from "./types";
+export * from "./types.js";

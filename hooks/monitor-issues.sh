@@ -83,7 +83,7 @@ fi
 # Initialize watermark on first run (capture current time, emit nothing on first loop)
 if [[ ! -f "$WATERMARK_FILE" ]]; then
   last_check=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  echo "$last_check" > "$WATERMARK_FILE"
+  echo "$last_check" >"$WATERMARK_FILE"
 else
   last_check=$(cat "$WATERMARK_FILE" 2>/dev/null) || last_check=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 fi
@@ -96,7 +96,7 @@ while true; do
   AUTOSHIP_MD_CURRENT_MTIME=$(_autoship_md_mtime)
   if [[ "$AUTOSHIP_MD_CURRENT_MTIME" != "$AUTOSHIP_MD_LAST_MTIME" ]]; then
     bash hooks/opencode/init.sh
-    echo "AUTOSHIP.md changed — routing config reloaded" >> "$AUTOSHIP_DIR/poll.log"
+    echo "AUTOSHIP.md changed — routing config reloaded" >>"$AUTOSHIP_DIR/poll.log"
     AUTOSHIP_MD_LAST_MTIME="$AUTOSHIP_MD_CURRENT_MTIME"
   fi
 
@@ -134,6 +134,6 @@ while true; do
   # Only write watermark if changed (avoid unnecessary disk I/O every 60s)
   if [[ "$last_check" != "$now" ]]; then
     last_check=$now
-    echo "$last_check" > "$WATERMARK_FILE"
+    echo "$last_check" >"$WATERMARK_FILE"
   fi
 done

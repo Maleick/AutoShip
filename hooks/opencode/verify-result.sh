@@ -21,6 +21,36 @@ fail() {
   exit 1
 }
 
+run_test_command() {
+  local command_string="$1"
+  local -a command_parts=()
+  local -a env_parts=()
+  read -r -a command_parts <<<"$command_string"
+  if [[ ${#command_parts[@]} -eq 0 ]]; then
+    fail "test command is empty"
+  fi
+  local part
+  for part in "${command_parts[@]}"; do
+    if [[ ! "$part" =~ ^[A-Za-z0-9_./:=@%+,-]+$ ]]; then
+      fail "test command contains unsupported characters"
+    fi
+  done
+  while [[ ${#command_parts[@]} -gt 0 && "${command_parts[0]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+    env_parts+=("${command_parts[0]}")
+    command_parts=("${command_parts[@]:1}")
+  done
+  if [[ ${#command_parts[@]} -eq 0 ]]; then
+    fail "test command is missing executable"
+  fi
+  if [[ ${#env_parts[@]} -gt 0 ]]; then
+    if ! (cd "$GIT_WORKTREE" && env "${env_parts[@]}" "${command_parts[@]}") >>"$LOG_PATH" 2>&1; then
+      fail "test command failed"
+    fi
+  elif ! (cd "$GIT_WORKTREE" && "${command_parts[@]}") >>"$LOG_PATH" 2>&1; then
+    fail "test command failed"
+  fi
+}
+
 [[ -d "$WORKTREE_PATH" ]] || fail "worktree missing"
 [[ -s "$RESULT_PATH" ]] || fail "AUTOSHIP_RESULT.md missing or empty"
 
@@ -55,18 +85,11 @@ fi
 [[ "$has_diff" == true ]] || fail "git diff is empty"
 
 if [[ -n "$TEST_COMMAND" && "$TEST_COMMAND" != "none" ]]; then
-  # Validate test_command is a simple command, not a shell injection vector
-  if [[ "$TEST_COMMAND" =~ [;&|] ]]; then
-    fail "test command contains shell metacharacters"
-  fi
-  if ! (cd "$GIT_WORKTREE" && bash -c "$TEST_COMMAND") >> "$LOG_PATH" 2>&1; then
-    fail "test command failed"
-  fi
+  run_test_command "$TEST_COMMAND"
 fi
 
-
 if [[ -f "$SCRIPT_DIR/policy-verify.sh" ]]; then
-  if ! bash "$SCRIPT_DIR/policy-verify.sh" "$GIT_WORKTREE" >> "$LOG_PATH" 2>&1; then
+  if ! bash "$SCRIPT_DIR/policy-verify.sh" "$GIT_WORKTREE" >>"$LOG_PATH" 2>&1; then
     fail "policy verification failed"
   fi
 else
@@ -74,7 +97,7 @@ else
 fi
 
 reviewer_output=$(mktemp)
-if ! bash "$SCRIPT_DIR/reviewer.sh" "$ISSUE_KEY" "$WORKTREE_PATH" "$RESULT_PATH" "$TEST_COMMAND" > "$reviewer_output" 2>&1; then
+if ! bash "$SCRIPT_DIR/reviewer.sh" "$ISSUE_KEY" "$WORKTREE_PATH" "$RESULT_PATH" "$TEST_COMMAND" >"$reviewer_output" 2>&1; then
   cp "$reviewer_output" "$LOG_PATH" 2>/dev/null || true
   rm -f "$reviewer_output"
   fail "reviewer failed"

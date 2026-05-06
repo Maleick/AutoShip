@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Clean up an AutoShip worktree after merge.
 
 set -euo pipefail
@@ -58,7 +59,7 @@ if [[ -f "$STATE_FILE" ]]; then
   jq --arg key "$ISSUE_KEY" \
     '.issues[$key].state = "merged" |
      .issues[$key].completed_at = (now | todate)' \
-    "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+    "$STATE_FILE" >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
 fi
 
 gh issue edit "$ISSUE_NUM" --remove-label "autoship:in-progress" 2>/dev/null || true

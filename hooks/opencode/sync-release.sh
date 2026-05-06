@@ -16,32 +16,104 @@ PLUGIN_DIR="$CONFIG_DIR/plugins"
 PLUGIN_DEST="$PLUGIN_DIR/autoship.ts"
 VERSION_FILE="$PLUGIN_DIR/autoship.version"
 AUTOSHIP_HOME="$CONFIG_DIR/.autoship"
-REPO_REF="Maleick/AutoShip"
 
+assert_not_symlink() {
+  local path="$1"
+  if [[ -L "$path" ]]; then
+    printf 'Error: refusing to operate on symlinked path: %s\n' "$path" >&2
+    exit 1
+  fi
+}
+
+assert_under_config() {
+  local path="$1"
+  local real_config real_path
+  mkdir -p "$CONFIG_DIR"
+  real_config="$(cd "$CONFIG_DIR" && pwd -P)"
+  mkdir -p "$path"
+  real_path="$(cd "$path" && pwd -P)"
+  case "$real_path" in
+    "$real_config" | "$real_config"/*) ;;
+    *)
+      printf 'Error: refusing to operate outside OpenCode config: %s\n' "$path" >&2
+      exit 1
+      ;;
+  esac
+}
+
+assert_no_source_symlinks() {
+  local path="$1"
+  local found=""
+  found=$(find "$path" -type l -print -quit 2>/dev/null || true)
+  if [[ -n "$found" ]]; then
+    printf 'Error: refusing to copy symlinked source path: %s\n' "$found" >&2
+    exit 1
+  fi
+}
+
+remove_managed_path() {
+  local path="$1"
+  local real_autoship real_parent
+  assert_not_symlink "$path"
+  if [[ ! -e "$path" ]]; then
+    return 0
+  fi
+  real_autoship="$(cd "$AUTOSHIP_HOME" && pwd -P)"
+  real_parent="$(cd "$(dirname "$path")" && pwd -P)"
+  case "$real_parent/$(basename "$path")" in
+    "$real_autoship"/*) ;;
+    *)
+      printf 'Error: refusing to remove managed path outside parent: %s\n' "$path" >&2
+      exit 1
+      ;;
+  esac
+  rm -rf "$path"
+}
+
+assert_not_symlink "$CONFIG_DIR"
+assert_not_symlink "$PLUGIN_DIR"
+assert_not_symlink "$AUTOSHIP_HOME"
+assert_not_symlink "$PLUGIN_DEST"
+assert_not_symlink "$VERSION_FILE"
+assert_under_config "$PLUGIN_DIR"
+assert_under_config "$AUTOSHIP_HOME"
 mkdir -p "$PLUGIN_DIR" "$AUTOSHIP_HOME"
 
 if [[ "$(cd "$REPO_ROOT" && pwd -P)" == "$(cd "$AUTOSHIP_HOME" && pwd -P)" ]]; then
+  assert_not_symlink "$AUTOSHIP_HOME/plugins"
+  assert_not_symlink "$AUTOSHIP_HOME/plugins/autoship.ts"
+  assert_not_symlink "$AUTOSHIP_HOME/VERSION"
   if [[ -f "$AUTOSHIP_HOME/plugins/autoship.ts" ]]; then
     cp -f "$AUTOSHIP_HOME/plugins/autoship.ts" "$PLUGIN_DEST"
   fi
   if [[ -f "$AUTOSHIP_HOME/VERSION" ]]; then
-    tr -d '[:space:]' < "$AUTOSHIP_HOME/VERSION" > "$VERSION_FILE"
+    tr -d '[:space:]' <"$AUTOSHIP_HOME/VERSION" >"$VERSION_FILE"
   else
-    printf '%s\n' "installed" > "$VERSION_FILE"
+    printf '%s\n' "installed" >"$VERSION_FILE"
   fi
   exit 0
 fi
 
 copy_assets() {
   local src="$1"
+  local managed
+  for managed in hooks skills commands plugins; do
+    assert_not_symlink "$src/$managed"
+    assert_no_source_symlinks "$src/$managed"
+  done
+  assert_not_symlink "$src/plugins/autoship.ts"
   rm -f "$PLUGIN_DEST"
   cp -f "$src/plugins/autoship.ts" "$PLUGIN_DEST"
-  rm -rf "$AUTOSHIP_HOME/hooks" "$AUTOSHIP_HOME/skills" "$AUTOSHIP_HOME/commands" "$AUTOSHIP_HOME/plugins"
+  for managed in hooks skills commands plugins; do
+    remove_managed_path "$AUTOSHIP_HOME/$managed"
+  done
   mkdir -p "$AUTOSHIP_HOME"
   cp -R "$src/hooks" "$AUTOSHIP_HOME/hooks"
   cp -R "$src/skills" "$AUTOSHIP_HOME/skills"
   cp -R "$src/commands" "$AUTOSHIP_HOME/commands"
   cp -R "$src/plugins" "$AUTOSHIP_HOME/plugins"
+  assert_not_symlink "$AUTOSHIP_HOME/AGENTS.md"
+  assert_not_symlink "$AUTOSHIP_HOME/VERSION"
   if [[ -f "$src/AGENTS.md" ]]; then
     cp -f "$src/AGENTS.md" "$AUTOSHIP_HOME/AGENTS.md"
   fi
@@ -50,46 +122,9 @@ copy_assets() {
   fi
 }
 
-LATEST_TAG=""
-if [[ "${AUTOSHIP_UNVERIFIED_RELEASE_SYNC:-0}" != "1" ]]; then
-  copy_assets "$REPO_ROOT"
-  printf '%s\n' "dev" > "$VERSION_FILE"
-  exit 0
+copy_assets "$REPO_ROOT"
+if [[ -f "$REPO_ROOT/VERSION" ]]; then
+  tr -d '[:space:]' <"$REPO_ROOT/VERSION" >"$VERSION_FILE"
+else
+  printf '%s\n' "dev" >"$VERSION_FILE"
 fi
-
-if command -v gh >/dev/null 2>&1; then
-  LATEST_TAG=$(gh api "repos/$REPO_REF/releases/latest" --jq '.tag_name' 2>/dev/null || true)
-fi
-
-if [[ -z "$LATEST_TAG" ]]; then
-  copy_assets "$REPO_ROOT"
-  printf '%s\n' "dev" > "$VERSION_FILE"
-  exit 0
-fi
-
-CURRENT_TAG=""
-if [[ -f "$VERSION_FILE" ]]; then
-  CURRENT_TAG="$(cat "$VERSION_FILE" 2>/dev/null || true)"
-fi
-
-if [[ "$CURRENT_TAG" == "$LATEST_TAG" && -f "$PLUGIN_DEST" && ! -L "$PLUGIN_DEST" && -d "$AUTOSHIP_HOME/hooks" && -d "$AUTOSHIP_HOME/skills" && -d "$AUTOSHIP_HOME/commands" ]]; then
-  exit 0
-fi
-
-tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
-
-archive="$tmp_dir/autoship.tgz"
-curl -fsSL "https://api.github.com/repos/$REPO_REF/tarball/$LATEST_TAG" -o "$archive"
-tar -xzf "$archive" -C "$tmp_dir"
-
-release_plugin=$(printf '%s\n' "$tmp_dir"/*/plugins/autoship.ts)
-if [[ ! -f "$release_plugin" ]]; then
-  copy_assets "$REPO_ROOT"
-  printf '%s\n' "dev" > "$VERSION_FILE"
-  exit 0
-fi
-
-release_root="$(dirname "$(dirname "$release_plugin")")"
-copy_assets "$release_root"
-printf '%s\n' "$LATEST_TAG" > "$VERSION_FILE"

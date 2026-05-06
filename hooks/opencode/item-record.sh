@@ -50,7 +50,7 @@ init_item_record() {
     die "Refusing to write to symlinked item record: $item_path"
   fi
 
-  cat > "$item_path" <<EOF
+  cat >"$item_path" <<EOF
 # AutoShip Issue Record: #$issue_num
 
 ## Metadata
@@ -108,10 +108,10 @@ append_item_event() {
   tmp_file=$(mktemp)
 
   if grep -q "| Timestamp |" "$item_path" 2>/dev/null; then
-    awk -v line="$new_line" '/\| Timestamp \|.*\|$/ && !done { print; print line; done=1; next } { print }' "$item_path" > "$tmp_file"
+    awk -v line="$new_line" '/\| Timestamp \|.*\|$/ && !done { print; print line; done=1; next } { print }' "$item_path" >"$tmp_file"
   else
     cp "$item_path" "$tmp_file"
-    echo "$new_line" >> "$tmp_file"
+    echo "$new_line" >>"$tmp_file"
   fi
 
   sed -i '' "s/^## Updated:.*/## Updated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")/" "$tmp_file"

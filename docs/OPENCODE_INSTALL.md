@@ -12,6 +12,14 @@ AutoShip uses OpenCode as the only supported runtime. The package installer regi
 
 ## Installation
 
+### OpenCode Agent Instructions
+
+Tell OpenCode:
+
+```text
+Fetch and follow instructions from https://raw.githubusercontent.com/Maleick/AutoShip/refs/tags/v2.2.1/INSTALL.md
+```
+
 ### Option 1: Global Installation (Recommended)
 
 ```bash

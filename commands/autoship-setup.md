@@ -37,7 +37,7 @@ bash "$AUTOSHIP_HOME/hooks/opencode/setup.sh" --no-tui \
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--no-tui` | Run in non-interactive mode | false |
-| `--max-agents N` | Max concurrent agents | 15 |
+| `--max-agents N` | Max concurrent agents | 20 |
 | `--labels LABEL1,LABEL2` | Labels to monitor | agent:ready |
 | `--refresh-models` | Force refresh model inventory | false |
 | `--planner-model MODEL` | Planner/coordinator/orchestrator/reviewer/lead model | best available role model |
@@ -49,7 +49,7 @@ bash "$AUTOSHIP_HOME/hooks/opencode/setup.sh" --no-tui \
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AUTOSHIP_MAX_AGENTS` | Max concurrent agents | 15 |
+| `AUTOSHIP_MAX_AGENTS` | Max concurrent agents | 20 |
 | `AUTOSHIP_MODELS` | Worker models | auto-detect free |
 | `AUTOSHIP_REFRESH_MODELS` | Set to 1 to force refresh | 0 |
 | `AUTOSHIP_PLANNER_MODEL` | Planner model | best available role model |

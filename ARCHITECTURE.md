@@ -2,17 +2,32 @@
 
 ## Overview
 
-AutoShip is an OpenCode-only GitHub issue → pull request orchestration plugin.
+AutoShip is a multi-runtime GitHub issue → pull request orchestration plugin.
 It automates the full lifecycle of issue resolution through a pipeline of
 specialized shell scripts and TypeScript types.
 
+## Supported Runtimes
+
+| Runtime | Directory | Max Workers | Dispatch Method | Target Label |
+|---------|-----------|-------------|-----------------|--------------|
+| **OpenCode** | `hooks/opencode/` | 20 | Interactive CLI | `agent:ready` |
+| **Hermes** | `hooks/hermes/` | 20 | Cronjob / `delegate_task` | `autoship:ready-simple` |
+
 ## System Architecture
 
-\`\`\`
-┌─────────────────────────────────────────────────────────────────┐
-│                        GitHub Issues                             │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
+### OpenCode Flow
+```
+GitHub issues (agent:ready) → configured planner → Model selector 
+→ OpenCode worker (free-first rotated pool) → configured reviewer 
+→ [pass] Pull request / [fail] → back to Model selector
+```
+
+### Hermes Flow
+```
+GitHub issues (autoship:ready-simple) → plan-issues.sh → dispatch.sh
+→ Worktree + HERMES_PROMPT.md → Hermes cronjob / delegate_task
+→ Subagent implements → Push + PR + cleanup
+```
 ┌───────────────────────────▼─────────────────────────────────────┐
 │                    hooks/opencode/plan-issues.sh                 │
 │  - Fetch and filter eligible issues                              │
@@ -99,13 +114,22 @@ Core types:
 
 ## Data Flow
 
-1. **Planning** — \`plan-issues.sh\` fetches GitHub issues and filters eligible ones
-2. **Dispatch** — \`dispatch.sh\` creates a worktree, selects a model, and queues the issue
-3. **Execution** — \`runner.sh\` runs the OpenCode worker in the worktree
-4. **Monitoring** — \`monitor-agents.sh\` and \`reconcile-state.sh\` track worker health
-5. **Verification** — \`verify-result.sh\` reviews the worker output
-6. **Delivery** — \`create-pr.sh\` creates a PR from verified work
-7. **Cleanup** — \`merge-pr.sh\` or \`cleanup-worktree.sh\` removes completed worktrees
+### OpenCode
+1. **Planning** — `plan-issues.sh` fetches GitHub issues and filters eligible ones
+2. **Dispatch** — `dispatch.sh` creates a worktree, selects a model, and queues the issue
+3. **Execution** — `runner.sh` runs the OpenCode worker in the worktree
+4. **Monitoring** — `monitor-agents.sh` and `reconcile-state.sh` track worker health
+5. **Verification** — `verify-result.sh` reviews the worker output
+6. **Delivery** — `create-pr.sh` creates a PR from verified work
+7. **Cleanup** — `merge-pr.sh` or `cleanup-worktree.sh` removes completed worktrees
+
+### Hermes
+1. **Planning** — `hooks/hermes/plan-issues.sh` fetches `autoship:ready-simple` issues
+2. **Dispatch** — `hooks/hermes/dispatch.sh` creates worktree + writes `HERMES_PROMPT.md`
+3. **Execution** — Hermes cronjob or `delegate_task` runs the subagent in the worktree
+4. **Monitoring** — Subagent reports status (COMPLETE/BLOCKED/STUCK) to workspace status file
+5. **Delivery** — Subagent creates PR via `gh pr create` and auto-merges
+6. **Cleanup** — Subagent removes worktree after PR merge
 
 ## Safety Features
 
@@ -118,7 +142,7 @@ Core types:
 
 ## Hooks Directory Structure
 
-\`\`\`
+```
 hooks/
 ├── opencode/
 │   ├── plan-issues.sh        # Issue planning and filtering
@@ -143,14 +167,23 @@ hooks/
 │   ├── pr-title.sh           # PR title generation
 │   ├── pr-body.sh            # PR body generation
 │   └── ...
+├── hermes/
+│   ├── setup.sh              # Hermes discovery and model routing
+│   ├── plan-issues.sh        # Plan issues for Hermes dispatch
+│   ├── dispatch.sh           # Create worktree + HERMES_PROMPT.md
+│   ├── runner.sh             # Execute Hermes workers
+│   ├── status.sh             # Hermes runtime status
+│   └── cronjob-dispatch.sh   # Generate Hermes cronjob specs
 ├── update-state.sh           # State mutation utility
 ├── capture-failure.sh        # Failure artifact capture
 └── ...
-\`\`\`
+```
 
 ## Dependencies
 
-- \`gh\` — GitHub CLI for issue/PR operations
-- \`opencode\` — OpenCode CLI for agent execution
-- \`jq\` — JSON processing
-- \`git\` — Worktree and branch management
+- `gh` — GitHub CLI for issue/PR operations
+- `opencode` — OpenCode CLI for agent execution (OpenCode runtime)
+- `hermes` — Hermes Agent CLI for cron-based execution (Hermes runtime)
+- `jq` — JSON processing
+- `git` — Worktree and branch management
+- `cron` — Cronjob scheduling (Hermes runtime)

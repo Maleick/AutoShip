@@ -39,7 +39,7 @@ fi
 PROMPT_FILE=$(mktemp)
 trap 'rm -f "$PROMPT_FILE"' EXIT
 
-cat > "$PROMPT_FILE" <<EOF
+cat >"$PROMPT_FILE" <<EOF
 You are the AutoShip reviewer. Verify this completed worker output.
 
 Issue key: $ISSUE_KEY
@@ -89,7 +89,7 @@ else
 fi
 
 tmp_log=$(mktemp)
-printf '%s\n' "$reviewer_output" > "$tmp_log"
+printf '%s\n' "$reviewer_output" >"$tmp_log"
 AUTOSHIP_FAILURE_LOG="$tmp_log" autoship_capture_failure reviewer_rejection "$ISSUE_KEY" "error_summary=$error_summary"
 rm -f "$tmp_log"
 

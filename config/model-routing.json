@@ -1,0 +1,58 @@
+{
+  "version": "2026-05-03",
+  "runtime": "opencode",
+  "dispatch_method": "free_first_rotation",
+  "max_concurrent": 20,
+  "notes": "max_concurrent set to 20. Hermes delegation.max_concurrent_children synced to match.",
+  "tiers": [
+    {
+      "name": "zen_free",
+      "priority": 1,
+      "provider": "opencode-zen",
+      "cost": "free",
+      "models": [
+        { "id": "opencode-zen/big-pickle", "name": "Big Pickle", "capabilities": ["code", "review", "docs", "plan"], "notes": "Free tier" },
+        { "id": "opencode-zen/minimax-m2.5-free", "name": "MiniMax M2.5 Free", "capabilities": ["code", "review", "docs", "plan"], "notes": "Free tier" },
+        { "id": "opencode-zen/ling-2.6-flash-free", "name": "Ling 2.6 Flash Free", "capabilities": ["code", "review", "docs", "plan"], "notes": "Free tier" },
+        { "id": "opencode-zen/hy3-preview-free", "name": "Hy3 Preview Free", "capabilities": ["code", "review", "docs", "plan"], "notes": "Free tier" },
+        { "id": "opencode-zen/nemotron-3-super-free", "name": "Nemotron 3 Super Free", "capabilities": ["code", "review", "docs", "plan"], "notes": "Free tier" },
+        { "id": "opencode-zen/gpt-5-nano", "name": "GPT 5 Nano", "capabilities": ["code", "review", "docs", "plan"], "notes": "Free tier" }
+      ],
+      "rotation": "round_robin",
+      "fallback_on": ["rate_limit", "quota_exhausted", "model_unavailable"]
+    },
+    {
+      "name": "go_paid",
+      "priority": 2,
+      "provider": "opencode-go",
+      "cost": "paid",
+      "models": [
+        { "id": "opencode-go/deepseek-v4-pro", "name": "DeepSeek V4 Pro", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "Paid tier, smarter" },
+        { "id": "opencode-go/deepseek-v4-flash", "name": "DeepSeek V4 Flash", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "Paid tier, faster" }
+      ],
+      "rotation": "round_robin",
+      "fallback_on": ["rate_limit", "quota_exhausted"]
+    },
+    {
+      "name": "hermes_fallback",
+      "priority": 3,
+      "provider": "hermes",
+      "cost": "subscription",
+      "models": [
+        { "id": "kimi-k2.6", "name": "KIMI K2.6", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "Kimi subscription fallback" },
+        { "id": "gpt-5.5", "name": "GPT 5.5", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "OpenAI fallback" }
+      ],
+      "rotation": "round_robin",
+      "fallback_on": []
+    }
+  ],
+  "rules": [
+    { "rule": "Always try zen_free tier first for every task" },
+    { "rule": "Rotate across zen_free models in round-robin to distribute quota" },
+    { "rule": "If all zen_free models hit rate limit or quota, escalate to go_paid tier" },
+    { "rule": "If go_paid tier also unavailable, fall back to hermes_fallback" },
+    { "rule": "Never use openai/gpt-5.5-fast" },
+    { "rule": "Track usage per model in .autoship/usage-log.json" },
+    { "rule": "Hermes default active worker cap is 20" }
+  ]
+}

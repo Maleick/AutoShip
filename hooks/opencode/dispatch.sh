@@ -44,6 +44,14 @@ fi
 TASK_TYPE="${POSITIONAL[1]:-medium_code}"
 MODEL_OVERRIDE="${POSITIONAL[2]:-}"
 
+case "$TASK_TYPE" in
+  research | docs | simple_code | medium_code | complex | mechanical | ci_fix | rust_unsafe) ;;
+  *)
+    echo "Error: invalid task type: $TASK_TYPE" >&2
+    exit 1
+    ;;
+esac
+
 REPO_ROOT=$(autoship_repo_root) || exit 1
 cd "$REPO_ROOT"
 
@@ -55,9 +63,9 @@ WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
 
 if [[ -f "$STATE_FILE" ]] && jq -e --arg key "$ISSUE_KEY" '(.issues[$key].terminal_failure // false) == true or (.issues[$key].retry_eligible // true) == false' "$STATE_FILE" >/dev/null 2>&1; then
   mkdir -p "$WORKSPACE_PATH"
-  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
+  printf 'BLOCKED\n' >"$WORKSPACE_PATH/status"
   reason=$(jq -r --arg key "$ISSUE_KEY" '.issues[$key].escalation_reason // "retry limit reached"' "$STATE_FILE" 2>/dev/null || echo "retry limit reached")
-  printf '%s\n' "$reason" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
+  printf '%s\n' "$reason" >"$WORKSPACE_PATH/BLOCKED_REASON.txt"
   echo "BLOCKED $ISSUE_KEY: $reason"
   exit 0
 fi
@@ -66,10 +74,10 @@ max_agents=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // emp
 if [[ -z "$max_agents" && -f "$AUTOSHIP_DIR/config.json" ]]; then
   max_agents=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
 fi
-max_agents="${max_agents:-15}"
+max_agents="${max_agents:-20}"
 # Validate max_agents is numeric
 if [[ ! "$max_agents" =~ ^[0-9]+$ ]]; then
-  max_agents=15
+  max_agents=20
 fi
 
 # Check system resources and potentially reduce concurrency cap
@@ -78,7 +86,8 @@ if [[ -x "$SCRIPT_DIR/resource-monitor.sh" ]]; then
   resource_status=$(echo "$resource_info" | jq -r '.load_status // "ok"')
   recommended_max=$(echo "$resource_info" | jq -r '.recommended_max_concurrent // '$max_agents)
   if [[ "$resource_status" != "ok" && "$recommended_max" =~ ^[0-9]+$ && "$recommended_max" -lt "$max_agents" ]]; then
-    echo "RESOURCE_${resource_status^^}: CPU/MEM load high, reducing concurrency from $max_agents to $recommended_max" >&2
+    resource_label=$(printf '%s' "$resource_status" | tr '[:lower:]' '[:upper:]')
+    echo "RESOURCE_${resource_label}: CPU/MEM load high, reducing concurrency from $max_agents to $recommended_max" >&2
     max_agents="$recommended_max"
   fi
 fi
@@ -89,7 +98,7 @@ if [[ ! "$running" =~ ^[0-9]+$ ]]; then
   running=0
 fi
 cap_note=""
-if (( running >= max_agents )); then
+if ((running >= max_agents)); then
   cap_note="CAP_REACHED: $running active / $max_agents max; workspace will remain queued"
 fi
 
@@ -113,7 +122,7 @@ resolve_model() {
     if [[ -n "$routing_log" ]]; then
       mkdir -p "$WORKSPACE_PATH"
       log_file="$WORKSPACE_PATH/routing-log.txt"
-      printf '%s\n' "$routing_log" > "$log_file"
+      printf '%s\n' "$routing_log" >"$log_file"
     fi
     printf '%s\n' "$selected_model"
     return 0
@@ -123,13 +132,13 @@ resolve_model() {
 
 resolve_role() {
   case "$1" in
-    docs|documentation) printf '%s\n' docs ;;
-    review|code_review) printf '%s\n' reviewer ;;
-    test|tests|ci_fix) printf '%s\n' tester ;;
+    docs | documentation) printf '%s\n' docs ;;
+    review | code_review) printf '%s\n' reviewer ;;
+    test | tests | ci_fix) printf '%s\n' tester ;;
     release) printf '%s\n' release ;;
-    simplify|refactor) printf '%s\n' simplifier ;;
-    plan|planning) printf '%s\n' planner ;;
-    lead|orchestration|coordination) printf '%s\n' lead ;;
+    simplify | refactor) printf '%s\n' simplifier ;;
+    plan | planning) printf '%s\n' planner ;;
+    lead | orchestration | coordination) printf '%s\n' lead ;;
     *) printf '%s\n' implementer ;;
   esac
 }
@@ -153,8 +162,8 @@ fi
 
 if [[ -z "$MODEL" ]]; then
   mkdir -p "$WORKSPACE_PATH"
-  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
-  printf 'No configured OpenCode model is available for task type %s. Run hooks/opencode/setup.sh to choose models.\n' "$TASK_TYPE" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
+  printf 'BLOCKED\n' >"$WORKSPACE_PATH/status"
+  printf 'No configured OpenCode model is available for task type %s. Run hooks/opencode/setup.sh to choose models.\n' "$TASK_TYPE" >"$WORKSPACE_PATH/BLOCKED_REASON.txt"
   autoship_state_set set-blocked "$ISSUE_KEY" reason="no configured OpenCode model for $TASK_TYPE"
   echo "BLOCKED $ISSUE_KEY: no configured OpenCode model for $TASK_TYPE"
   exit 0
@@ -170,12 +179,12 @@ fi
 
 FULL_WORKSPACE_PATH=$(bash "$SCRIPT_DIR/create-worktree.sh" "$ISSUE_KEY" "autoship/issue-${ISSUE_NUM}")
 mkdir -p "$WORKSPACE_PATH"
-date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE_PATH/started_at"
-printf 'QUEUED\n' > "$WORKSPACE_PATH/status"
-printf '%s\n' "$MODEL" > "$WORKSPACE_PATH/model"
-printf '%s\n' "$ROLE" > "$WORKSPACE_PATH/role"
+date -u +%Y-%m-%dT%H:%M:%SZ >"$WORKSPACE_PATH/started_at"
+printf 'QUEUED\n' >"$WORKSPACE_PATH/status"
+printf '%s\n' "$MODEL" >"$WORKSPACE_PATH/model"
+printf '%s\n' "$ROLE" >"$WORKSPACE_PATH/role"
 
-cat > "$WORKSPACE_PATH/AUTOSHIP_PROMPT.md" <<EOF
+cat >"$WORKSPACE_PATH/AUTOSHIP_PROMPT.md" <<EOF
 # AutoShip Agent Prompt
 
 ## Issue #$ISSUE_NUM: $TITLE
@@ -209,7 +218,8 @@ $(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUM" --title "$TITLE" --labels 
 EOF
 
 autoship_state_set set-queued "$ISSUE_KEY" agent="$MODEL" model="$MODEL" role="$ROLE" task_type="$TASK_TYPE"
-bash "$SCRIPT_DIR/metrics-collector.sh" record-dispatch "$ISSUE_KEY" "$MODEL" > /dev/null 2>&1 || true
+bash "$SCRIPT_DIR/../quota-update.sh" decrement >/dev/null 2>&1 || true
+bash "$SCRIPT_DIR/metrics-collector.sh" record-dispatch "$ISSUE_KEY" "$MODEL" >/dev/null 2>&1 || true
 
 echo "Queued issue #$ISSUE_NUM for $MODEL ($TASK_TYPE, role=$ROLE)"
 [[ -n "$cap_note" ]] && echo "$cap_note"
