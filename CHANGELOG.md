@@ -1,3 +1,12 @@
+## [2.4.11](https://github.com/Maleick/AutoShip/compare/v2.4.10...v2.4.11) (2026-05-06)
+
+
+### Bug Fixes
+
+* **circuit-breaker:** read disabled models from .models map ([#364](https://github.com/Maleick/AutoShip/issues/364)) ([20b8f41](https://github.com/Maleick/AutoShip/commit/20b8f41094039c065d4f9bf27193405811f4acca))
+* **resource-monitor:** correct vmstat fallback conditional syntax ([#362](https://github.com/Maleick/AutoShip/issues/362)) ([4c53a3a](https://github.com/Maleick/AutoShip/commit/4c53a3a843cd5467ef930d57091e2e5783d21998))
+* **retry:** normalize and clamp retry attempt ([#363](https://github.com/Maleick/AutoShip/issues/363)) ([592678c](https://github.com/Maleick/AutoShip/commit/592678c3e6d54f891d0d290eadc5ae87321099e8))
+
 ## [2.4.10](https://github.com/Maleick/AutoShip/compare/v2.4.9...v2.4.10) (2026-05-06)
 
 
