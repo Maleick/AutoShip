@@ -88,10 +88,25 @@ if [[ -n "${1:-}" ]]; then
     done
   fi
 
+  # Determine prompt file (HERMES_PROMPT.md or AUTOSHIP_PROMPT.md)
+  prompt_file=""
+  if [[ -f "$worktree_path/HERMES_PROMPT.md" ]]; then
+    prompt_file="$worktree_path/HERMES_PROMPT.md"
+  elif [[ -f "$worktree_path/AUTOSHIP_PROMPT.md" ]]; then
+    prompt_file="$worktree_path/AUTOSHIP_PROMPT.md"
+  fi
+
   if [[ -z "$worktree_path" || ! -d "$worktree_path" ]]; then
     echo "Error: worktree not found for issue-$ISSUE_NUM" >&2
     printf 'BLOCKED\n' >"$status_file"
     autoship_state_set set-blocked "$ISSUE_KEY" reason="worktree not found"
+    exit 1
+  fi
+
+  if [[ -z "$prompt_file" ]]; then
+    echo "Error: no prompt file (HERMES_PROMPT.md or AUTOSHIP_PROMPT.md) found for $ISSUE_KEY" >&2
+    printf 'BLOCKED\n' >"$status_file"
+    autoship_state_set set-blocked "$ISSUE_KEY" reason="no_prompt_file"
     exit 1
   fi
 
