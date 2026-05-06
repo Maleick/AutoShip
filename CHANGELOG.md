@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/Maleick/AutoShip/compare/v2.4.19...v2.5.0) (2026-05-06)
+
+
+### Features
+
+* **hermes:** Add Windows bridge support to runner.sh ([b5e5291](https://github.com/Maleick/AutoShip/commit/b5e5291f857f2c05e68cfc4367f045c5386583e9))
+
 ## [2.4.19](https://github.com/Maleick/AutoShip/compare/v2.4.18...v2.4.19) (2026-05-06)
 
 
