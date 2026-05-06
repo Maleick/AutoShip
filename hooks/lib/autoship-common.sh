@@ -131,7 +131,7 @@ json_atomic_write() {
   shift 2
   local tmp
   tmp="${file}.tmp.$$"
-  if jq "$@" "$filter" "$file" > "$tmp" 2>/dev/null; then
+  if jq "$@" "$filter" "$file" >"$tmp" 2>/dev/null; then
     mv "$tmp" "$file"
     return 0
   else
@@ -147,7 +147,7 @@ atomic_write() {
   local content="$2"
   local tmp
   tmp="${file}.tmp.$$"
-  printf '%s' "$content" > "$tmp" && mv "$tmp" "$file"
+  printf '%s' "$content" >"$tmp" && mv "$tmp" "$file"
 }
 
 # =============================================================================
@@ -166,7 +166,7 @@ autoship_mktemp() {
   echo "$tmp"
 }
 
-# Create a temp directory and register it for cleanup  
+# Create a temp directory and register it for cleanup
 # Usage: tmpdir=$(autoship_mkdtemp)
 autoship_mkdtemp() {
   local tmp
@@ -198,12 +198,12 @@ setup_autoship_cleanup() {
 with_lock() {
   local lock_file="$1"
   shift
-  
+
   if [[ -L "$lock_file" ]]; then
     echo "Error: refusing symlink lock file: $lock_file" >&2
     return 1
   fi
-  
+
   if command -v flock >/dev/null 2>&1; then
     (
       exec 200>"$lock_file"
@@ -229,7 +229,7 @@ require_jq() {
   fi
 }
 
-# Check if gh is available  
+# Check if gh is available
 require_gh() {
   if ! command -v gh >/dev/null 2>&1; then
     echo "Error: gh CLI is required but not found" >&2
@@ -259,7 +259,7 @@ state_get_issue_field() {
 ensure_state_file() {
   if [[ ! -f "${STATE_FILE}" ]]; then
     mkdir -p "${AUTOSHIP_DIR}"
-    echo '{}' > "${STATE_FILE}"
+    echo '{}' >"${STATE_FILE}"
   fi
 }
 

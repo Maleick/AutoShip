@@ -7,7 +7,7 @@ if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 labels=$(gh pr view "$PR_NUMBER" --json labels --jq '[.labels[].name] | join(",")')
-if ! grep -Eq '(^|,)autoship:auto-merge(,|$)' <<< "$labels"; then
+if ! grep -Eq '(^|,)autoship:auto-merge(,|$)' <<<"$labels"; then
   echo "PR #$PR_NUMBER is not labeled autoship:auto-merge"
   exit 0
 fi
@@ -16,7 +16,7 @@ if [[ -z "$checks" ]]; then
   echo "PR #$PR_NUMBER has no reported checks; refusing auto-merge"
   exit 1
 fi
-if grep -Eq 'FAILURE|ERROR|CANCELLED|PENDING|QUEUED|IN_PROGRESS' <<< "$checks"; then
+if grep -Eq 'FAILURE|ERROR|CANCELLED|PENDING|QUEUED|IN_PROGRESS' <<<"$checks"; then
   echo "PR #$PR_NUMBER checks are not mergeable: $checks"
   exit 1
 fi

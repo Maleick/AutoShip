@@ -41,7 +41,7 @@ canonical_file() {
 
 is_runtime_artifact() {
   case "$1" in
-    .autoship|.autoship/*|AUTOSHIP_PROMPT.md|AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|BLOCKED_REASON.txt|model|role|routing-log.txt|started_at|status|worker.pid)
+    .autoship | .autoship/* | AUTOSHIP_PROMPT.md | AUTOSHIP_RESULT.md | AUTOSHIP_RUNNER.log | BLOCKED_REASON.txt | model | role | routing-log.txt | started_at | status | worker.pid)
       return 0
       ;;
   esac
@@ -52,7 +52,7 @@ implementation_changes() {
   git -C "$WORKTREE_PATH" status --porcelain | while IFS= read -r line; do
     path="${line#???}"
     case "$line" in
-      R*|C*) path="${path#* -> }" ;;
+      R* | C*) path="${path#* -> }" ;;
     esac
     if ! is_runtime_artifact "$path"; then
       printf '%s\n' "$path"
@@ -126,14 +126,14 @@ BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT
 CRITERIA_FILE="$WORKTREE_PATH/acceptance-criteria.json"
 if [[ -x "$SCRIPT_DIR/pr-body.sh" ]]; then
-  bash "$SCRIPT_DIR/pr-body.sh" "$ISSUE_NUMBER" "$RESULT_PATH" "$CRITERIA_FILE" > "$BODY_FILE"
+  bash "$SCRIPT_DIR/pr-body.sh" "$ISSUE_NUMBER" "$RESULT_PATH" "$CRITERIA_FILE" >"$BODY_FILE"
 else
   {
     printf '## Summary\n'
     cat "$RESULT_PATH"
     printf '\n\nCloses #%s\n\n' "$ISSUE_NUMBER"
     printf 'Dispatched by AutoShip.\n'
-  } > "$BODY_FILE"
+  } >"$BODY_FILE"
 fi
 
 if [[ "$MODE" != "live" && "${AUTOSHIP_ENABLE_PR_CREATE:-false}" != "true" ]]; then
@@ -150,7 +150,7 @@ fi
     while IFS= read -r path; do
       [[ -n "$path" ]] || continue
       git add -- "$path"
-    done <<< "$CHANGED_PATHS"
+    done <<<"$CHANGED_PATHS"
     if ! git diff --cached --quiet; then
       git commit -m "$TITLE" -m "Closes #$ISSUE_NUMBER" -m "Dispatched by AutoShip."
     fi
@@ -164,8 +164,8 @@ PR_URL=$(gh pr create \
   --head "autoship/issue-$ISSUE_NUMBER")
 
 issue_meta=$(gh issue view "$ISSUE_NUMBER" --json labels,milestone 2>/dev/null || echo '{}')
-labels=$(jq -r '[.labels[].name? | select(. != "agent:ready")] | join(",")' <<< "$issue_meta" 2>/dev/null || true)
-milestone=$(jq -r '.milestone.title // empty' <<< "$issue_meta" 2>/dev/null || true)
+labels=$(jq -r '[.labels[].name? | select(. != "agent:ready")] | join(",")' <<<"$issue_meta" 2>/dev/null || true)
+milestone=$(jq -r '.milestone.title // empty' <<<"$issue_meta" 2>/dev/null || true)
 if [[ -n "$labels" ]]; then
   gh pr edit "$PR_URL" --add-label "$labels" >/dev/null 2>&1 || true
 fi

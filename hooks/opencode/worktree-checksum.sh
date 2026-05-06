@@ -19,6 +19,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   case "${1:-checksum}" in
     checksum) checksum_worktree "${2:-.}" ;;
     changed) changed_files_since_base "${2:-.}" ;;
-    *) echo "Usage: $0 checksum|changed [dir]" >&2; exit 2 ;;
+    *)
+      echo "Usage: $0 checksum|changed [dir]" >&2
+      exit 2
+      ;;
   esac
 fi

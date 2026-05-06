@@ -57,6 +57,20 @@ assert_canonical_inventory
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+if ! grep -A4 'actions/setup-node@v4' "$REPO_ROOT/.github/workflows/release.yml" | grep -Eq "node-version: ['\"]?(22|24)['\"]?"; then
+  fail "release workflow must use Node 22 or 24 for semantic-release"
+fi
+grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" >/dev/null \
+  || fail "check.sh syntax check must include Hermes hooks"
+if grep -Eq 'DELEGATED|DELEGATE_TASK_READY|Parent agent should now call delegate_task' "$REPO_ROOT/hooks/hermes/runner.sh"; then
+  fail "Hermes runner must execute production work instead of writing delegate_task markers"
+fi
+if grep -F -- '--base master' "$REPO_ROOT/hooks/hermes/dispatch.sh" >/dev/null; then
+  fail "Hermes prompt must not hardcode master as PR base"
+fi
+grep -F 'HERMES_BASE_BRANCH' "$REPO_ROOT/hooks/hermes/dispatch.sh" >/dev/null \
+  || fail "Hermes dispatch must support configurable or detected base branch"
+
 POLICY_REPO="$TMP_DIR/policy-repo"
 mkdir -p "$POLICY_REPO/.autoship" "$POLICY_REPO/hooks/opencode" "$POLICY_REPO/policies"
 git init -q "$POLICY_REPO"
@@ -64,10 +78,10 @@ cp "$SCRIPT_DIR/policy.sh" "$POLICY_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$POLICY_REPO/policies/default.json"
 (
   cd "$POLICY_REPO"
-  printf '{broken json\n' > .autoship/config.json
+  printf '{broken json\n' >.autoship/config.json
   bash hooks/opencode/policy.sh json >/dev/null || fail "policy json falls back when config is malformed"
   assert_eq "8" "$(bash hooks/opencode/policy.sh value cargoConcurrencyCap)" "policy value falls back when config is malformed"
-  printf '"bad-type"\n' > .autoship/config.json
+  printf '"bad-type"\n' >.autoship/config.json
   bash hooks/opencode/policy.sh json >/dev/null || fail "policy json falls back when config is non-object"
   assert_eq "8" "$(bash hooks/opencode/policy.sh value cargoConcurrencyCap)" "policy value falls back when config is non-object"
 )
@@ -77,7 +91,7 @@ grep -F '| `/autoship-setup` |' "$REPO_ROOT/README.md" >/dev/null || fail "READM
 grep -F '| `/autoship-setup` |' "$REPO_ROOT/commands/autoship.md" >/dev/null || fail "/autoship command table includes /autoship-setup"
 
 ISSUES_FILE="$TMP_DIR/issues.json"
-cat > "$ISSUES_FILE" <<'JSON'
+cat >"$ISSUES_FILE" <<'JSON'
 [
   {"number": 2301, "title": "new high issue", "body": "safe", "labels": [{"name": "agent:ready"}]},
   {"number": 746, "title": "low safe docs", "body": "update docs", "labels": [{"name": "agent:ready"}, {"name": "documentation"}, {"name": "size-s"}]},
@@ -88,7 +102,7 @@ cat > "$ISSUES_FILE" <<'JSON'
 JSON
 
 PLAN_OUTPUT="$TMP_DIR/plan.json"
-bash "$SCRIPT_DIR/plan-issues.sh" --issues-file "$ISSUES_FILE" --limit 10 > "$PLAN_OUTPUT"
+bash "$SCRIPT_DIR/plan-issues.sh" --issues-file "$ISSUES_FILE" --limit 10 >"$PLAN_OUTPUT"
 
 eligible_numbers=$(jq -r '.eligible[].number' "$PLAN_OUTPUT" | paste -sd ' ' -)
 blocked_numbers=$(jq -r '.blocked[].number' "$PLAN_OUTPUT" | paste -sd ' ' -)
@@ -110,28 +124,28 @@ fi
 PACKAGE_VERIFY_REPO="$TMP_DIR/package-verify-repo"
 mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks/opencode" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills/autoship-setup" "$PACKAGE_VERIFY_REPO/plugins" "$PACKAGE_VERIFY_REPO/policies" "$PACKAGE_VERIFY_REPO/.opencode" "$PACKAGE_VERIFY_REPO/.autoship"
 cp "$SCRIPT_DIR/../../package.json" "$PACKAGE_VERIFY_REPO/package.json"
-jq '.files += [".autoship", "unintended.tmp"]' "$PACKAGE_VERIFY_REPO/package.json" > "$PACKAGE_VERIFY_REPO/package.json.tmp" && mv "$PACKAGE_VERIFY_REPO/package.json.tmp" "$PACKAGE_VERIFY_REPO/package.json"
-printf 'runtime state\n' > "$PACKAGE_VERIFY_REPO/.autoship/state.json"
-printf 'unintended\n' > "$PACKAGE_VERIFY_REPO/unintended.tmp"
-printf 'export {};\n' > "$PACKAGE_VERIFY_REPO/dist/index.js"
-printf 'cli\n' > "$PACKAGE_VERIFY_REPO/dist/cli.js"
-printf 'hook\n' > "$PACKAGE_VERIFY_REPO/hooks/init.sh"
-printf 'hook\n' > "$PACKAGE_VERIFY_REPO/hooks/opencode/install.sh"
-printf 'hook\n' > "$PACKAGE_VERIFY_REPO/hooks/opencode/init.sh"
-printf 'hook\n' > "$PACKAGE_VERIFY_REPO/hooks/opencode/sync-release.sh"
-printf 'command\n' > "$PACKAGE_VERIFY_REPO/commands/autoship.md"
-printf 'command\n' > "$PACKAGE_VERIFY_REPO/commands/autoship-setup.md"
-printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-orchestrate.md"
-printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-setup/SKILL.md"
-printf 'plugin\n' > "$PACKAGE_VERIFY_REPO/plugins/autoship.ts"
-printf '{"policy":"default"}\n' > "$PACKAGE_VERIFY_REPO/policies/default.json"
-printf '{"policy":"textquest"}\n' > "$PACKAGE_VERIFY_REPO/policies/textquest.json"
-printf 'agents\n' > "$PACKAGE_VERIFY_REPO/AGENTS.md"
-printf '1.0.0\n' > "$PACKAGE_VERIFY_REPO/VERSION"
-printf 'readme\n' > "$PACKAGE_VERIFY_REPO/README.md"
-printf 'install\n' > "$PACKAGE_VERIFY_REPO/INSTALL.md"
-printf 'license\n' > "$PACKAGE_VERIFY_REPO/LICENSE"
-printf 'install\n' > "$PACKAGE_VERIFY_REPO/.opencode/INSTALL.md"
+jq '.files += [".autoship", "unintended.tmp"]' "$PACKAGE_VERIFY_REPO/package.json" >"$PACKAGE_VERIFY_REPO/package.json.tmp" && mv "$PACKAGE_VERIFY_REPO/package.json.tmp" "$PACKAGE_VERIFY_REPO/package.json"
+printf 'runtime state\n' >"$PACKAGE_VERIFY_REPO/.autoship/state.json"
+printf 'unintended\n' >"$PACKAGE_VERIFY_REPO/unintended.tmp"
+printf 'export {};\n' >"$PACKAGE_VERIFY_REPO/dist/index.js"
+printf 'cli\n' >"$PACKAGE_VERIFY_REPO/dist/cli.js"
+printf 'hook\n' >"$PACKAGE_VERIFY_REPO/hooks/init.sh"
+printf 'hook\n' >"$PACKAGE_VERIFY_REPO/hooks/opencode/install.sh"
+printf 'hook\n' >"$PACKAGE_VERIFY_REPO/hooks/opencode/init.sh"
+printf 'hook\n' >"$PACKAGE_VERIFY_REPO/hooks/opencode/sync-release.sh"
+printf 'command\n' >"$PACKAGE_VERIFY_REPO/commands/autoship.md"
+printf 'command\n' >"$PACKAGE_VERIFY_REPO/commands/autoship-setup.md"
+printf 'skill\n' >"$PACKAGE_VERIFY_REPO/skills/autoship-orchestrate.md"
+printf 'skill\n' >"$PACKAGE_VERIFY_REPO/skills/autoship-setup/SKILL.md"
+printf 'plugin\n' >"$PACKAGE_VERIFY_REPO/plugins/autoship.ts"
+printf '{"policy":"default"}\n' >"$PACKAGE_VERIFY_REPO/policies/default.json"
+printf '{"policy":"textquest"}\n' >"$PACKAGE_VERIFY_REPO/policies/textquest.json"
+printf 'agents\n' >"$PACKAGE_VERIFY_REPO/AGENTS.md"
+printf '1.0.0\n' >"$PACKAGE_VERIFY_REPO/VERSION"
+printf 'readme\n' >"$PACKAGE_VERIFY_REPO/README.md"
+printf 'install\n' >"$PACKAGE_VERIFY_REPO/INSTALL.md"
+printf 'license\n' >"$PACKAGE_VERIFY_REPO/LICENSE"
+printf 'install\n' >"$PACKAGE_VERIFY_REPO/.opencode/INSTALL.md"
 (
   cd "$PACKAGE_VERIFY_REPO"
   if bash "$SCRIPT_DIR/verify-package.sh" >/dev/null 2>&1; then
@@ -147,18 +161,18 @@ git init -q "$STATE_REPO"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-746" "$STATE_REPO/.autoship/workspaces/issue-749" "$STATE_REPO/.autoship/workspaces/issue-750"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-751"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-752"
-cat > "$STATE_REPO/.autoship/state.json" <<'JSON'
+cat >"$STATE_REPO/.autoship/state.json" <<'JSON'
 {"config":{"maxConcurrentAgents":15},"issues":{"issue-746":{"state":"running"},"issue-749":{"state":"running"},"issue-750":{"state":"running"},"issue-751":{"state":"queued"}},"stats":{}}
 JSON
-printf 'COMPLETE\n' > "$STATE_REPO/.autoship/workspaces/issue-746/status"
-printf 'BLOCKED\n' > "$STATE_REPO/.autoship/workspaces/issue-749/status"
-printf 'RUNNING\n' > "$STATE_REPO/.autoship/workspaces/issue-750/status"
-printf 'QUEUED\n' > "$STATE_REPO/.autoship/workspaces/issue-751/status"
-printf 'changed\n' > "$STATE_REPO/.autoship/workspaces/issue-746/AUTOSHIP_RESULT.md"
-printf 'STUCK\n' > "$STATE_REPO/.autoship/workspaces/issue-752/status"
-printf '999999\n' > "$STATE_REPO/.autoship/workspaces/issue-750/worker.pid"
-printf '2026-04-24T00:00:00Z\n' > "$STATE_REPO/.autoship/workspaces/issue-752/started_at"
-printf 'stale result from issue-762\n' > "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESULT.md"
+printf 'COMPLETE\n' >"$STATE_REPO/.autoship/workspaces/issue-746/status"
+printf 'BLOCKED\n' >"$STATE_REPO/.autoship/workspaces/issue-749/status"
+printf 'RUNNING\n' >"$STATE_REPO/.autoship/workspaces/issue-750/status"
+printf 'QUEUED\n' >"$STATE_REPO/.autoship/workspaces/issue-751/status"
+printf 'changed\n' >"$STATE_REPO/.autoship/workspaces/issue-746/AUTOSHIP_RESULT.md"
+printf 'STUCK\n' >"$STATE_REPO/.autoship/workspaces/issue-752/status"
+printf '999999\n' >"$STATE_REPO/.autoship/workspaces/issue-750/worker.pid"
+printf '2026-04-24T00:00:00Z\n' >"$STATE_REPO/.autoship/workspaces/issue-752/started_at"
+printf 'stale result from issue-762\n' >"$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESULT.md"
 touch -t 202604230000 "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESULT.md"
 touch -t 202604240000 "$STATE_REPO/.autoship/workspaces/issue-752/started_at"
 
@@ -174,7 +188,7 @@ assert_eq "1" "$(jq -r '.stats.blocked' "$STATE_REPO/.autoship/state.json")" "re
 assert_eq "1" "$(jq -r '.stats.failed' "$STATE_REPO/.autoship/state.json")" "reconcile increments failed stats for stuck workspaces"
 
 STATUS_OUTPUT=$(bash "$SCRIPT_DIR/status.sh" --repo "$STATE_REPO")
-printf '%s\n' "$STATUS_OUTPUT" | grep -F 'AGENTS (0 active / 15 max)' >/dev/null || fail "status refreshes dead workers before counting active/max concurrency"
+printf '%s\n' "$STATUS_OUTPUT" | grep -F 'AGENTS (0 active / 15 max)' >/dev/null || fail "status preserves configured max concurrency"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Queued:    1' >/dev/null || fail "status shows queued count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 0' >/dev/null || fail "status shows completed count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Blocked:   1' >/dev/null || fail "status shows blocked count"
@@ -183,10 +197,10 @@ assert_eq "stuck" "$(jq -r '.issues["issue-750"].state' "$STATE_REPO/.autoship/s
 NO_RUNNING_REPO="$TMP_DIR/no-running-repo"
 git init -q "$NO_RUNNING_REPO"
 mkdir -p "$NO_RUNNING_REPO/.autoship/workspaces/issue-999"
-cat > "$NO_RUNNING_REPO/.autoship/state.json" <<'JSON'
+cat >"$NO_RUNNING_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-999":{"state":"stuck"}},"stats":{"failed":1},"config":{"maxConcurrentAgents":15}}
 JSON
-printf 'STUCK\n' > "$NO_RUNNING_REPO/.autoship/workspaces/issue-999/status"
+printf 'STUCK\n' >"$NO_RUNNING_REPO/.autoship/workspaces/issue-999/status"
 NO_RUNNING_STATUS=$(bash "$SCRIPT_DIR/status.sh" --repo "$NO_RUNNING_REPO")
 printf '%s\n' "$NO_RUNNING_STATUS" | grep -F 'AGENTS (0 active / 15 max)' >/dev/null || fail "status handles zero running workspaces under pipefail"
 printf '%s\n' "$NO_RUNNING_STATUS" | grep -F 'STUCK:     1' >/dev/null || fail "status shows stuck workspace when none are running"
@@ -198,13 +212,13 @@ cp "$SCRIPT_DIR/runner.sh" "$RUNNER_REPO/hooks/opencode/runner.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$RUNNER_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$RUNNER_REPO/hooks/capture-failure.sh"
 chmod +x "$RUNNER_REPO/hooks/opencode/runner.sh" "$RUNNER_REPO/hooks/update-state.sh" "$RUNNER_REPO/hooks/capture-failure.sh"
-cat > "$RUNNER_REPO/.autoship/state.json" <<'JSON'
+cat >"$RUNNER_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-996":{"state":"queued","model":"opencode/test-free","role":"implementer","attempt":2}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf 'QUEUED\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/status"
-printf 'test prompt\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_PROMPT.md"
-printf 'opencode/test-free\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/model"
-cat > "$RUNNER_REPO/bin/opencode" <<'SH'
+printf 'QUEUED\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/status"
+printf 'test prompt\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/model"
+cat >"$RUNNER_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 if [[ -n "${OPENCODE_RUN_ID:-}" || -n "${OPENCODE_SERVER_PASSWORD:-}" ]]; then
   printf 'ENV_LEAK\n'
@@ -219,10 +233,10 @@ chmod +x "$RUNNER_REPO/bin/opencode"
   OPENCODE_RUN_ID=leaked OPENCODE_SERVER_PASSWORD=leaked PATH="$RUNNER_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issue-996/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$RUNNER_REPO/.autoship/workspaces/issue-996/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issue-996/status")" "runner salvages worker exit without terminal artifact"
+assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$RUNNER_REPO/.autoship/workspaces/issue-996/status")" "runner salvages worker exit without terminal artifact"
 if grep -F 'ENV_LEAK' "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_RUNNER.log" >/dev/null 2>&1; then
   fail "runner must unset parent OpenCode session environment before nested opencode run"
 fi
@@ -248,10 +262,10 @@ git init -q "$RETRY_REPO"
 cp "$SCRIPT_DIR/../update-state.sh" "$RETRY_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/dispatch.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
 chmod +x "$RETRY_REPO/hooks/update-state.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
-cat > "$RETRY_REPO/.autoship/state.json" <<'JSON'
+cat >"$RETRY_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-181":{"state":"running","attempt":3,"model":"opencode/test","role":"implementer"}},"stats":{},"config":{"maxConcurrentAgents":15,"maxRetries":3}}
 JSON
-cat > "$RETRY_REPO/.autoship/failures/20260424T010000Z-issue-181.json" <<'JSON'
+cat >"$RETRY_REPO/.autoship/failures/20260424T010000Z-issue-181.json" <<'JSON'
 {"failure_id":"20260424T010000Z-issue-181","issue":"issue-181","failure_category":"failed_verification","error_summary":"tests failed","attempt":3,"timestamp":"2026-04-24T01:00:00Z"}
 JSON
 (
@@ -269,10 +283,10 @@ jq -e '.issues["issue-181"].state == "blocked"
   and .issues["issue-181"].failure_evidence.error_summary == "tests failed"' "$RETRY_REPO/.autoship/state.json" >/dev/null || fail "set-failed records terminal retry exhaustion evidence"
 dispatch_output=$(cd "$RETRY_REPO" && bash hooks/opencode/dispatch.sh 181 medium_code)
 printf '%s\n' "$dispatch_output" | grep -F 'failed verification after retry limit' >/dev/null || fail "dispatch blocks terminal retry-exhausted issue"
-assert_eq "BLOCKED" "$(tr -d '[:space:]' < "$RETRY_REPO/.autoship/workspaces/issue-181/status")" "terminal retry-exhausted issue remains blocked instead of redispatched"
+assert_eq "BLOCKED" "$(tr -d '[:space:]' <"$RETRY_REPO/.autoship/workspaces/issue-181/status")" "terminal retry-exhausted issue remains blocked instead of redispatched"
 
-printf '{broken json' > "$RETRY_REPO/.autoship/failures/20260424T020000Z-issue-182.json"
-jq '.issues["issue-182"] = {"state":"running","attempt":2}' "$RETRY_REPO/.autoship/state.json" > "$RETRY_REPO/.autoship/state.json.tmp" && mv "$RETRY_REPO/.autoship/state.json.tmp" "$RETRY_REPO/.autoship/state.json"
+printf '{broken json' >"$RETRY_REPO/.autoship/failures/20260424T020000Z-issue-182.json"
+jq '.issues["issue-182"] = {"state":"running","attempt":2}' "$RETRY_REPO/.autoship/state.json" >"$RETRY_REPO/.autoship/state.json.tmp" && mv "$RETRY_REPO/.autoship/state.json.tmp" "$RETRY_REPO/.autoship/state.json"
 (
   cd "$RETRY_REPO"
   bash hooks/update-state.sh set-failed issue-182 error_summary="malformed artifact fallback" >/dev/null
@@ -290,16 +304,19 @@ cp "$SCRIPT_DIR/runner.sh" "$FALLBACK_REPO/hooks/opencode/runner.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$FALLBACK_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$FALLBACK_REPO/hooks/capture-failure.sh"
 chmod +x "$FALLBACK_REPO/hooks/opencode/runner.sh" "$FALLBACK_REPO/hooks/update-state.sh" "$FALLBACK_REPO/hooks/capture-failure.sh"
-cat > "$FALLBACK_REPO/.autoship/state.json" <<'JSON'
+cat >"$FALLBACK_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-208":{"state":"queued","model":"opencode/paid-model","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-cat > "$FALLBACK_REPO/config/model-routing.json" <<'JSON'
+mkdir -p "$FALLBACK_REPO/config"
+cat >"$FALLBACK_REPO/config/model-routing.json" <<'JSON'
 {"models":[{"id":"opencode/paid-model","cost":"selected","strength":100,"max_task_types":["medium_code"]},{"id":"opencode/free-fallback","cost":"free","strength":80,"max_task_types":["medium_code"]}]}
 JSON
-printf 'QUEUED\n' > "$FALLBACK_REPO/.autoship/workspaces/issue-208/status"
-printf 'test prompt\n' > "$FALLBACK_REPO/.autoship/workspaces/issue-208/AUTOSHIP_PROMPT.md"
-printf 'opencode/paid-model\n' > "$FALLBACK_REPO/.autoship/workspaces/issue-208/model"
-cat > "$FALLBACK_REPO/bin/opencode" <<'SH'
+# Also copy to .autoship for runner compatibility
+cp "$FALLBACK_REPO/config/model-routing.json" "$FALLBACK_REPO/.autoship/model-routing.json"
+printf 'QUEUED\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/status"
+printf 'test prompt\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/AUTOSHIP_PROMPT.md"
+printf 'opencode/paid-model\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/model"
+cat >"$FALLBACK_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 model=""
 while [[ $# -gt 0 ]]; do
@@ -322,11 +339,11 @@ chmod +x "$FALLBACK_REPO/bin/opencode"
   PATH="$FALLBACK_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  [[ "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" "runner retries billing failures with a free fallback model"
-assert_eq "opencode/free-fallback" "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/model")" "runner records fallback model in workspace"
+assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" "runner retries billing failures with a free fallback model"
+assert_eq "opencode/free-fallback" "$(tr -d '[:space:]' <"$FALLBACK_REPO/.autoship/workspaces/issue-208/model")" "runner records fallback model in workspace"
 jq -e '."opencode/paid-model".fail == 1 and (."opencode/paid-model".last_error | test("Insufficient balance"))' "$FALLBACK_REPO/.autoship/model-history.json" >/dev/null || fail "runner records paid model billing failure in model history"
 
 AUTOCOMMIT_REPO="$TMP_DIR/autocommit-runner-repo"
@@ -340,16 +357,16 @@ git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" init -q
 git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" config user.email autoship@example.invalid
 git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" config user.name AutoShip
 mkdir -p "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/src"
-printf 'base\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/src/lib.rs"
+printf 'base\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/src/lib.rs"
 git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" add src/lib.rs
 git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" commit -q -m initial
-cat > "$AUTOCOMMIT_REPO/.autoship/state.json" <<'JSON'
+cat >"$AUTOCOMMIT_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-253":{"state":"queued","model":"opencode/test-free","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf 'QUEUED\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status"
-printf 'test prompt\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/AUTOSHIP_PROMPT.md"
-printf 'opencode/test-free\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/model"
-cat > "$AUTOCOMMIT_REPO/bin/opencode" <<'SH'
+printf 'QUEUED\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status"
+printf 'test prompt\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/model"
+cat >"$AUTOCOMMIT_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 printf 'impl\n' >> src/lib.rs
 printf 'COMPLETE\n' > status
@@ -362,10 +379,10 @@ chmod +x "$AUTOCOMMIT_REPO/bin/opencode"
   PATH="$AUTOCOMMIT_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' < "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" "runner keeps complete status after auto-committing production changes"
+assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" "runner keeps complete status after auto-committing production changes"
 assert_eq "2" "$(git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" rev-list --count HEAD)" "runner auto-commits worker changes before completion"
 git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" diff -- src/lib.rs --quiet || fail "runner leaves no unstaged worker changes after auto-commit"
 
@@ -378,13 +395,13 @@ cp "$SCRIPT_DIR/policy.sh" "$CARGO_RUNNER_REPO/hooks/opencode/policy.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$CARGO_RUNNER_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$CARGO_RUNNER_REPO/hooks/capture-failure.sh"
 chmod +x "$CARGO_RUNNER_REPO/hooks/opencode/runner.sh" "$CARGO_RUNNER_REPO/hooks/update-state.sh" "$CARGO_RUNNER_REPO/hooks/capture-failure.sh"
-cat > "$CARGO_RUNNER_REPO/.autoship/state.json" <<'JSON'
+cat >"$CARGO_RUNNER_REPO/.autoship/state.json" <<'JSON'
 {"issues":{"issue-401":{"state":"queued","model":"opencode/test-free","role":"implementer","task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15,"cargoTargetIsolationThreshold":8}}
 JSON
-printf 'QUEUED\n' > "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status"
-printf 'test prompt\n' > "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/AUTOSHIP_PROMPT.md"
-printf 'opencode/test-free\n' > "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/model"
-cat > "$CARGO_RUNNER_REPO/bin/opencode" <<'SH'
+printf 'QUEUED\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status"
+printf 'test prompt\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/model"
+cat >"$CARGO_RUNNER_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 case "${CARGO_TARGET_DIR:-}" in
   */target-isolated) printf 'COMPLETE\n' > status; printf 'cargo isolated\n' > AUTOSHIP_RESULT.md; exit 0 ;;
@@ -397,10 +414,10 @@ chmod +x "$CARGO_RUNNER_REPO/bin/opencode"
   PATH="$CARGO_RUNNER_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' < "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status")" "runner sets isolated CARGO_TARGET_DIR above threshold"
+assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status")" "runner sets isolated CARGO_TARGET_DIR above threshold"
 
 SALVAGE_REPO="$TMP_DIR/salvage-runner-repo"
 mkdir -p "$SALVAGE_REPO/.autoship/workspaces/issue-402" "$SALVAGE_REPO/hooks/opencode" "$SALVAGE_REPO/hooks" "$SALVAGE_REPO/bin"
@@ -413,16 +430,16 @@ git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" init -q
 git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" config user.email autoship@example.invalid
 git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" config user.name AutoShip
 mkdir -p "$SALVAGE_REPO/.autoship/workspaces/issue-402/src"
-printf 'base\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/src/lib.rs"
+printf 'base\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/src/lib.rs"
 git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" add src/lib.rs
 git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" commit -q -m initial
-cat > "$SALVAGE_REPO/.autoship/state.json" <<'JSON'
+cat >"$SALVAGE_REPO/.autoship/state.json" <<'JSON'
 {"issues":{"issue-402":{"state":"queued","model":"opencode/test-free","role":"implementer","task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15,"truncationSalvage":true}}
 JSON
-printf 'QUEUED\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/status"
-printf 'test prompt\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_PROMPT.md"
-printf 'opencode/test-free\n' > "$SALVAGE_REPO/.autoship/workspaces/issue-402/model"
-cat > "$SALVAGE_REPO/bin/opencode" <<'SH'
+printf 'QUEUED\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/status"
+printf 'test prompt\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/model"
+cat >"$SALVAGE_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 printf 'salvaged\n' >> src/lib.rs
 exit 0
@@ -433,10 +450,10 @@ chmod +x "$SALVAGE_REPO/bin/opencode"
   PATH="$SALVAGE_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' < "$SALVAGE_REPO/.autoship/workspaces/issue-402/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$SALVAGE_REPO/.autoship/workspaces/issue-402/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$SALVAGE_REPO/.autoship/workspaces/issue-402/status")" "runner salvages truncated worker with implementation changes"
+assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$SALVAGE_REPO/.autoship/workspaces/issue-402/status")" "runner salvages truncated worker with implementation changes"
 test -s "$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_RESULT.md" || fail "salvage writes AUTOSHIP_RESULT.md"
 assert_eq "2" "$(git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" rev-list --count HEAD)" "salvage commits worker changes"
 
@@ -451,16 +468,16 @@ git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" init -q
 git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" config user.email autoship@example.invalid
 git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" config user.name AutoShip
 mkdir -p "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/src"
-printf 'base\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/src/lib.rs"
+printf 'base\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/src/lib.rs"
 git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" add src/lib.rs
 git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" commit -q -m initial
-cat > "$TESTS_ONLY_REPO/.autoship/state.json" <<'JSON'
+cat >"$TESTS_ONLY_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-254":{"state":"queued","model":"opencode/test-free","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf 'QUEUED\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status"
-printf 'test prompt\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/AUTOSHIP_PROMPT.md"
-printf 'opencode/test-free\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/model"
-cat > "$TESTS_ONLY_REPO/bin/opencode" <<'SH'
+printf 'QUEUED\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status"
+printf 'test prompt\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/model"
+cat >"$TESTS_ONLY_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 mkdir -p tests
 printf 'test only\n' > tests/new.test.ts
@@ -474,10 +491,10 @@ chmod +x "$TESTS_ONLY_REPO/bin/opencode"
   PATH="$TESTS_ONLY_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' < "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "STUCK" "$(tr -d '[:space:]' < "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" "runner rejects tests-only complete results"
+assert_eq "STUCK" "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" "runner rejects tests-only complete results"
 grep -F 'REJECT: tests-only diff' "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/AUTOSHIP_RUNNER.log" >/dev/null || fail "runner records tests-only rejection reason"
 
 SESSION_REPO="$TMP_DIR/session-runner-repo"
@@ -487,13 +504,13 @@ cp "$SCRIPT_DIR/runner.sh" "$SESSION_REPO/hooks/opencode/runner.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$SESSION_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$SESSION_REPO/hooks/capture-failure.sh"
 chmod +x "$SESSION_REPO/hooks/opencode/runner.sh" "$SESSION_REPO/hooks/update-state.sh" "$SESSION_REPO/hooks/capture-failure.sh"
-cat > "$SESSION_REPO/.autoship/state.json" <<'JSON'
+cat >"$SESSION_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-997":{"state":"queued","model":"opencode/nemotron-3-super-free","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf 'QUEUED\n' > "$SESSION_REPO/.autoship/workspaces/issue-997/status"
-printf 'test prompt\n' > "$SESSION_REPO/.autoship/workspaces/issue-997/AUTOSHIP_PROMPT.md"
-printf 'opencode/nemotron-3-super-free\n' > "$SESSION_REPO/.autoship/workspaces/issue-997/model"
-cat > "$SESSION_REPO/bin/opencode" <<'SH'
+printf 'QUEUED\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/status"
+printf 'test prompt\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/AUTOSHIP_PROMPT.md"
+printf 'opencode/nemotron-3-super-free\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/model"
+cat >"$SESSION_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 printf 'Session not found\n' >&2
 exit 1
@@ -504,10 +521,10 @@ chmod +x "$SESSION_REPO/bin/opencode"
   PATH="$SESSION_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' < "$SESSION_REPO/.autoship/workspaces/issue-997/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$SESSION_REPO/.autoship/workspaces/issue-997/status")" != "RUNNING" ]] && break
   sleep 1
 done
-assert_eq "STUCK" "$(tr -d '[:space:]' < "$SESSION_REPO/.autoship/workspaces/issue-997/status")" "runner marks session failures stuck"
+assert_eq "STUCK" "$(tr -d '[:space:]' <"$SESSION_REPO/.autoship/workspaces/issue-997/status")" "runner marks session failures stuck"
 grep -F 'OpenCode returned Session not found' "$SESSION_REPO/.autoship/workspaces/issue-997/AUTOSHIP_RUNNER.log" >/dev/null || fail "runner explains OpenCode session failures"
 
 MONITOR_REPO="$TMP_DIR/monitor-repo"
@@ -517,20 +534,20 @@ cp "$SCRIPT_DIR/monitor-agents.sh" "$MONITOR_REPO/hooks/opencode/monitor-agents.
 cp "$SCRIPT_DIR/reconcile-state.sh" "$MONITOR_REPO/hooks/opencode/reconcile-state.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$MONITOR_REPO/hooks/update-state.sh"
 chmod +x "$MONITOR_REPO/hooks/opencode/monitor-agents.sh" "$MONITOR_REPO/hooks/opencode/reconcile-state.sh" "$MONITOR_REPO/hooks/update-state.sh"
-cat > "$MONITOR_REPO/.autoship/state.json" <<'JSON'
+cat >"$MONITOR_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-997":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf '[]\n' > "$MONITOR_REPO/.autoship/event-queue.json"
-printf 'RUNNING\n' > "$MONITOR_REPO/.autoship/workspaces/issue-997/status"
-printf '999999\n' > "$MONITOR_REPO/.autoship/workspaces/issue-997/worker.pid"
+printf '[]\n' >"$MONITOR_REPO/.autoship/event-queue.json"
+printf 'RUNNING\n' >"$MONITOR_REPO/.autoship/workspaces/issue-997/status"
+printf '999999\n' >"$MONITOR_REPO/.autoship/workspaces/issue-997/worker.pid"
 (
   cd "$MONITOR_REPO"
   bash hooks/opencode/monitor-agents.sh >/dev/null
 )
-assert_eq "STUCK" "$(tr -d '[:space:]' < "$MONITOR_REPO/.autoship/workspaces/issue-997/status")" "monitor marks RUNNING workspace stuck when worker pid is no longer live"
+assert_eq "STUCK" "$(tr -d '[:space:]' <"$MONITOR_REPO/.autoship/workspaces/issue-997/status")" "monitor marks RUNNING workspace stuck when worker pid is no longer live"
 assert_eq "stuck" "$(jq -r '.issues["issue-997"].state' "$MONITOR_REPO/.autoship/state.json")" "monitor reconciles stale RUNNING workspace state"
 mkdir -p "$MONITOR_REPO/.autoship/workspaces/not-an-issue"
-printf 'COMPLETE\n' > "$MONITOR_REPO/.autoship/workspaces/not-an-issue/status"
+printf 'COMPLETE\n' >"$MONITOR_REPO/.autoship/workspaces/not-an-issue/status"
 (
   cd "$MONITOR_REPO"
   bash hooks/opencode/monitor-agents.sh >/dev/null
@@ -546,17 +563,17 @@ cp "$SCRIPT_DIR/monitor-agents.sh" "$TIMEOUT_REPO/hooks/opencode/monitor-agents.
 cp "$SCRIPT_DIR/reconcile-state.sh" "$TIMEOUT_REPO/hooks/opencode/reconcile-state.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$TIMEOUT_REPO/hooks/update-state.sh"
 chmod +x "$TIMEOUT_REPO/hooks/opencode/monitor-agents.sh" "$TIMEOUT_REPO/hooks/opencode/reconcile-state.sh" "$TIMEOUT_REPO/hooks/update-state.sh"
-cat > "$TIMEOUT_REPO/.autoship/state.json" <<'JSON'
+cat >"$TIMEOUT_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-1000":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":15,"workerTimeoutMs":1000}}
 JSON
-printf '[]\n' > "$TIMEOUT_REPO/.autoship/event-queue.json"
-printf 'RUNNING\n' > "$TIMEOUT_REPO/.autoship/workspaces/issue-1000/status"
-printf '2026-04-24T00:00:00Z\n' > "$TIMEOUT_REPO/.autoship/workspaces/issue-1000/started_at"
+printf '[]\n' >"$TIMEOUT_REPO/.autoship/event-queue.json"
+printf 'RUNNING\n' >"$TIMEOUT_REPO/.autoship/workspaces/issue-1000/status"
+printf '2026-04-24T00:00:00Z\n' >"$TIMEOUT_REPO/.autoship/workspaces/issue-1000/started_at"
 (
   cd "$TIMEOUT_REPO"
   bash hooks/opencode/monitor-agents.sh >/dev/null
 )
-assert_eq "STUCK" "$(tr -d '[:space:]' < "$TIMEOUT_REPO/.autoship/workspaces/issue-1000/status")" "monitor marks over-timeout running workspace stuck"
+assert_eq "STUCK" "$(tr -d '[:space:]' <"$TIMEOUT_REPO/.autoship/workspaces/issue-1000/status")" "monitor marks over-timeout running workspace stuck"
 assert_eq "stuck" "$(jq -r '.issues["issue-1000"].state' "$TIMEOUT_REPO/.autoship/state.json")" "monitor reconciles timeout stuck state"
 
 MONITOR_COMPLETE_REPO="$TMP_DIR/monitor-complete-repo"
@@ -564,28 +581,28 @@ mkdir -p "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998" "$MONITOR_COMPL
 git init -q "$MONITOR_COMPLETE_REPO"
 git -C "$MONITOR_COMPLETE_REPO" config user.email autoship@example.invalid
 git -C "$MONITOR_COMPLETE_REPO" config user.name AutoShip
-printf 'base\n' > "$MONITOR_COMPLETE_REPO/README.md"
+printf 'base\n' >"$MONITOR_COMPLETE_REPO/README.md"
 git -C "$MONITOR_COMPLETE_REPO" add README.md
 git -C "$MONITOR_COMPLETE_REPO" commit -q -m initial
 cp "$SCRIPT_DIR/monitor-agents.sh" "$MONITOR_COMPLETE_REPO/hooks/opencode/monitor-agents.sh"
 cp "$SCRIPT_DIR/reconcile-state.sh" "$MONITOR_COMPLETE_REPO/hooks/opencode/reconcile-state.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$MONITOR_COMPLETE_REPO/hooks/update-state.sh"
 chmod +x "$MONITOR_COMPLETE_REPO/hooks/opencode/monitor-agents.sh" "$MONITOR_COMPLETE_REPO/hooks/opencode/reconcile-state.sh" "$MONITOR_COMPLETE_REPO/hooks/update-state.sh"
-cat > "$MONITOR_COMPLETE_REPO/.autoship/state.json" <<'JSON'
+cat >"$MONITOR_COMPLETE_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-998":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf '[]\n' > "$MONITOR_COMPLETE_REPO/.autoship/event-queue.json"
-printf 'RUNNING\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status"
-printf '999999\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/worker.pid"
-printf '2026-04-24T00:00:00Z\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/started_at"
-printf 'result\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/AUTOSHIP_RESULT.md"
+printf '[]\n' >"$MONITOR_COMPLETE_REPO/.autoship/event-queue.json"
+printf 'RUNNING\n' >"$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status"
+printf '999999\n' >"$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/worker.pid"
+printf '2026-04-24T00:00:00Z\n' >"$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/started_at"
+printf 'result\n' >"$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/AUTOSHIP_RESULT.md"
 touch -t 202604240001 "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/AUTOSHIP_RESULT.md"
 touch -t 202604240000 "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/started_at"
 (
   cd "$MONITOR_COMPLETE_REPO"
   bash hooks/opencode/monitor-agents.sh >/dev/null
 )
-assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status")" "monitor marks dead worker complete when fresh result artifact exists"
+assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status")" "monitor marks dead worker complete when fresh result artifact exists"
 
 QUEUE_REPO="$TMP_DIR/queue-repo"
 mkdir -p "$QUEUE_REPO/.autoship" "$QUEUE_REPO/hooks/opencode" "$QUEUE_REPO/hooks"
@@ -593,11 +610,11 @@ git init -q "$QUEUE_REPO"
 cp "$SCRIPT_DIR/process-event-queue.sh" "$QUEUE_REPO/hooks/opencode/process-event-queue.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$QUEUE_REPO/hooks/update-state.sh"
 chmod +x "$QUEUE_REPO/hooks/opencode/process-event-queue.sh" "$QUEUE_REPO/hooks/update-state.sh"
-cat > "$QUEUE_REPO/.autoship/state.json" <<'JSON'
+cat >"$QUEUE_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-991":{"state":"running"},"issue-992":{"state":"running"},"issue-993":{"state":"running"}},"stats":{}}
 JSON
-printf '{"sessions":[]}' > "$QUEUE_REPO/.autoship/token-ledger.json"
-cat > "$QUEUE_REPO/.autoship/event-queue.json" <<'JSON'
+printf '{"sessions":[]}' >"$QUEUE_REPO/.autoship/token-ledger.json"
+cat >"$QUEUE_REPO/.autoship/event-queue.json" <<'JSON'
 [
   {"type":"blocked","issue":"issue-991","priority":2,"data":{"status":"BLOCKED"},"queued_at":"2026-04-24T00:00:00Z"},
   {"type":"blocked","issue":"issue-991","priority":2,"data":{"status":"BLOCKED"},"queued_at":"2026-04-24T00:00:01Z"},
@@ -629,11 +646,11 @@ cp "$SCRIPT_DIR/dispatch.sh" "$QUEUE_INVALID_REPO/hooks/opencode/dispatch.sh"
 cp "$SCRIPT_DIR/runner.sh" "$QUEUE_INVALID_REPO/hooks/opencode/runner.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$QUEUE_INVALID_REPO/hooks/update-state.sh"
 chmod +x "$QUEUE_INVALID_REPO/hooks/opencode/process-event-queue.sh" "$QUEUE_INVALID_REPO/hooks/update-state.sh"
-cat > "$QUEUE_INVALID_REPO/.autoship/state.json" <<'JSON'
+cat >"$QUEUE_INVALID_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{},"stats":{}}
 JSON
-printf '{"sessions":[]}' > "$QUEUE_INVALID_REPO/.autoship/token-ledger.json"
-cat > "$QUEUE_INVALID_REPO/.autoship/event-queue.json" <<'JSON'
+printf '{"sessions":[]}' >"$QUEUE_INVALID_REPO/.autoship/token-ledger.json"
+cat >"$QUEUE_INVALID_REPO/.autoship/event-queue.json" <<'JSON'
 [
   {"type":"blocked","issue":"../blocked","priority":2,"queued_at":"2026-04-24T00:00:00Z"},
   "not-an-object",
@@ -654,11 +671,11 @@ mkdir -p "$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184" "$VERIFY_FAIL_REPO/h
 git init -q "$VERIFY_FAIL_REPO"
 git -C "$VERIFY_FAIL_REPO" config user.email autoship@example.invalid
 git -C "$VERIFY_FAIL_REPO" config user.name AutoShip
-printf 'base\n' > "$VERIFY_FAIL_REPO/README.md"
+printf 'base\n' >"$VERIFY_FAIL_REPO/README.md"
 git -C "$VERIFY_FAIL_REPO" add README.md
 git -C "$VERIFY_FAIL_REPO" commit -q -m initial
 git -C "$VERIFY_FAIL_REPO" checkout -q -b autoship/issue-184
-printf 'changed\n' > "$VERIFY_FAIL_REPO/feature.txt"
+printf 'changed\n' >"$VERIFY_FAIL_REPO/feature.txt"
 cp "$SCRIPT_DIR/process-event-queue.sh" "$VERIFY_FAIL_REPO/hooks/opencode/process-event-queue.sh"
 cp "$SCRIPT_DIR/pr-title.sh" "$VERIFY_FAIL_REPO/hooks/opencode/pr-title.sh"
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_FAIL_REPO/hooks/opencode/verify-result.sh"
@@ -667,13 +684,13 @@ cp "$SCRIPT_DIR/policy.sh" "$VERIFY_FAIL_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_FAIL_REPO/policies/default.json"
 cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
 chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_FAIL_REPO/hooks/opencode/pr-title.sh" "$VERIFY_FAIL_REPO/hooks/opencode/verify-result.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
-cat > "$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
+cat >"$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: FAIL\n'
 exit 1
 SH
 chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh"
-cat > "$VERIFY_FAIL_REPO/bin/gh" <<'SH'
+cat >"$VERIFY_FAIL_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1 $2" == "pr create" ]]; then
   printf 'pr create called\n' >> "$GH_PR_LOG"
@@ -694,14 +711,14 @@ fi
 exit 0
 SH
 chmod +x "$VERIFY_FAIL_REPO/bin/gh"
-cat > "$VERIFY_FAIL_REPO/.autoship/state.json" <<'JSON'
+cat >"$VERIFY_FAIL_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-184":{"state":"running","title":"Create PR after verified PASS","labels":"type:feature"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf '[]\n' > "$VERIFY_FAIL_REPO/.autoship/processed-events.json"
-cat > "$VERIFY_FAIL_REPO/.autoship/event-queue.json" <<'JSON'
+printf '[]\n' >"$VERIFY_FAIL_REPO/.autoship/processed-events.json"
+cat >"$VERIFY_FAIL_REPO/.autoship/event-queue.json" <<'JSON'
 [{"type":"verify","issue":"issue-184","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:00Z"}]
 JSON
-printf 'Result\n' > "$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
+printf 'Result\n' >"$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
 (
   cd "$VERIFY_FAIL_REPO"
   GH_PR_LOG="$VERIFY_FAIL_REPO/gh-pr.log" PATH="$VERIFY_FAIL_REPO/bin:$PATH" bash hooks/opencode/process-event-queue.sh >/dev/null
@@ -715,11 +732,11 @@ git init -q "$VERIFY_PASS_REPO"
 git -C "$VERIFY_PASS_REPO" config user.email autoship@example.invalid
 git -C "$VERIFY_PASS_REPO" config user.name AutoShip
 git -C "$VERIFY_PASS_REPO" remote add origin git@github.com:owner/repo.git
-printf 'base\n' > "$VERIFY_PASS_REPO/README.md"
+printf 'base\n' >"$VERIFY_PASS_REPO/README.md"
 git -C "$VERIFY_PASS_REPO" add README.md
 git -C "$VERIFY_PASS_REPO" commit -q -m initial
 git -C "$VERIFY_PASS_REPO" checkout -q -b autoship/issue-184
-printf 'changed\n' > "$VERIFY_PASS_REPO/feature.txt"
+printf 'changed\n' >"$VERIFY_PASS_REPO/feature.txt"
 cp "$SCRIPT_DIR/process-event-queue.sh" "$VERIFY_PASS_REPO/hooks/opencode/process-event-queue.sh"
 cp "$SCRIPT_DIR/pr-title.sh" "$VERIFY_PASS_REPO/hooks/opencode/pr-title.sh"
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_PASS_REPO/hooks/opencode/verify-result.sh"
@@ -728,13 +745,13 @@ cp "$SCRIPT_DIR/policy.sh" "$VERIFY_PASS_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_PASS_REPO/policies/default.json"
 cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
 chmod +x "$VERIFY_PASS_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_PASS_REPO/hooks/opencode/pr-title.sh" "$VERIFY_PASS_REPO/hooks/opencode/verify-result.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
-cat > "$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
+cat >"$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
 exit 0
 SH
 chmod +x "$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh"
-cat > "$VERIFY_PASS_REPO/bin/gh" <<'SH'
+cat >"$VERIFY_PASS_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1 $2" == "pr create" ]]; then
   printf '%s\n' "$*" >> "$GH_PR_LOG"
@@ -756,14 +773,14 @@ fi
 exit 0
 SH
 chmod +x "$VERIFY_PASS_REPO/bin/gh"
-cat > "$VERIFY_PASS_REPO/.autoship/state.json" <<'JSON'
+cat >"$VERIFY_PASS_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-184":{"state":"running","title":"Create PR after verified PASS","labels":"type:feature"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf '[]\n' > "$VERIFY_PASS_REPO/.autoship/processed-events.json"
-cat > "$VERIFY_PASS_REPO/.autoship/event-queue.json" <<'JSON'
+printf '[]\n' >"$VERIFY_PASS_REPO/.autoship/processed-events.json"
+cat >"$VERIFY_PASS_REPO/.autoship/event-queue.json" <<'JSON'
 [{"type":"verify","issue":"issue-184","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:00Z"}]
 JSON
-printf 'Result summary\n' > "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
+printf 'Result summary\n' >"$VERIFY_PASS_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
 (
   cd "$VERIFY_PASS_REPO"
   GH_PR_LOG="$VERIFY_PASS_REPO/gh-pr.log" PATH="$VERIFY_PASS_REPO/bin:$PATH" bash hooks/opencode/process-event-queue.sh >/dev/null
@@ -778,11 +795,11 @@ mkdir -p "$VERIFY_HOOK_PASS_REPO/.autoship/workspaces/issue-182" "$VERIFY_HOOK_P
 git init -q "$VERIFY_HOOK_PASS_REPO"
 git -C "$VERIFY_HOOK_PASS_REPO" config user.email autoship@example.invalid
 git -C "$VERIFY_HOOK_PASS_REPO" config user.name AutoShip
-printf 'base\n' > "$VERIFY_HOOK_PASS_REPO/README.md"
+printf 'base\n' >"$VERIFY_HOOK_PASS_REPO/README.md"
 git -C "$VERIFY_HOOK_PASS_REPO" add README.md
 git -C "$VERIFY_HOOK_PASS_REPO" commit -q -m initial
 git -C "$VERIFY_HOOK_PASS_REPO" checkout -q -b autoship/issue-182
-printf 'changed\n' > "$VERIFY_HOOK_PASS_REPO/feature.txt"
+printf 'changed\n' >"$VERIFY_HOOK_PASS_REPO/feature.txt"
 git -C "$VERIFY_HOOK_PASS_REPO" add feature.txt
 git -C "$VERIFY_HOOK_PASS_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_PASS_REPO/hooks/opencode/verify-result.sh"
@@ -790,13 +807,13 @@ chmod +x "$VERIFY_HOOK_PASS_REPO/hooks/opencode/verify-result.sh"
 cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_PASS_REPO/hooks/opencode/policy-verify.sh"
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_PASS_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_PASS_REPO/policies/default.json"
-cat > "$VERIFY_HOOK_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
+cat >"$VERIFY_HOOK_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_PASS_REPO/hooks/opencode/reviewer.sh"
-printf '2026-04-24T00:00:00Z\n' > "$VERIFY_HOOK_PASS_REPO/.autoship/workspaces/issue-182/started_at"
-printf 'Result summary\n' > "$VERIFY_HOOK_PASS_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
+printf '2026-04-24T00:00:00Z\n' >"$VERIFY_HOOK_PASS_REPO/.autoship/workspaces/issue-182/started_at"
+printf 'Result summary\n' >"$VERIFY_HOOK_PASS_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 touch -t 202604240000 "$VERIFY_HOOK_PASS_REPO/.autoship/workspaces/issue-182/started_at"
 touch -t 202604240001 "$VERIFY_HOOK_PASS_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 (
@@ -810,11 +827,11 @@ mkdir -p "$VERIFY_HOOK_ENV_REPO/.autoship/workspaces/issue-182" "$VERIFY_HOOK_EN
 git init -q "$VERIFY_HOOK_ENV_REPO"
 git -C "$VERIFY_HOOK_ENV_REPO" config user.email autoship@example.invalid
 git -C "$VERIFY_HOOK_ENV_REPO" config user.name AutoShip
-printf 'base\n' > "$VERIFY_HOOK_ENV_REPO/README.md"
+printf 'base\n' >"$VERIFY_HOOK_ENV_REPO/README.md"
 git -C "$VERIFY_HOOK_ENV_REPO" add README.md
 git -C "$VERIFY_HOOK_ENV_REPO" commit -q -m initial
 git -C "$VERIFY_HOOK_ENV_REPO" checkout -q -b autoship/issue-182
-printf 'changed\n' > "$VERIFY_HOOK_ENV_REPO/feature.txt"
+printf 'changed\n' >"$VERIFY_HOOK_ENV_REPO/feature.txt"
 git -C "$VERIFY_HOOK_ENV_REPO" add feature.txt
 git -C "$VERIFY_HOOK_ENV_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_ENV_REPO/hooks/opencode/verify-result.sh"
@@ -822,18 +839,18 @@ chmod +x "$VERIFY_HOOK_ENV_REPO/hooks/opencode/verify-result.sh"
 cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_ENV_REPO/hooks/opencode/policy-verify.sh"
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_ENV_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_ENV_REPO/policies/default.json"
-cat > "$VERIFY_HOOK_ENV_REPO/hooks/opencode/reviewer.sh" <<'SH'
+cat >"$VERIFY_HOOK_ENV_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_ENV_REPO/hooks/opencode/reviewer.sh"
-cat > "$VERIFY_HOOK_ENV_REPO/bin/require-ci" <<'SH'
+cat >"$VERIFY_HOOK_ENV_REPO/bin/require-ci" <<'SH'
 #!/usr/bin/env bash
 test "${CI:-}" = "1"
 SH
 chmod +x "$VERIFY_HOOK_ENV_REPO/bin/require-ci"
-printf '2026-04-24T00:00:00Z\n' > "$VERIFY_HOOK_ENV_REPO/.autoship/workspaces/issue-182/started_at"
-printf 'Result summary\n' > "$VERIFY_HOOK_ENV_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
+printf '2026-04-24T00:00:00Z\n' >"$VERIFY_HOOK_ENV_REPO/.autoship/workspaces/issue-182/started_at"
+printf 'Result summary\n' >"$VERIFY_HOOK_ENV_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 touch -t 202604240000 "$VERIFY_HOOK_ENV_REPO/.autoship/workspaces/issue-182/started_at"
 touch -t 202604240001 "$VERIFY_HOOK_ENV_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 (
@@ -847,11 +864,11 @@ mkdir -p "$VERIFY_HOOK_FAIL_REPO/.autoship/workspaces/issue-182" "$VERIFY_HOOK_F
 git init -q "$VERIFY_HOOK_FAIL_REPO"
 git -C "$VERIFY_HOOK_FAIL_REPO" config user.email autoship@example.invalid
 git -C "$VERIFY_HOOK_FAIL_REPO" config user.name AutoShip
-printf 'base\n' > "$VERIFY_HOOK_FAIL_REPO/README.md"
+printf 'base\n' >"$VERIFY_HOOK_FAIL_REPO/README.md"
 git -C "$VERIFY_HOOK_FAIL_REPO" add README.md
 git -C "$VERIFY_HOOK_FAIL_REPO" commit -q -m initial
 git -C "$VERIFY_HOOK_FAIL_REPO" checkout -q -b autoship/issue-182
-printf 'changed\n' > "$VERIFY_HOOK_FAIL_REPO/feature.txt"
+printf 'changed\n' >"$VERIFY_HOOK_FAIL_REPO/feature.txt"
 git -C "$VERIFY_HOOK_FAIL_REPO" add feature.txt
 git -C "$VERIFY_HOOK_FAIL_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/verify-result.sh"
@@ -859,13 +876,13 @@ chmod +x "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/verify-result.sh"
 cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/policy-verify.sh"
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_FAIL_REPO/policies/default.json"
-cat > "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
+cat >"$VERIFY_HOOK_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/reviewer.sh"
-printf '2026-04-24T00:00:00Z\n' > "$VERIFY_HOOK_FAIL_REPO/.autoship/workspaces/issue-182/started_at"
-printf 'stale result\n' > "$VERIFY_HOOK_FAIL_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
+printf '2026-04-24T00:00:00Z\n' >"$VERIFY_HOOK_FAIL_REPO/.autoship/workspaces/issue-182/started_at"
+printf 'stale result\n' >"$VERIFY_HOOK_FAIL_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 touch -t 202604240001 "$VERIFY_HOOK_FAIL_REPO/.autoship/workspaces/issue-182/started_at"
 touch -t 202604240000 "$VERIFY_HOOK_FAIL_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 if (
@@ -881,11 +898,11 @@ mkdir -p "$VERIFY_HOOK_TEST_FAIL_REPO/.autoship/workspaces/issue-182" "$VERIFY_H
 git init -q "$VERIFY_HOOK_TEST_FAIL_REPO"
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" config user.email autoship@example.invalid
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" config user.name AutoShip
-printf 'base\n' > "$VERIFY_HOOK_TEST_FAIL_REPO/README.md"
+printf 'base\n' >"$VERIFY_HOOK_TEST_FAIL_REPO/README.md"
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" add README.md
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" commit -q -m initial
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" checkout -q -b autoship/issue-182
-printf 'changed\n' > "$VERIFY_HOOK_TEST_FAIL_REPO/feature.txt"
+printf 'changed\n' >"$VERIFY_HOOK_TEST_FAIL_REPO/feature.txt"
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" add feature.txt
 git -C "$VERIFY_HOOK_TEST_FAIL_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/verify-result.sh"
@@ -893,13 +910,13 @@ chmod +x "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/verify-result.sh"
 cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/policy-verify.sh"
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_TEST_FAIL_REPO/policies/default.json"
-cat > "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
+cat >"$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/reviewer.sh"
-printf '2026-04-24T00:00:00Z\n' > "$VERIFY_HOOK_TEST_FAIL_REPO/.autoship/workspaces/issue-182/started_at"
-printf 'Result summary\n' > "$VERIFY_HOOK_TEST_FAIL_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
+printf '2026-04-24T00:00:00Z\n' >"$VERIFY_HOOK_TEST_FAIL_REPO/.autoship/workspaces/issue-182/started_at"
+printf 'Result summary\n' >"$VERIFY_HOOK_TEST_FAIL_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 touch -t 202604240000 "$VERIFY_HOOK_TEST_FAIL_REPO/.autoship/workspaces/issue-182/started_at"
 touch -t 202604240001 "$VERIFY_HOOK_TEST_FAIL_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 if (
@@ -915,11 +932,11 @@ mkdir -p "$VERIFY_HOOK_INJECTION_REPO/.autoship/workspaces/issue-182" "$VERIFY_H
 git init -q "$VERIFY_HOOK_INJECTION_REPO"
 git -C "$VERIFY_HOOK_INJECTION_REPO" config user.email autoship@example.invalid
 git -C "$VERIFY_HOOK_INJECTION_REPO" config user.name AutoShip
-printf 'base\n' > "$VERIFY_HOOK_INJECTION_REPO/README.md"
+printf 'base\n' >"$VERIFY_HOOK_INJECTION_REPO/README.md"
 git -C "$VERIFY_HOOK_INJECTION_REPO" add README.md
 git -C "$VERIFY_HOOK_INJECTION_REPO" commit -q -m initial
 git -C "$VERIFY_HOOK_INJECTION_REPO" checkout -q -b autoship/issue-182
-printf 'changed\n' > "$VERIFY_HOOK_INJECTION_REPO/feature.txt"
+printf 'changed\n' >"$VERIFY_HOOK_INJECTION_REPO/feature.txt"
 git -C "$VERIFY_HOOK_INJECTION_REPO" add feature.txt
 git -C "$VERIFY_HOOK_INJECTION_REPO" commit -q -m 'feat: issue 182'
 cp "$SCRIPT_DIR/verify-result.sh" "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/verify-result.sh"
@@ -927,13 +944,13 @@ chmod +x "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/verify-result.sh"
 cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/policy-verify.sh"
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_INJECTION_REPO/policies/default.json"
-cat > "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/reviewer.sh" <<'SH'
+cat >"$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/reviewer.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/reviewer.sh"
-printf '2026-04-24T00:00:00Z\n' > "$VERIFY_HOOK_INJECTION_REPO/.autoship/workspaces/issue-182/started_at"
-printf 'Result summary\n' > "$VERIFY_HOOK_INJECTION_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
+printf '2026-04-24T00:00:00Z\n' >"$VERIFY_HOOK_INJECTION_REPO/.autoship/workspaces/issue-182/started_at"
+printf 'Result summary\n' >"$VERIFY_HOOK_INJECTION_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 touch -t 202604240000 "$VERIFY_HOOK_INJECTION_REPO/.autoship/workspaces/issue-182/started_at"
 touch -t 202604240001 "$VERIFY_HOOK_INJECTION_REPO/.autoship/workspaces/issue-182/AUTOSHIP_RESULT.md"
 if (
@@ -952,11 +969,11 @@ cp "$SCRIPT_DIR/reviewer.sh" "$REVIEWER_REPO/hooks/opencode/reviewer.sh"
 cp "$SCRIPT_DIR/select-model.sh" "$REVIEWER_REPO/hooks/opencode/select-model.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$REVIEWER_REPO/hooks/capture-failure.sh"
 chmod +x "$REVIEWER_REPO/hooks/opencode/reviewer.sh" "$REVIEWER_REPO/hooks/opencode/select-model.sh" "$REVIEWER_REPO/hooks/capture-failure.sh"
-cat > "$REVIEWER_REPO/.autoship/state.json" <<'JSON'
+cat >"$REVIEWER_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-183":{"state":"verifying","model":"opencode/test","role":"reviewer","attempt":1}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-printf 'result\n' > "$REVIEWER_REPO/.autoship/workspaces/issue-183/AUTOSHIP_RESULT.md"
-cat > "$REVIEWER_REPO/bin/opencode" <<'SH'
+printf 'result\n' >"$REVIEWER_REPO/.autoship/workspaces/issue-183/AUTOSHIP_RESULT.md"
+cat >"$REVIEWER_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 case "${AUTOSHIP_FAKE_REVIEW:-pass}" in
   pass) printf 'analysis\nVERDICT: PASS\n' ;;
@@ -992,14 +1009,14 @@ mkdir -p "$INIT_REPO"
 git init -q "$INIT_REPO"
 git -C "$INIT_REPO" remote add origin https://github.com/owner/repo.git
 mkdir -p "$INIT_REPO/.autoship"
-cat > "$INIT_REPO/.autoship/state.json" <<'JSON'
+cat >"$INIT_REPO/.autoship/state.json" <<'JSON'
 {"autoship_version":"old","platform":"opencode","repo":"owner/repo","issues":{},"stats":{"session_dispatched":2,"session_completed":1},"config":{"maxConcurrentAgents":15}}
 JSON
 (
   cd "$INIT_REPO"
   bash "$SCRIPT_DIR/init.sh" >/dev/null
 )
-expected_version=$(tr -d '[:space:]' < "$SCRIPT_DIR/../../VERSION")
+expected_version=$(tr -d '[:space:]' <"$SCRIPT_DIR/../../VERSION")
 assert_eq "$expected_version" "$(jq -r '.autoship_version' "$INIT_REPO/.autoship/state.json")" "init refreshes autoship_version from VERSION file"
 test -f "$INIT_REPO/.autoship/quota.json" || fail "init creates quota.json using the shared quota-update hook"
 
@@ -1009,12 +1026,13 @@ git init -q "$WORKTREE_REPO"
 git -C "$WORKTREE_REPO" config user.email autoship@example.invalid
 git -C "$WORKTREE_REPO" config user.name AutoShip
 mkdir -p "$WORKTREE_REPO/.autoship"
-printf '{"models":[]}\n' > "$WORKTREE_REPO/config/model-routing.json"
-printf 'base\n' > "$WORKTREE_REPO/README.md"
+mkdir -p "$WORKTREE_REPO/config"
+printf '{"models":[]}\n' >"$WORKTREE_REPO/config/model-routing.json"
+printf 'base\n' >"$WORKTREE_REPO/README.md"
 git -C "$WORKTREE_REPO" add README.md
 git -C "$WORKTREE_REPO" commit -q -m initial
 mkdir -p "$WORKTREE_REPO/.autoship/workspaces/issue-156"
-printf 'stale\n' > "$WORKTREE_REPO/.autoship/workspaces/issue-156/AUTOSHIP_RESULT.md"
+printf 'stale\n' >"$WORKTREE_REPO/.autoship/workspaces/issue-156/AUTOSHIP_RESULT.md"
 (
   cd "$WORKTREE_REPO"
   worktree_output=$(bash "$SCRIPT_DIR/create-worktree.sh" issue-156 autoship/issue-156)
@@ -1036,7 +1054,7 @@ CANCEL_REPO="$TMP_DIR/cancel-repo"
 mkdir -p "$CANCEL_REPO/hooks/opencode" "$CANCEL_REPO/hooks"
 git init -q "$CANCEL_REPO"
 cp "$SCRIPT_DIR/cancel.sh" "$CANCEL_REPO/hooks/opencode/cancel.sh"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$CANCEL_REPO/hooks/update-state.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$CANCEL_REPO/hooks/update-state.sh"
 chmod +x "$CANCEL_REPO/hooks/opencode/cancel.sh" "$CANCEL_REPO/hooks/update-state.sh"
 if (
   cd "$CANCEL_REPO"
@@ -1052,7 +1070,7 @@ mkdir -p "$AUTO_MERGE_REPO/hooks/opencode" "$AUTO_MERGE_REPO/bin"
 git init -q "$AUTO_MERGE_REPO"
 cp "$SCRIPT_DIR/auto-merge.sh" "$AUTO_MERGE_REPO/hooks/opencode/auto-merge.sh"
 chmod +x "$AUTO_MERGE_REPO/hooks/opencode/auto-merge.sh"
-cat > "$AUTO_MERGE_REPO/bin/gh" <<'SH'
+cat >"$AUTO_MERGE_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 printf 'gh should not be called\n' >&2
 exit 1
@@ -1071,20 +1089,20 @@ mkdir -p "$MERGE_REPO/bin"
 git init -q "$MERGE_REPO"
 git -C "$MERGE_REPO" config user.email autoship@example.invalid
 git -C "$MERGE_REPO" config user.name AutoShip
-printf 'base\n' > "$MERGE_REPO/README.md"
+printf 'base\n' >"$MERGE_REPO/README.md"
 git -C "$MERGE_REPO" add README.md
 git -C "$MERGE_REPO" commit -q -m initial
 mkdir -p "$MERGE_REPO/hooks/opencode" "$MERGE_REPO/.autoship/workspaces"
 cp "$SCRIPT_DIR/cleanup-worktree.sh" "$MERGE_REPO/hooks/opencode/cleanup-worktree.sh"
 cp "$SCRIPT_DIR/merge-pr.sh" "$MERGE_REPO/hooks/opencode/merge-pr.sh"
 chmod +x "$MERGE_REPO/hooks/opencode/cleanup-worktree.sh" "$MERGE_REPO/hooks/opencode/merge-pr.sh"
-cat > "$MERGE_REPO/.autoship/state.json" <<'JSON'
+cat >"$MERGE_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-210":{"state":"completed"}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
 git -C "$MERGE_REPO" branch autoship/issue-210
 git -C "$MERGE_REPO" worktree add -q "$MERGE_REPO/.autoship/workspaces/issue-210" autoship/issue-210
-printf 'result\n' > "$MERGE_REPO/.autoship/workspaces/issue-210/AUTOSHIP_RESULT.md"
-cat > "$MERGE_REPO/bin/gh" <<'SH'
+printf 'result\n' >"$MERGE_REPO/.autoship/workspaces/issue-210/AUTOSHIP_RESULT.md"
+cat >"$MERGE_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$GH_ARGS_LOG"
 exit 0
@@ -1107,7 +1125,7 @@ mkdir -p "$REPORT_REPO/.autoship/failures" "$REPORT_REPO/.autoship/reports" "$RE
 git init -q "$REPORT_REPO"
 cp "$SCRIPT_DIR/self-improvement-report.sh" "$REPORT_REPO/hooks/opencode/self-improvement-report.sh"
 chmod +x "$REPORT_REPO/hooks/opencode/self-improvement-report.sh"
-cat > "$REPORT_REPO/.autoship/failures/20260424T010000Z-issue-101.json" <<'JSON'
+cat >"$REPORT_REPO/.autoship/failures/20260424T010000Z-issue-101.json" <<'JSON'
 {
   "issue": "issue-101",
   "failure_category": "model_failure",
@@ -1119,7 +1137,7 @@ cat > "$REPORT_REPO/.autoship/failures/20260424T010000Z-issue-101.json" <<'JSON'
   "timestamp": "2026-04-24T01:00:00Z"
 }
 JSON
-cat > "$REPORT_REPO/.autoship/failures/20260424T020000Z-issue-102.json" <<'JSON'
+cat >"$REPORT_REPO/.autoship/failures/20260424T020000Z-issue-102.json" <<'JSON'
 {
   "issue": "issue-102",
   "failure_category": "model_failure",
@@ -1134,7 +1152,7 @@ JSON
 REPORT_OUTPUT="$REPORT_REPO/.autoship/reports/self-improvement.md"
 (
   cd "$REPORT_REPO"
-  bash hooks/opencode/self-improvement-report.sh > "$REPORT_OUTPUT"
+  bash hooks/opencode/self-improvement-report.sh >"$REPORT_OUTPUT"
 )
 grep -F '## Root Cause Evidence' "$REPORT_OUTPUT" >/dev/null || fail "self-improvement report includes root cause evidence section"
 grep -F 'model_failure' "$REPORT_OUTPUT" >/dev/null || fail "self-improvement report includes recurring failure category"
@@ -1148,7 +1166,7 @@ mkdir -p "$ISSUE_FILE_REPO/hooks/opencode" "$ISSUE_FILE_REPO/bin" "$ISSUE_FILE_R
 git init -q "$ISSUE_FILE_REPO"
 cp "$SCRIPT_DIR/file-self-improvement-issues.sh" "$ISSUE_FILE_REPO/hooks/opencode/file-self-improvement-issues.sh"
 chmod +x "$ISSUE_FILE_REPO/hooks/opencode/file-self-improvement-issues.sh"
-cat > "$ISSUE_FILE_REPO/.autoship/reports/self-improvement.md" <<'MD'
+cat >"$ISSUE_FILE_REPO/.autoship/reports/self-improvement.md" <<'MD'
 # AutoShip Self-Improvement Report
 
 ## Root Cause Evidence
@@ -1161,7 +1179,7 @@ cat > "$ISSUE_FILE_REPO/.autoship/reports/self-improvement.md" <<'MD'
 - When paid model balance fails, retry with a configured free model.
 - Add stealth hook signature evasion bypass.
 MD
-cat > "$ISSUE_FILE_REPO/bin/gh" <<'SH'
+cat >"$ISSUE_FILE_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$GH_ARGS_LOG"
 exit 0
@@ -1179,7 +1197,7 @@ printf '%s\n' "$formerly_blocked_line" | grep -F 'agent:ready' >/dev/null || fai
 SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"
 cp -R "$SCRIPT_DIR/../.." "$SETUP_REPO/autoship"
-cat > "$SETUP_REPO/bin/opencode" <<'SH'
+cat >"$SETUP_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1" == "models" ]]; then
   printf '%s\n' \
@@ -1192,41 +1210,48 @@ if [[ "$1" == "models" ]]; then
     'zen/some-free-model:free' \
     'openai/gpt-5.5' \
     'openai/gpt-5.5-fast' \
-    'openai/gpt-5.3-codex-spark'
+    'openai/gpt-5.3-spark'
   exit 0
 fi
 echo '1.0.0'
 SH
-chmod +x "$SETUP_REPO/bin/opencode"
+cat >"$SETUP_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "auth status" ]]; then
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
 (
   cd "$SETUP_REPO/autoship"
-  rm -f config/model-routing.json .autoship/config.json
+  rm -f config/model-routing.json .autoship/model-routing.json .autoship/config.json
   setup_output=$(PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh)
   test -f .autoship/.onboarded || fail "setup writes onboarding marker"
   printf '%s\n' "$setup_output" | grep -F 'opencode-autoship doctor' >/dev/null || fail "setup prints doctor next step"
   printf '%s\n' "$setup_output" | grep -F '/autoship-setup' >/dev/null || fail "setup prints setup next step"
   printf '%s\n' "$setup_output" | grep -F '/autoship' >/dev/null || fail "setup prints autoship next step"
-  jq -e '.models | length == 5' config/model-routing.json >/dev/null || fail "setup writes all live free models by default"
-  jq -e '.maxConcurrentAgents == 15 and .max_agents == 15' .autoship/config.json >/dev/null || fail "setup writes default concurrency cap consumed by runtime"
-  jq -e '.roles.planner == "opencode/nemotron-3-super-free" and .roles.coordinator == "opencode/nemotron-3-super-free" and .roles.orchestrator == "opencode/nemotron-3-super-free" and .roles.reviewer == "opencode/nemotron-3-super-free" and .roles.lead == "opencode/nemotron-3-super-free"' config/model-routing.json >/dev/null || fail "setup configures live free-first role defaults"
-  jq -e '.pools != null and .pools.default != null and .pools.frontend != null and .pools.backend != null and .pools.docs != null' config/model-routing.json >/dev/null || fail "setup writes worker pools"
-  jq -e 'all(.models[]; .cost == "free")' config/model-routing.json >/dev/null || fail "default setup excludes paid worker models"
-  jq -e 'all(.models[]; .id != "openai/gpt-5.5")' config/model-routing.json >/dev/null || fail "planner model is not used as a default worker"
-  jq -e '.models[0].id == "opencode/nemotron-3-super-free" and .defaultFallback == "opencode/nemotron-3-super-free"' config/model-routing.json >/dev/null || fail "setup ranks strongest free worker first"
-  jq -e 'any(.models[]; .id == "openrouter/google/gemma-3-27b-it:free")' config/model-routing.json >/dev/null || fail "setup includes OpenRouter free models from live OpenCode list"
-  jq -e 'any(.models[]; .id == "zen/some-free-model:free")' config/model-routing.json >/dev/null || fail "setup includes free models from any live OpenCode provider"
-  jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' config/model-routing.json > config/model-routing.json.tmp && mv config/model-routing.json.tmp config/model-routing.json
+  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup writes all live free models by default"
+  jq -e '.maxConcurrentAgents == 20 and .max_agents == 20' .autoship/config.json >/dev/null || fail "setup writes default concurrency cap consumed by runtime"
+  jq -e '.roles.planner == "opencode/nemotron-3-super-free" and .roles.coordinator == "opencode/nemotron-3-super-free" and .roles.orchestrator == "opencode/nemotron-3-super-free" and .roles.reviewer == "opencode/nemotron-3-super-free" and .roles.lead == "opencode/nemotron-3-super-free"' .autoship/model-routing.json >/dev/null || fail "setup configures live free-first role defaults"
+  jq -e '.pools != null and .pools.default != null and .pools.frontend != null and .pools.backend != null and .pools.docs != null' .autoship/model-routing.json >/dev/null || fail "setup writes worker pools"
+  jq -e 'all(.models[]; .cost == "free")' .autoship/model-routing.json >/dev/null || fail "default setup excludes paid worker models"
+  jq -e 'all(.models[]; .id != "openai/gpt-5.5")' .autoship/model-routing.json >/dev/null || fail "planner model is not used as a default worker"
+  jq -e '.models[0].id == "opencode/nemotron-3-super-free" and .defaultFallback == "opencode/nemotron-3-super-free"' .autoship/model-routing.json >/dev/null || fail "setup ranks strongest free worker first"
+  jq -e 'any(.models[]; .id == "openrouter/google/gemma-3-27b-it:free")' .autoship/model-routing.json >/dev/null || fail "setup includes OpenRouter free models from live OpenCode list"
+  jq -e 'any(.models[]; .id == "zen/some-free-model:free")' .autoship/model-routing.json >/dev/null || fail "setup includes free models from any live OpenCode provider"
+  jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json >.autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
-  jq -e '.models[0].id == "manual/model"' config/model-routing.json >/dev/null || fail "setup preserves manual model-routing edits by default"
+  jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "setup preserves manual model-routing edits by default"
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --max-agents=9 >/dev/null
-  jq -e '.models[0].id == "manual/model"' config/model-routing.json >/dev/null || fail "noninteractive setup preserves manual model-routing edits by default"
+  jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "noninteractive setup preserves manual model-routing edits by default"
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models >/dev/null
-  jq -e '.models | length == 5' config/model-routing.json >/dev/null || fail "setup --refresh-models regenerates manual model routing when explicitly requested"
-  jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' config/model-routing.json > config/model-routing.json.tmp && mv config/model-routing.json.tmp config/model-routing.json
+  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup --refresh-models regenerates manual model routing when explicitly requested"
+  jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json >.autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   AUTOSHIP_REFRESH_MODELS=1 PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
-  jq -e '.models | length == 5' config/model-routing.json >/dev/null || fail "setup refreshes generated model routing when requested"
-  AUTOSHIP_MODELS='opencode/gpt-5,opencode-go/qwen3.6-plus,openai/gpt-5.3-codex-spark' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
-  jq -e '.models[0].id == "opencode/gpt-5" and .models[0].cost == "selected" and .models[1].id == "opencode-go/qwen3.6-plus" and .models[2].id == "openai/gpt-5.3-codex-spark"' config/model-routing.json >/dev/null || fail "setup allows explicit selected non-free and Spark models from live list"
+  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup refreshes generated model routing when requested"
+  AUTOSHIP_MODELS='opencode/gpt-5,opencode-go/qwen3.6-plus,openai/gpt-5.3-spark' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
+  jq -e '.models[0].id == "opencode/gpt-5" and .models[0].cost == "selected" and .models[1].id == "opencode-go/qwen3.6-plus" and .models[2].id == "openai/gpt-5.3-spark"' .autoship/model-routing.json >/dev/null || fail "setup allows explicit selected non-free and Spark models from live list"
   if AUTOSHIP_MODELS='missing/model' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null 2>&1; then
     fail "setup rejects selected models that are not in the live OpenCode list"
   fi
@@ -1237,13 +1262,13 @@ chmod +x "$SETUP_REPO/bin/opencode"
     fail "setup rejects forbidden lead model override"
   fi
   AUTOSHIP_LEAD_MODEL=openai/gpt-5.5 PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
-  jq -e '.roles.lead == "openai/gpt-5.5"' config/model-routing.json >/dev/null || fail "setup accepts lead model override via AUTOSHIP_LEAD_MODEL"
+  jq -e '.roles.lead == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup accepts lead model override via AUTOSHIP_LEAD_MODEL"
 )
 
 SELECT_REPO="$TMP_DIR/select-repo"
-mkdir -p "$SELECT_REPO/.autoship" "$SELECT_REPO/hooks/opencode"
+mkdir -p "$SELECT_REPO/.autoship" "$SELECT_REPO/config" "$SELECT_REPO/hooks/opencode"
 cp "$SCRIPT_DIR/select-model.sh" "$SELECT_REPO/hooks/opencode/select-model.sh"
-cat > "$SELECT_REPO/config/model-routing.json" <<'JSON'
+cat >"$SELECT_REPO/config/model-routing.json" <<'JSON'
 {
   "roles": {
     "planner": "openai/gpt-5.5",
@@ -1260,20 +1285,20 @@ cat > "$SELECT_REPO/config/model-routing.json" <<'JSON'
   "models": [
     {"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["simple_code"]},
     {"id":"free/reliable:free","cost":"free","strength":70,"max_task_types":["simple_code"]},
-    {"id":"openai/gpt-5.3-codex-spark","cost":"selected","strength":95,"max_task_types":["complex"]},
+    {"id":"openai/gpt-5.3-spark","cost":"selected","strength":95,"max_task_types":["complex"]},
     {"id":"opencode-go/qwen3.6-plus","cost":"selected","strength":110,"max_task_types":["medium_code"]}
   ]
 }
 JSON
 assert_eq "free/strong:free" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh simple_code 100)" "selector treats missing model history as empty"
-cat > "$SELECT_REPO/.autoship/model-history.json" <<'JSON'
+cat >"$SELECT_REPO/.autoship/model-history.json" <<'JSON'
 {
   "free/strong:free": {"success": 0, "fail": 6},
   "free/reliable:free": {"success": 4, "fail": 0}
 }
 JSON
 assert_eq "free/reliable:free" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh simple_code 100)" "selector learns from previous run outcomes"
-assert_eq "openai/gpt-5.3-codex-spark" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh complex 102)" "selector can choose selected Spark model for complex work"
+assert_eq "openai/gpt-5.3-spark" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh complex 102)" "selector can choose selected Spark model for complex work"
 assert_eq "opencode-go/qwen3.6-plus" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh medium_code 103)" "selector can choose Go model when best for task"
 assert_eq "openai/gpt-5.5" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --role planner)" "selector returns GPT-5.5 planner role"
 assert_eq "openai/gpt-5.5" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --role reviewer)" "selector returns GPT-5.5 reviewer role"
@@ -1290,7 +1315,7 @@ assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "score:" && echo "true" || ech
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "reason:" && echo "true" || echo "false")" "routing log shows reason"
 assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "final_selection: free/reliable:free" && echo "true" || echo "false")" "routing log shows final selection"
 
-cat > "$SELECT_REPO/.autoship/model-history.json" <<'JSON'
+cat >"$SELECT_REPO/.autoship/model-history.json" <<'JSON'
 {
   "free/strong:free": {"success": 0, "fail": 6},
   "free/reliable:free": {"success": 4, "fail": 0}
@@ -1300,7 +1325,7 @@ JSON
 ROUTING_LOG_ESCALATE=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log simple_code 100)
 assert_eq "true" "$(echo "$ROUTING_LOG_ESCALATE" | grep -q "free model selected by default" && echo "true" || echo "false")" "routing log shows free selection reason"
 
-cat > "$SELECT_REPO/config/model-routing.json" <<'JSON'
+cat >"$SELECT_REPO/config/model-routing.json" <<'JSON'
 {
   "roles": {
     "planner": "openai/gpt-5.5",
@@ -1317,14 +1342,14 @@ cat > "$SELECT_REPO/config/model-routing.json" <<'JSON'
   "models": [
     {"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["simple_code"]},
     {"id":"free/reliable:free","cost":"free","strength":70,"max_task_types":["simple_code"]},
-    {"id":"openai/gpt-5.3-codex-spark","cost":"selected","strength":95,"max_task_types":["complex"]},
+    {"id":"openai/gpt-5.3-spark","cost":"selected","strength":95,"max_task_types":["complex"]},
     {"id":"opencode-go/qwen3.6-plus","cost":"selected","strength":110,"max_task_types":["medium_code"]}
   ]
 }
 JSON
 
 ROUTING_LOG_COMPLEX=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log complex 102)
-assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "final_selection: openai/gpt-5.3-codex-spark" && echo "true" || echo "false")" "routing log shows Spark for complex task"
+assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "final_selection: openai/gpt-5.3-spark" && echo "true" || echo "false")" "routing log shows Spark for complex task"
 assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "Spark model selected for complex task" && echo "true" || echo "false")" "routing log shows escalation reason for Spark"
 
 UPDATE_REPO="$TMP_DIR/update-repo"
@@ -1332,10 +1357,10 @@ mkdir -p "$UPDATE_REPO/.autoship" "$UPDATE_REPO/bin" "$UPDATE_REPO/hooks"
 git init -q "$UPDATE_REPO"
 git -C "$UPDATE_REPO" remote add origin git@github.com:owner/repo.git
 cp "$SCRIPT_DIR/../update-state.sh" "$UPDATE_REPO/hooks/update-state.sh"
-cat > "$UPDATE_REPO/.autoship/state.json" <<'JSON'
+cat >"$UPDATE_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-cat > "$UPDATE_REPO/bin/gh" <<'SH'
+cat >"$UPDATE_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1 $2" == "label list" ]]; then
   printf '%s\n' autoship:in-progress autoship:blocked autoship:paused autoship:done
@@ -1351,25 +1376,33 @@ chmod +x "$UPDATE_REPO/bin/gh" "$UPDATE_REPO/hooks/update-state.sh"
 (cd "$UPDATE_REPO" && AUTOSHIP_GH_ISSUES_LOG="$UPDATE_REPO/gh-issues.log" PATH="$UPDATE_REPO/bin:$PATH" bash hooks/update-state.sh set-running issue-123 >/dev/null)
 assert_eq "running" "$(jq -r '.issues["issue-123"].state' "$UPDATE_REPO/.autoship/state.json")" "update-state stores normalized issue key"
 assert_eq "123" "$(head -1 "$UPDATE_REPO/gh-issues.log")" "update-state passes numeric issue to gh"
+if (cd "$UPDATE_REPO" && PATH="$UPDATE_REPO/bin:$PATH" bash hooks/update-state.sh set-queued issue-124 task_type=--repo model=123 >/dev/null 2>&1); then
+  fail "update-state rejects invalid task_type and non-string model fields"
+fi
 
 DISPATCH_REPO="$TMP_DIR/dispatch-repo"
-mkdir -p "$DISPATCH_REPO/.autoship" "$DISPATCH_REPO/hooks/opencode" "$DISPATCH_REPO/hooks" "$DISPATCH_REPO/bin"
+mkdir -p "$DISPATCH_REPO/.autoship" "$DISPATCH_REPO/config" "$DISPATCH_REPO/hooks/opencode" "$DISPATCH_REPO/hooks" "$DISPATCH_REPO/bin"
 git init -q "$DISPATCH_REPO"
 git -C "$DISPATCH_REPO" config user.email autoship@example.invalid
 git -C "$DISPATCH_REPO" config user.name AutoShip
 git -C "$DISPATCH_REPO" remote add origin git@github.com:owner/repo.git
-printf 'base\n' > "$DISPATCH_REPO/README.md"
+printf 'base\n' >"$DISPATCH_REPO/README.md"
 git -C "$DISPATCH_REPO" add README.md
 git -C "$DISPATCH_REPO" commit -q -m initial
 cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/"
 cp "$SCRIPT_DIR/../update-state.sh" "$DISPATCH_REPO/hooks/update-state.sh"
-cat > "$DISPATCH_REPO/.autoship/state.json" <<'JSON'
+cat >"$DISPATCH_REPO/hooks/opencode/resource-monitor.sh" <<'SH'
+#!/usr/bin/env bash
+printf '{"load_status":"throttled","recommended_max_concurrent":8}\n'
+SH
+cat >"$DISPATCH_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-cat > "$DISPATCH_REPO/config/model-routing.json" <<'JSON'
+cat >"$DISPATCH_REPO/config/model-routing.json" <<'JSON'
 {"models":[{"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["docs","medium_code"]}]}
 JSON
-cat > "$DISPATCH_REPO/bin/gh" <<'SH'
+cp "$DISPATCH_REPO/config/model-routing.json" "$DISPATCH_REPO/.autoship/model-routing.json"
+cat >"$DISPATCH_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1 $2" == "issue view" ]]; then
   case "$4" in
@@ -1388,7 +1421,7 @@ if [[ "$1 $2" == "issue edit" ]]; then
 fi
 exit 0
 SH
-chmod +x "$DISPATCH_REPO/bin/gh" "$DISPATCH_REPO/hooks/opencode/dispatch.sh" "$DISPATCH_REPO/hooks/opencode/create-worktree.sh" "$DISPATCH_REPO/hooks/opencode/select-model.sh" "$DISPATCH_REPO/hooks/opencode/pr-title.sh" "$DISPATCH_REPO/hooks/update-state.sh"
+chmod +x "$DISPATCH_REPO/bin/gh" "$DISPATCH_REPO/hooks/opencode/dispatch.sh" "$DISPATCH_REPO/hooks/opencode/create-worktree.sh" "$DISPATCH_REPO/hooks/opencode/select-model.sh" "$DISPATCH_REPO/hooks/opencode/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/resource-monitor.sh" "$DISPATCH_REPO/hooks/update-state.sh"
 (
   cd "$DISPATCH_REPO"
   PATH="$DISPATCH_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 456 docs >/dev/null
@@ -1397,32 +1430,91 @@ assert_eq "docs" "$(cat "$DISPATCH_REPO/.autoship/workspaces/issue-456/role")" "
 assert_eq "docs" "$(jq -r '.issues["issue-456"].role' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records specialized role in state"
 assert_eq "free/strong:free" "$(jq -r '.issues["issue-456"].model' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records selected model in state"
 grep -F '## Specialized Role' "$DISPATCH_REPO/.autoship/workspaces/issue-456/AUTOSHIP_PROMPT.md" >/dev/null || fail "dispatch records specialized role in prompt"
+if (cd "$DISPATCH_REPO" && PATH="$DISPATCH_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 457 --repo >/dev/null 2>&1); then
+  fail "dispatch rejects invalid task types before writing state"
+fi
+assert_eq "null" "$(jq -r '.issues["issue-457"] // null' "$DISPATCH_REPO/.autoship/state.json")" "dispatch leaves state unchanged for invalid task type"
+
+QUOTA_REPO="$TMP_DIR/quota-repo"
+mkdir -p "$QUOTA_REPO/.autoship" "$QUOTA_REPO/hooks/opencode" "$QUOTA_REPO/hooks" "$QUOTA_REPO/bin"
+git init -q "$QUOTA_REPO"
+git -C "$QUOTA_REPO" config user.email autoship@example.invalid
+git -C "$QUOTA_REPO" config user.name AutoShip
+git -C "$QUOTA_REPO" remote add origin git@github.com:owner/repo.git
+printf 'base\n' >"$QUOTA_REPO/README.md"
+git -C "$QUOTA_REPO" add README.md
+git -C "$QUOTA_REPO" commit -q -m initial
+cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/resource-monitor.sh" "$QUOTA_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/../update-state.sh" "$SCRIPT_DIR/../quota-update.sh" "$QUOTA_REPO/hooks/"
+cat >"$QUOTA_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{},"stats":{"session_dispatched":262},"config":{"maxConcurrentAgents":20}}
+JSON
+cat >"$QUOTA_REPO/.autoship/model-routing.json" <<'JSON'
+{"models":[{"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["medium_code"]}]}
+JSON
+cat >"$QUOTA_REPO/.autoship/quota.json" <<'JSON'
+{"opencode":{"available":true,"quota_pct":-1,"quota_source":"provider","dispatches":0}}
+JSON
+cp "$DISPATCH_REPO/bin/gh" "$QUOTA_REPO/bin/gh"
+chmod +x "$QUOTA_REPO/bin/gh" "$QUOTA_REPO/hooks/opencode/dispatch.sh" "$QUOTA_REPO/hooks/opencode/create-worktree.sh" "$QUOTA_REPO/hooks/opencode/select-model.sh" "$QUOTA_REPO/hooks/opencode/pr-title.sh" "$QUOTA_REPO/hooks/opencode/resource-monitor.sh" "$QUOTA_REPO/hooks/update-state.sh" "$QUOTA_REPO/hooks/quota-update.sh"
+(
+  cd "$QUOTA_REPO"
+  PATH="$QUOTA_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 458 medium_code >/dev/null
+)
+assert_eq "263" "$(jq -r '.opencode.dispatches' "$QUOTA_REPO/.autoship/quota.json")" "dispatch syncs quota dispatch counter from state stats before incrementing"
+
+ROUTER_REPO="$TMP_DIR/router-repo"
+mkdir -p "$ROUTER_REPO/.autoship" "$ROUTER_REPO/config" "$ROUTER_REPO/hooks/hermes"
+cp "$SCRIPT_DIR/../hermes/model-router.py" "$ROUTER_REPO/hooks/hermes/model-router.py"
+cat >"$ROUTER_REPO/config/model-routing.json" <<'JSON'
+{"defaultFallback":"configured/fallback","tiers":[{"name":"zen_free","models":[{"id":"configured/free","capabilities":["code"]}]}]}
+JSON
+router_model=$(cd "$ROUTER_REPO" && python3 hooks/hermes/model-router.py "Fix small bug" '[]')
+assert_eq "configured/free" "$router_model" "Hermes router selects configured model IDs instead of hardcoded fallbacks"
+cat >"$ROUTER_REPO/config/model-routing.json" <<'JSON'
+{"defaultFallback":"configured/fallback","tiers":[]}
+JSON
+router_fallback=$(cd "$ROUTER_REPO" && python3 hooks/hermes/model-router.py "Implement parity feature" '[]')
+assert_eq "configured/fallback" "$router_fallback" "Hermes router uses configured defaultFallback when no tier matches"
+
+CAPTURE_REPO="$TMP_DIR/capture-repo"
+mkdir -p "$CAPTURE_REPO/hooks/lib" "$CAPTURE_REPO/hooks"
+git init -q "$CAPTURE_REPO"
+cp "$SCRIPT_DIR/../lib/common.sh" "$CAPTURE_REPO/hooks/lib/common.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$CAPTURE_REPO/hooks/capture-failure.sh"
+(
+  cd "$CAPTURE_REPO"
+  source hooks/lib/common.sh
+  autoship_capture_failure model_failure issue-999 error_summary=boom
+)
+test -d "$CAPTURE_REPO/.autoship/failures" || fail "common capture helper uses root-level capture-failure.sh"
 
 FIXTURE_REPO="$TMP_DIR/fixture-pipeline-repo"
-mkdir -p "$FIXTURE_REPO/.autoship" "$FIXTURE_REPO/hooks/opencode" "$FIXTURE_REPO/hooks" "$FIXTURE_REPO/bin"
+mkdir -p "$FIXTURE_REPO/.autoship" "$FIXTURE_REPO/config" "$FIXTURE_REPO/hooks/opencode" "$FIXTURE_REPO/hooks" "$FIXTURE_REPO/bin"
 git init -q "$FIXTURE_REPO"
 git -C "$FIXTURE_REPO" config user.email autoship@example.invalid
 git -C "$FIXTURE_REPO" config user.name AutoShip
 git -C "$FIXTURE_REPO" remote add origin git@github.com:owner/repo.git
-printf 'base\n' > "$FIXTURE_REPO/README.md"
+printf 'base\n' >"$FIXTURE_REPO/README.md"
 git -C "$FIXTURE_REPO" add README.md
 git -C "$FIXTURE_REPO" commit -q -m initial
 cp "$SCRIPT_DIR/plan-issues.sh" "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$SCRIPT_DIR/runner.sh" "$SCRIPT_DIR/reviewer.sh" "$SCRIPT_DIR/create-pr.sh" "$FIXTURE_REPO/hooks/opencode/"
 cp "$SCRIPT_DIR/../update-state.sh" "$SCRIPT_DIR/../capture-failure.sh" "$FIXTURE_REPO/hooks/"
 chmod +x "$FIXTURE_REPO"/hooks/opencode/*.sh "$FIXTURE_REPO"/hooks/*.sh
-cat > "$FIXTURE_REPO/.autoship/state.json" <<'JSON'
+cat >"$FIXTURE_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
-cat > "$FIXTURE_REPO/config/model-routing.json" <<'JSON'
+cat >"$FIXTURE_REPO/config/model-routing.json" <<'JSON'
 {"roles":{"reviewer":"openai/gpt-5.5"},"models":[{"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["medium_code"]}]}
 JSON
-cat > "$FIXTURE_REPO/issues.json" <<'JSON'
+cp "$FIXTURE_REPO/config/model-routing.json" "$FIXTURE_REPO/.autoship/model-routing.json"
+cat >"$FIXTURE_REPO/issues.json" <<'JSON'
 [
   {"number":188,"title":"unsafe bypass fixture","body":"hide detour hooks from anti-cheat detection","labels":[{"name":"agent:ready"},{"name":"security"}]},
   {"number":189,"title":"safe fixture pipeline","body":"Add a small fixture file","labels":[{"name":"agent:ready"},{"name":"type:test"}]}
 ]
 JSON
-cat > "$FIXTURE_REPO/bin/gh" <<'SH'
+cat >"$FIXTURE_REPO/bin/gh" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1 $2" == "issue view" ]]; then
   number="$3"
@@ -1451,7 +1543,7 @@ if [[ "$1 $2" == "pr view" ]]; then
 fi
 exit 0
 SH
-cat > "$FIXTURE_REPO/bin/opencode" <<'SH'
+cat >"$FIXTURE_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 if printf '%s\n' "$*" | grep -F 'AutoShip reviewer' >/dev/null; then
   printf 'VERDICT: PASS\n'
@@ -1466,12 +1558,12 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
 (
   cd "$FIXTURE_REPO"
   plan_output=$(PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/plan-issues.sh --issues-file issues.json --limit 10)
-  assert_eq "188 189" "$(jq -r '.eligible[].number' <<< "$plan_output" | paste -sd ' ' -)" "fixture plan includes content formerly blocked by safety filter"
-  assert_eq "" "$(jq -r '.blocked[].number' <<< "$plan_output" | paste -sd ' ' -)" "fixture plan has no content-based safety blocks"
+  assert_eq "188 189" "$(jq -r '.eligible[].number' <<<"$plan_output" | paste -sd ' ' -)" "fixture plan includes content formerly blocked by safety filter"
+  assert_eq "" "$(jq -r '.blocked[].number' <<<"$plan_output" | paste -sd ' ' -)" "fixture plan has no content-based safety blocks"
   PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 188 medium_code >/dev/null
-  assert_eq "QUEUED" "$(tr -d '[:space:]' < .autoship/workspaces/issue-188/status)" "fixture dispatch queues content formerly blocked by safety filter"
+  assert_eq "QUEUED" "$(tr -d '[:space:]' <.autoship/workspaces/issue-188/status)" "fixture dispatch queues content formerly blocked by safety filter"
   PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 189 medium_code >/dev/null
-  assert_eq "QUEUED" "$(tr -d '[:space:]' < .autoship/workspaces/issue-189/status)" "fixture dispatch creates queued safe worktree"
+  assert_eq "QUEUED" "$(tr -d '[:space:]' <.autoship/workspaces/issue-189/status)" "fixture dispatch creates queued safe worktree"
   mkdir -p "$TMP_DIR/symlink-workspaces"
   mv .autoship/workspaces "$TMP_DIR/symlink-workspaces/workspaces"
   ln -s "$TMP_DIR/symlink-workspaces/workspaces" .autoship/workspaces
@@ -1482,10 +1574,10 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
   mv "$TMP_DIR/symlink-workspaces/workspaces" .autoship/workspaces
   PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
   for _ in 1 2 3 4 5; do
-    [[ "$(tr -d '[:space:]' < .autoship/workspaces/issue-189/status)" != "RUNNING" ]] && break
+    [[ "$(tr -d '[:space:]' <.autoship/workspaces/issue-189/status)" != "RUNNING" ]] && break
     sleep 1
   done
-  assert_eq "COMPLETE" "$(tr -d '[:space:]' < .autoship/workspaces/issue-189/status)" "fixture runner records completed worker state"
+  assert_eq "COMPLETE" "$(tr -d '[:space:]' <.autoship/workspaces/issue-189/status)" "fixture runner records completed worker state"
   PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/reviewer.sh issue-189 "$FIXTURE_REPO/.autoship/workspaces/issue-189" >/dev/null
   AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-189 "$FIXTURE_REPO/.autoship/workspaces/issue-189" >/dev/null
   test ! -e "$FIXTURE_REPO/gh-mutations.log" || fail "fixture PR dry-run must not call gh pr create"
@@ -1493,17 +1585,17 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
   artifact_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-artifact-only"
   mkdir -p "$artifact_workspace"
   git -C "$FIXTURE_REPO" worktree add -q "$artifact_workspace" HEAD
-  printf 'artifact only\n' > "$artifact_workspace/AUTOSHIP_RESULT.md"
-  printf 'COMPLETE\n' > "$artifact_workspace/status"
+  printf 'artifact only\n' >"$artifact_workspace/AUTOSHIP_RESULT.md"
+  printf 'COMPLETE\n' >"$artifact_workspace/status"
   if PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-190 "$artifact_workspace" >/dev/null 2>&1; then
     fail "PR dry-run must reject artifact-only worktrees"
   fi
   live_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-191"
   git -C "$FIXTURE_REPO" worktree add -q -b autoship/issue-191 "$live_workspace" HEAD
-  printf 'implementation\n' > "$live_workspace/implementation.txt"
-  printf 'live result\n' > "$live_workspace/AUTOSHIP_RESULT.md"
-  printf 'runner log\n' > "$live_workspace/AUTOSHIP_RUNNER.log"
-  printf 'COMPLETE\n' > "$live_workspace/status"
+  printf 'implementation\n' >"$live_workspace/implementation.txt"
+  printf 'live result\n' >"$live_workspace/AUTOSHIP_RESULT.md"
+  printf 'runner log\n' >"$live_workspace/AUTOSHIP_RUNNER.log"
+  printf 'COMPLETE\n' >"$live_workspace/status"
   AUTOSHIP_ENABLE_PR_CREATE=true AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/live-gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-191 "$live_workspace" >/dev/null
   git -C "$live_workspace" show --name-only --format= HEAD | grep -F 'implementation.txt' >/dev/null || fail "live PR path commits implementation changes"
   if git -C "$live_workspace" show --name-only --format= HEAD | grep -E 'AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|status' >/dev/null; then
@@ -1519,18 +1611,18 @@ cp -R "$SCRIPT_DIR/../.." "$SYNC_REPO"
   OPENCODE_CONFIG_DIR="$CONFIG_DIR" bash hooks/opencode/sync-release.sh >/dev/null
   test -d "$CONFIG_DIR/.autoship/hooks" || fail "sync-release copies hooks"
   rm -rf "$CONFIG_DIR/.autoship/hooks"
-  printf 'stale file\n' > "$CONFIG_DIR/.autoship/hooks"
+  printf 'stale file\n' >"$CONFIG_DIR/.autoship/hooks"
   OPENCODE_CONFIG_DIR="$CONFIG_DIR" bash hooks/opencode/sync-release.sh >/dev/null
   test -d "$CONFIG_DIR/.autoship/hooks" || fail "sync-release replaces stale managed files with directories"
   AGENTS_TARGET="$TMP_DIR/sync-agents-target"
-  printf 'original\n' > "$AGENTS_TARGET"
+  printf 'original\n' >"$AGENTS_TARGET"
   rm "$CONFIG_DIR/.autoship/AGENTS.md"
   ln -s "$AGENTS_TARGET" "$CONFIG_DIR/.autoship/AGENTS.md"
   if OPENCODE_CONFIG_DIR="$CONFIG_DIR" bash hooks/opencode/sync-release.sh >"$TMP_DIR/sync-symlink-leaf.out" 2>&1; then
     fail "sync-release refuses symlinked destination leaf files"
   fi
   grep -F 'refusing to operate on symlinked path' "$TMP_DIR/sync-symlink-leaf.out" >/dev/null || fail "sync-release reports symlinked destination leaf file"
-  assert_eq "original" "$(tr -d '\n' < "$AGENTS_TARGET")" "sync-release does not write through symlinked destination leaf"
+  assert_eq "original" "$(tr -d '\n' <"$AGENTS_TARGET")" "sync-release does not write through symlinked destination leaf"
   rm -rf "$CONFIG_DIR" skills
   ln -s "$TMP_DIR" skills
   if OPENCODE_CONFIG_DIR="$CONFIG_DIR" bash hooks/opencode/sync-release.sh >"$TMP_DIR/sync-symlink-src.out" 2>&1; then
@@ -1545,7 +1637,7 @@ mkdir -p "$SELF_SYNC_CONFIG"
 cp -R "$SCRIPT_DIR/../.." "$SELF_AUTOSHIP_HOME"
 rm -rf "$SELF_AUTOSHIP_HOME/plugins"
 mkdir -p "$TMP_DIR/self-sync-plugin-target"
-printf 'external plugin\n' > "$TMP_DIR/self-sync-plugin-target/autoship.ts"
+printf 'external plugin\n' >"$TMP_DIR/self-sync-plugin-target/autoship.ts"
 ln -s "$TMP_DIR/self-sync-plugin-target" "$SELF_AUTOSHIP_HOME/plugins"
 if OPENCODE_CONFIG_DIR="$SELF_SYNC_CONFIG" bash "$SELF_AUTOSHIP_HOME/hooks/opencode/sync-release.sh" >"$TMP_DIR/self-sync-symlink.out" 2>&1; then
   fail "sync-release self-install refuses symlinked plugin parent"
@@ -1559,10 +1651,11 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   rm -rf .autoship node_modules dist
   npm install --package-lock=false --no-audit --no-fund >/dev/null
   npm run build >/dev/null
-  assert_eq "opencode-autoship $(cat VERSION)" "$(node dist/cli.js --version)" "package CLI prints version with --version"
+  package_version="v$(node -p 'require("./package.json").version')"
+  assert_eq "opencode-autoship $package_version" "$(node dist/cli.js --version)" "package CLI prints version with --version"
   CONFIG_DIR="$TMP_DIR/package-config"
   mkdir -p "$CONFIG_DIR"
-  printf '%s\n' '{"plugin":["other-plugin"],"customSetting":true}' > "$CONFIG_DIR/opencode.json"
+  printf '%s\n' '{"plugin":["other-plugin"],"customSetting":true}' >"$CONFIG_DIR/opencode.json"
   install_output=$(OPENCODE_CONFIG_DIR="$CONFIG_DIR" node dist/cli.js install)
   if printf '%s\n' "$install_output" | grep -F 'opencode-autoship vv' >/dev/null; then
     fail "package installer must not print a double-v version"
@@ -1575,6 +1668,7 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   test -d "$CONFIG_DIR/.autoship/skills" || fail "package installer copies skills"
   test -f "$CONFIG_DIR/.autoship/AGENTS.md" || fail "package installer copies AGENTS.md"
   test -f "$CONFIG_DIR/.autoship/VERSION" || fail "package installer copies VERSION"
+  assert_eq "$package_version" "$(tr -d '\n' <"$CONFIG_DIR/.autoship/VERSION")" "package installer writes VERSION from package.json"
   SYMLINK_CONFIG_DIR="$TMP_DIR/package-symlink-config"
   mkdir -p "$SYMLINK_CONFIG_DIR/.autoship"
   ln -s "$TMP_DIR" "$SYMLINK_CONFIG_DIR/.autoship/hooks"
@@ -1606,7 +1700,7 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   fi
   DOCTOR_BIN="$TMP_DIR/doctor-bin"
   mkdir -p "$DOCTOR_BIN"
-  cat > "$DOCTOR_BIN/opencode" <<'SH'
+  cat >"$DOCTOR_BIN/opencode" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1" == "models" ]]; then
   printf '%s\n' opencode/minimax-m2.5-free openai/gpt-5.5
@@ -1614,7 +1708,7 @@ if [[ "$1" == "models" ]]; then
 fi
 exit 0
 SH
-  cat > "$DOCTOR_BIN/gh" <<'SH'
+  cat >"$DOCTOR_BIN/gh" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1 $2" == "auth status" ]]; then
   printf '%s\n' "Token scopes: 'repo', 'workflow'"
@@ -1633,26 +1727,26 @@ SH
   grep -F '[FAIL]' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor prints FAIL checks"
   grep -F '[WARN]' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor prints WARN checks"
   grep -F 'opencode-autoship install' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor failure output includes package install remediation"
-  mkdir -p .autoship
-  printf '{}\n' > .autoship/config.json
-  printf '%s\n' '{"models":[{"id":"opencode/minimax-m2.5-free"}]}' > config/model-routing.json
-  printf '%s\n' '{"plugin":["opencode-autoship"]}' > "$DOCTOR_CONFIG/opencode.json"
-  mkdir -p "$DOCTOR_CONFIG/.autoship/hooks" "$DOCTOR_CONFIG/.autoship/commands" "$DOCTOR_CONFIG/.autoship/skills"
-  printf '{}\n' > "$DOCTOR_CONFIG/.autoship/config.json"
-  printf '%s\n' '{"models":[{"id":"opencode/minimax-m2.5-free"}]}' > "$DOCTOR_CONFIG/config/model-routing.json"
+  mkdir -p .autoship config
+  printf '{}\n' >.autoship/config.json
+  printf '%s\n' '{"models":[{"id":"opencode/minimax-m2.5-free"}]}' >.autoship/model-routing.json
+  printf '%s\n' '{"plugin":["opencode-autoship"]}' >"$DOCTOR_CONFIG/opencode.json"
+  mkdir -p "$DOCTOR_CONFIG/.autoship/hooks" "$DOCTOR_CONFIG/.autoship/commands" "$DOCTOR_CONFIG/.autoship/skills" "$DOCTOR_CONFIG/config"
+  printf '{}\n' >"$DOCTOR_CONFIG/.autoship/config.json"
+  printf '%s\n' '{"models":[{"id":"opencode/minimax-m2.5-free"}]}' >"$DOCTOR_CONFIG/config/model-routing.json"
   cp AGENTS.md "$DOCTOR_CONFIG/.autoship/AGENTS.md"
   cp VERSION "$DOCTOR_CONFIG/.autoship/VERSION"
-  date -u +%Y-%m-%dT%H:%M:%SZ > "$DOCTOR_CONFIG/.autoship/.onboarded"
+  date -u +%Y-%m-%dT%H:%M:%SZ >"$DOCTOR_CONFIG/.autoship/.onboarded"
   PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-pass.txt"
   grep -F '[PASS]' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor prints PASS checks"
   grep -F '0 failed' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor summary reports zero failures"
   grep -F 'model-inventory' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates OpenCode model inventory"
   grep -F 'gh-auth' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates GitHub auth"
-  cat > "$DOCTOR_BIN/opencode" <<'SH'
+  cat >"$DOCTOR_BIN/opencode" <<'SH'
 #!/usr/bin/env bash
 exit 1
 SH
-  cat > "$DOCTOR_BIN/gh" <<'SH'
+  cat >"$DOCTOR_BIN/gh" <<'SH'
 #!/usr/bin/env bash
 exit 1
 SH
@@ -1661,7 +1755,7 @@ SH
   grep -F '[WARN] model-inventory' "$TMP_DIR/doctor-optional-warn.txt" >/dev/null || fail "doctor warns for unavailable model inventory"
   grep -F '[WARN] gh-auth' "$TMP_DIR/doctor-optional-warn.txt" >/dev/null || fail "doctor warns for missing GitHub auth"
   grep -F '0 failed' "$TMP_DIR/doctor-optional-warn.txt" >/dev/null || fail "doctor treats optional readiness checks as warnings"
-  printf 'v0.0.0\n' > "$DOCTOR_CONFIG/.autoship/VERSION"
+  printf 'v0.0.0\n' >"$DOCTOR_CONFIG/.autoship/VERSION"
   if PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-version-fail.txt" 2>&1; then
     fail "doctor fails when installed asset version does not match package"
   fi
@@ -1672,7 +1766,7 @@ VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment"
 mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
 cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
 cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
-printf '%s\n' "$(tr -d '[:space:]' < VERSION)" > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+printf '%s\n' "$(tr -d '[:space:]' <VERSION)" >"$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
 bash "$SCRIPT_DIR/validate-version-alignment.sh" \
   --repo "$VERSION_ALIGNMENT_DIR" \
   --installed-version "$VERSION_ALIGNMENT_DIR/installed/VERSION" \
@@ -1691,16 +1785,16 @@ assert_version_alignment_fails() {
   grep -F "$expected_message" "$output_file" >/dev/null || fail "version alignment validation reports $expected_message"
 }
 
-printf 'v0.0.0\n' > "$VERSION_ALIGNMENT_DIR/installed/VERSION"
+printf 'v0.0.0\n' >"$VERSION_ALIGNMENT_DIR/installed/VERSION"
 assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'installed asset marker'
 
 VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment-package"
 mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
 cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
-jq '.version = "0.0.0"' "$VERSION_ALIGNMENT_DIR/package.json" > "$VERSION_ALIGNMENT_DIR/package.tmp"
+jq '.version = "0.0.0"' "$VERSION_ALIGNMENT_DIR/package.json" >"$VERSION_ALIGNMENT_DIR/package.tmp"
 mv "$VERSION_ALIGNMENT_DIR/package.tmp" "$VERSION_ALIGNMENT_DIR/package.json"
 cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
-printf '%s\n' "$(tr -d '[:space:]' < VERSION)" > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+printf '%s\n' "$(tr -d '[:space:]' <VERSION)" >"$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
 assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'package.json version'
 
 VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment-changelog"
@@ -1708,14 +1802,14 @@ mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
 cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
 perl -0pi -e 's/^## v[0-9][^\n]*/## v0.0.0/m' "$VERSION_ALIGNMENT_DIR/CHANGELOG.md"
 cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
-printf '%s\n' "$(tr -d '[:space:]' < VERSION)" > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+printf '%s\n' "$(tr -d '[:space:]' <VERSION)" >"$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
 assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'CHANGELOG release heading'
 
 VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment-tag"
 mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
 cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
 cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
-printf 'v0.0.0\n' > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+printf 'v0.0.0\n' >"$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
 assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'GitHub release tag marker'
 
 bash "$SCRIPT_DIR/test-model-parsing.sh" >/dev/null

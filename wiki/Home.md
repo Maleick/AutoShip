@@ -13,7 +13,7 @@ AutoShip is the OpenCode plugin for solo maintainers who want their GitHub issue
 - Selects worker models from the live `opencode models` inventory
 - Defaults to ranked free worker models from the live OpenCode inventory and rotates compatible workers by issue number
 - Includes OpenCode Go models as allowed low-cost subscription fallbacks and allows explicitly selected Spark, Nvidia, OpenRouter, Zen, and other provider models when available
-- Runs up to 15 active workers by default
+- Runs up to 20 active workers by default
 
 ## Pages
 

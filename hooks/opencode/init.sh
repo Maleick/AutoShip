@@ -1,3 +1,4 @@
+#!/bin/bash
 # Initialize .autoship/ directory for OpenCode.
 
 set -euo pipefail
@@ -10,7 +11,7 @@ LEDGER_FILE="$AUTOSHIP_DIR/token-ledger.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RELEASE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 if [[ -f "$RELEASE_ROOT/VERSION" ]]; then
-  AUTOSHIP_VERSION="$(tr -d '[:space:]' < "$RELEASE_ROOT/VERSION")"
+  AUTOSHIP_VERSION="$(tr -d '[:space:]' <"$RELEASE_ROOT/VERSION")"
 else
   AUTOSHIP_VERSION="dev"
 fi
@@ -42,11 +43,11 @@ fi
 mkdir -p "$WORKSPACES_DIR"
 mkdir -p "$AUTOSHIP_DIR/results"
 
-[[ ! -f "$AUTOSHIP_DIR/event-queue.json" ]] && echo '[]' > "$AUTOSHIP_DIR/event-queue.json"
-[[ ! -f "$AUTOSHIP_DIR/.pr-monitor-seen.json" ]] && echo '{}' > "$AUTOSHIP_DIR/.pr-monitor-seen.json"
-[[ ! -f "$AUTOSHIP_DIR/model-history.json" ]] && echo '{}' > "$AUTOSHIP_DIR/model-history.json"
+[[ ! -f "$AUTOSHIP_DIR/event-queue.json" ]] && echo '[]' >"$AUTOSHIP_DIR/event-queue.json"
+[[ ! -f "$AUTOSHIP_DIR/.pr-monitor-seen.json" ]] && echo '{}' >"$AUTOSHIP_DIR/.pr-monitor-seen.json"
+[[ ! -f "$AUTOSHIP_DIR/model-history.json" ]] && echo '{}' >"$AUTOSHIP_DIR/model-history.json"
 [[ ! -f "$AUTOSHIP_DIR/quota.json" ]] && bash "$(dirname "$SCRIPT_DIR")/quota-update.sh" init 2>/dev/null || true
-[[ ! -f "$AUTOSHIP_DIR/config.json" ]] && echo '{}' > "$AUTOSHIP_DIR/config.json"
+[[ ! -f "$AUTOSHIP_DIR/config.json" ]] && echo '{}' >"$AUTOSHIP_DIR/config.json"
 
 # Initialize state.json
 if [[ ! -f "$STATE_FILE" ]]; then
@@ -81,32 +82,32 @@ if [[ ! -f "$STATE_FILE" ]]; then
         blocked: 0
       },
       config: {
-        maxConcurrentAgents: 15
+        maxConcurrentAgents: 20
       }
-    }' > "$STATE_FILE"
+    }' >"$STATE_FILE"
   echo "Initialized $STATE_FILE"
 else
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   jq --arg now "$NOW" \
-     --arg ver "$AUTOSHIP_VERSION" \
-     '.updated_at = $now |
+    --arg ver "$AUTOSHIP_VERSION" \
+    '.updated_at = $now |
      .stats.session_dispatched = 0 |
      .stats.session_completed = 0 |
      .platform = "opencode" |
      .autoship_version = $ver |
-     .config.maxConcurrentAgents = (.config.maxConcurrentAgents // 15)' \
-     "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+     .config.maxConcurrentAgents = (.config.maxConcurrentAgents // 20)' \
+    "$STATE_FILE" >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   echo "Refreshed $STATE_FILE"
 fi
 
 DETECTED_TOOLS="{}"
 if command -v opencode >/dev/null 2>&1; then
-  DETECTED_TOOLS=$(jq '.opencode = {"available": true}' <<< "$DETECTED_TOOLS")
+  DETECTED_TOOLS=$(jq '.opencode = {"available": true}' <<<"$DETECTED_TOOLS")
 fi
 
 jq --argjson tools "$DETECTED_TOOLS" \
   '.tools = {"opencode": {"status": (if $tools.opencode.available == true then "available" else "unavailable" end), "quota_pct": -1}}' \
-  "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+  "$STATE_FILE" >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
 
 init_token_ledger() {
   if ! command -v jq >/dev/null 2>&1; then return 0; fi
@@ -120,9 +121,9 @@ init_token_ledger() {
     --arg repo "$REPO_SLUG" \
     '{session_id: $sid, started_at: $now, repo: $repo, issues: []}')
   if [[ -f "$LEDGER_FILE" ]]; then
-    jq --argjson s "$new_session" '.sessions += [$s]' "$LEDGER_FILE" > "$LEDGER_FILE.tmp" && mv "$LEDGER_FILE.tmp" "$LEDGER_FILE"
+    jq --argjson s "$new_session" '.sessions += [$s]' "$LEDGER_FILE" >"$LEDGER_FILE.tmp" && mv "$LEDGER_FILE.tmp" "$LEDGER_FILE"
   else
-    jq -n --argjson s "$new_session" '{schema_version: 1, sessions: [$s]}' > "$LEDGER_FILE"
+    jq -n --argjson s "$new_session" '{schema_version: 1, sessions: [$s]}' >"$LEDGER_FILE"
   fi
   echo "Token ledger updated: session $session_id"
 }
@@ -140,36 +141,36 @@ load_routing_config() {
   local routing_file="$AUTOSHIP_DIR/routing.json"
   local model_routing_file="$AUTOSHIP_DIR/model-routing.json"
   local autoship_md="AUTOSHIP.md"
-  local DEFAULT_ROUTING='{"routing":{"research":["opencode"],"docs":["opencode"],"simple_code":["opencode"],"medium_code":["opencode"],"complex":["opencode"],"mechanical":["opencode"],"ci_fix":["opencode"],"rust_unsafe":["opencode"]},"max_concurrent_agents":15}'
+  local DEFAULT_ROUTING='{"routing":{"research":["opencode"],"docs":["opencode"],"simple_code":["opencode"],"medium_code":["opencode"],"complex":["opencode"],"mechanical":["opencode"],"ci_fix":["opencode"],"rust_unsafe":["opencode"]},"max_concurrent_agents":20}'
   write_model_routing() {
     if [[ -f "$model_routing_file" ]] && jq -e '(.models // []) | length > 0' "$model_routing_file" >/dev/null 2>&1; then
       return 0
     fi
     rm -f "$model_routing_file"
     if command -v opencode >/dev/null 2>&1 && [[ -x "$SCRIPT_DIR/setup.sh" ]]; then
-      AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-15}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
+      AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-20}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
     fi
     if [[ ! -f "$model_routing_file" ]]; then
-      jq -n '{defaultFallback: null, models: []}' > "$model_routing_file"
+      jq -n '{defaultFallback: null, models: []}' >"$model_routing_file"
     fi
   }
   write_model_routing
   if [[ ! -f "$autoship_md" ]]; then
-    printf '%s\n' "$DEFAULT_ROUTING" > "$routing_file"
+    printf '%s\n' "$DEFAULT_ROUTING" >"$routing_file"
     return 0
   fi
   local front_matter
   front_matter=$(awk '/^---$/{if(p){exit}else{p=1;next}} p{print}' "$autoship_md" 2>/dev/null) || front_matter=""
   if [[ -z "$front_matter" ]]; then
-    printf '%s\n' "$DEFAULT_ROUTING" > "$routing_file"
+    printf '%s\n' "$DEFAULT_ROUTING" >"$routing_file"
     return 0
   fi
-  printf '%s\n' "$DEFAULT_ROUTING" > "$routing_file"
+  printf '%s\n' "$DEFAULT_ROUTING" >"$routing_file"
 }
 load_routing_config
 
 # Write the repo hooks directory so shared hooks can resolve sibling scripts.
-echo "$REPO_ROOT/hooks" > "$AUTOSHIP_DIR/hooks_dir"
+echo "$REPO_ROOT/hooks" >"$AUTOSHIP_DIR/hooks_dir"
 
 echo "Scanning for stale worktrees..."
 

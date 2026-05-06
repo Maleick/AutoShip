@@ -23,7 +23,10 @@ ISSUE_NUM="${2:-0}"
 if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
   ISSUE_NUM=0
 fi
-ROUTING_FILE="config/model-routing.json"
+ROUTING_FILE=".autoship/model-routing.json"
+if [[ ! -f "$ROUTING_FILE" && -f "config/model-routing.json" ]]; then
+  ROUTING_FILE="config/model-routing.json"
+fi
 HISTORY_FILE=".autoship/model-history.json"
 CIRCUIT_FILE=".autoship/circuit-breaker.json"
 
@@ -46,8 +49,8 @@ if [[ -n "$POOL" ]]; then
 fi
 
 if [[ "$LOG" == true ]]; then
-# Shared jq filter definitions
-JQ_DEFS='
+  # Shared jq filter definitions
+  JQ_DEFS='
 def hist($id):
   (($history[0] // {})[$id] // {success: 0, fail: 0});
 def circuit_open($id):
@@ -62,13 +65,13 @@ def compatible:
   and (circuit_open(.id) | not);
 def cost_score:
   if .cost == "free" then 100
-  elif (.id | test("(^|/)gpt-5\\.3-codex-spark$|spark"; "i")) then 85
+  elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then 85
   elif (.id | startswith("opencode-go/")) then 80
   elif (.cost // "") == "selected" then 70
   else 50 end;
 def reason:
   if .cost == "free" then "free model selected by default"
-  elif (.id | test("(^|/)gpt-5\\.3-codex-spark$|spark"; "i")) then "Spark model selected for complex task suitability"
+  elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then "Spark model selected for complex task suitability"
   elif (.cost // "") == "selected" then "operator-selected model for task"
   else "model selected as fallback" end;
 def scored_model:
@@ -98,8 +101,8 @@ def rotated_models:
   end;
 '
 
-if [[ "$LOG" == true ]]; then
-  jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "$HISTORY_FILE" --slurpfile circuit "$CIRCUIT_FILE" --argjson now "$(date +%s)" "${JQ_DEFS}
+  if [[ "$LOG" == true ]]; then
+    jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "$HISTORY_FILE" --slurpfile circuit "$CIRCUIT_FILE" --argjson now "$(date +%s)" "${JQ_DEFS}
 rotated_models |
 . as \$candidates |
 if length > 0 then
@@ -110,10 +113,10 @@ if length > 0 then
 else
   \"routing_log:\\nfinal_selection:\"
 end" "$ROUTING_FILE"
-  exit 0
-fi
+    exit 0
+  fi
 
-jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "$HISTORY_FILE" --slurpfile circuit "$CIRCUIT_FILE" --argjson now "$(date +%s)" "${JQ_DEFS}
+  jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "$HISTORY_FILE" --slurpfile circuit "$CIRCUIT_FILE" --argjson now "$(date +%s)" "${JQ_DEFS}
 rotated_models |
 if length > 0 then .[0].id else empty end" "$ROUTING_FILE"
   exit 0
@@ -134,7 +137,7 @@ jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "
     and (circuit_open(.id) | not);
   def cost_score:
     if .cost == "free" then 100
-    elif (.id | test("(^|/)gpt-5\\.3-codex-spark$|spark"; "i")) then 85
+    elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then 85
     elif (.id | startswith("opencode-go/")) then 80
     elif (.cost // "") == "selected" then 70
     else 50 end;

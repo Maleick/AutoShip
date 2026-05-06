@@ -25,7 +25,7 @@ run_test_command() {
   local command_string="$1"
   local -a command_parts=()
   local -a env_parts=()
-  read -r -a command_parts <<< "$command_string"
+  read -r -a command_parts <<<"$command_string"
   if [[ ${#command_parts[@]} -eq 0 ]]; then
     fail "test command is empty"
   fi
@@ -43,10 +43,10 @@ run_test_command() {
     fail "test command is missing executable"
   fi
   if [[ ${#env_parts[@]} -gt 0 ]]; then
-    if ! (cd "$GIT_WORKTREE" && env "${env_parts[@]}" "${command_parts[@]}") >> "$LOG_PATH" 2>&1; then
+    if ! (cd "$GIT_WORKTREE" && env "${env_parts[@]}" "${command_parts[@]}") >>"$LOG_PATH" 2>&1; then
       fail "test command failed"
     fi
-  elif ! (cd "$GIT_WORKTREE" && "${command_parts[@]}") >> "$LOG_PATH" 2>&1; then
+  elif ! (cd "$GIT_WORKTREE" && "${command_parts[@]}") >>"$LOG_PATH" 2>&1; then
     fail "test command failed"
   fi
 }
@@ -88,9 +88,8 @@ if [[ -n "$TEST_COMMAND" && "$TEST_COMMAND" != "none" ]]; then
   run_test_command "$TEST_COMMAND"
 fi
 
-
 if [[ -f "$SCRIPT_DIR/policy-verify.sh" ]]; then
-  if ! bash "$SCRIPT_DIR/policy-verify.sh" "$GIT_WORKTREE" >> "$LOG_PATH" 2>&1; then
+  if ! bash "$SCRIPT_DIR/policy-verify.sh" "$GIT_WORKTREE" >>"$LOG_PATH" 2>&1; then
     fail "policy verification failed"
   fi
 else
@@ -98,7 +97,7 @@ else
 fi
 
 reviewer_output=$(mktemp)
-if ! bash "$SCRIPT_DIR/reviewer.sh" "$ISSUE_KEY" "$WORKTREE_PATH" "$RESULT_PATH" "$TEST_COMMAND" > "$reviewer_output" 2>&1; then
+if ! bash "$SCRIPT_DIR/reviewer.sh" "$ISSUE_KEY" "$WORKTREE_PATH" "$RESULT_PATH" "$TEST_COMMAND" >"$reviewer_output" 2>&1; then
   cp "$reviewer_output" "$LOG_PATH" 2>/dev/null || true
   rm -f "$reviewer_output"
   fail "reviewer failed"

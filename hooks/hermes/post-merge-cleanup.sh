@@ -2,7 +2,6 @@
 # Post-merge cleanup: remove worktrees after PR is merged
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ISSUE_NUM="${1:?Issue number required}"
 REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
 

@@ -70,9 +70,9 @@ is_safe_repo_file() {
     head -15 "AGENTS.md"
     echo ""
   fi
-} > "$TEMP_FILE"
+} >"$TEMP_FILE"
 
 # Capping at 1500 chars (~250 tokens proxy) keeps OpenCode worker prompts focused
-head -c 1500 "$TEMP_FILE" > "$CONTEXT_FILE"
+head -c 1500 "$TEMP_FILE" >"$CONTEXT_FILE"
 
-echo "Project context extracted to $CONTEXT_FILE ($(wc -c < "$CONTEXT_FILE") chars)"
+echo "Project context extracted to $CONTEXT_FILE ($(wc -c <"$CONTEXT_FILE") chars)"

@@ -5,7 +5,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 PACK_JSON="$TMP_DIR/npm-pack-dry-run.json"
-npm pack --dry-run --json --ignore-scripts > "$PACK_JSON"
+npm pack --dry-run --json --ignore-scripts >"$PACK_JSON"
 
 node - "$PACK_JSON" <<'NODE'
 const fs = require("fs");

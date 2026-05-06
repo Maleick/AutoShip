@@ -16,13 +16,13 @@ run_with_anti_flake() {
 
   # Execute the command directly (no eval) to avoid shell injection when
   # test_cmd comes from repo-controlled configuration.
-  read -r -a cmd_parts <<< "$test_cmd"
+  read -r -a cmd_parts <<<"$test_cmd"
   if [[ "${#cmd_parts[@]}" -eq 0 ]]; then
     echo "[anti-flake] FAIL: empty test command" >&2
     return 1
   fi
 
-  while (( attempt <= FLAME_RETRY_COUNT )); do
+  while ((attempt <= FLAME_RETRY_COUNT)); do
     ((++attempt))
 
     set +e
@@ -32,7 +32,7 @@ run_with_anti_flake() {
 
     if [[ $last_status -eq 0 ]]; then
       if [[ $attempt -gt 1 ]]; then
-        echo "[anti-flake] PASS on retry $((attempt-1))/$FLAME_RETRY_COUNT" >&2
+        echo "[anti-flake] PASS on retry $((attempt - 1))/$FLAME_RETRY_COUNT" >&2
       fi
       return 0
     fi
@@ -44,7 +44,7 @@ run_with_anti_flake() {
   done
 
   echo "[anti-flake] FAIL after $attempt attempts" >&2
-  return $last_status
+  return "$last_status"
 }
 
 test_flake_config() {

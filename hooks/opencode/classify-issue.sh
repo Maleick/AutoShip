@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # classify-issue-opencode.sh — Classify GitHub issue complexity for OpenCode
 
 set -euo pipefail
@@ -53,19 +54,37 @@ fi
 TITLE_LOWER=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]')
 
 case "$TITLE_LOWER" in
-  *research*) echo "research"; exit 0 ;;
-  *docs*|*readme*|*documentation*) echo "docs"; exit 0 ;;
-  *refactor*|*cleanup*|*cleanup*) echo "mechanical"; exit 0 ;;
-  *fix*|*bug*|*patch*) echo "simple_code"; exit 0 ;;
-  *feature*|*implement*|*add*) echo "medium_code"; exit 0 ;;
-  *architecture*|*redesign*|*migration*) echo "complex"; exit 0 ;;
+  *research*)
+    echo "research"
+    exit 0
+    ;;
+  *docs* | *readme* | *documentation*)
+    echo "docs"
+    exit 0
+    ;;
+  *refactor* | *cleanup* | *cleanup*)
+    echo "mechanical"
+    exit 0
+    ;;
+  *fix* | *bug* | *patch*)
+    echo "simple_code"
+    exit 0
+    ;;
+  *feature* | *implement* | *add*)
+    echo "medium_code"
+    exit 0
+    ;;
+  *architecture* | *redesign* | *migration*)
+    echo "complex"
+    exit 0
+    ;;
 esac
 
 # Default classification based on body analysis
 BODY_LENGTH=${#ISSUE_BODY}
-if (( BODY_LENGTH < 200 )); then
+if ((BODY_LENGTH < 200)); then
   echo "simple_code"
-elif (( BODY_LENGTH < 800 )); then
+elif ((BODY_LENGTH < 800)); then
   echo "medium_code"
 else
   echo "complex"

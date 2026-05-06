@@ -39,28 +39,28 @@ ROUTING='{
   "providers": [
     "nous",
     "openrouter",
-    "openai-codex",
+    "openai",
     "kimi-coding",
     "local"
   ],
   "dispatch_method": "cronjob",
-  "max_concurrent": 3,
+  "max_concurrent": 20,
   "notes": "Hermes uses the provider/model configured in ~/.hermes/config.yaml"
 }'
 
-echo "$ROUTING" | jq . > "$AUTOSHIP_DIR/hermes-model-routing.json"
+echo "$ROUTING" | jq . >"$AUTOSHIP_DIR/hermes-model-routing.json"
 
 echo "Hermes runtime configured:"
 echo "  CLI available: $HERMES_AVAILABLE"
 echo "  Active session: $HERMES_ACTIVE"
-echo "  Max concurrent: 3 (Hermes subagent limit)"
+echo "  Max concurrent: 20"
 echo "  Routing file: $AUTOSHIP_DIR/hermes-model-routing.json"
 
 # Update main model-routing.json to include Hermes if it exists
 if [[ -f "$AUTOSHIP_DIR/model-routing.json" ]]; then
   jq --slurpfile hermes "$AUTOSHIP_DIR/hermes-model-routing.json" '
     .runtimes.hermes = $hermes[0]
-  ' "$AUTOSHIP_DIR/model-routing.json" > "$AUTOSHIP_DIR/model-routing.json.tmp" && \
-  mv "$AUTOSHIP_DIR/model-routing.json.tmp" "$AUTOSHIP_DIR/model-routing.json"
+  ' "$AUTOSHIP_DIR/model-routing.json" >"$AUTOSHIP_DIR/model-routing.json.tmp" \
+    && mv "$AUTOSHIP_DIR/model-routing.json.tmp" "$AUTOSHIP_DIR/model-routing.json"
   echo "  Updated main model-routing.json with Hermes runtime"
 fi

@@ -20,7 +20,7 @@ fi
 tmp_json="$(mktemp)"
 trap 'rm -f "$tmp_json"' EXIT
 
-if ! jq -s '[.[] | select(type == "object")]' "$FAILURES_DIR"/*.json > "$tmp_json" 2>/dev/null; then
+if ! jq -s '[.[] | select(type == "object")]' "$FAILURES_DIR"/*.json >"$tmp_json" 2>/dev/null; then
   echo "# AutoShip Self-Improvement Report"
   echo
   echo "No readable failure artifacts found."

@@ -21,6 +21,19 @@ Thumbs.db
 
 # Local code analysis caches
 .code-review-graph/
+graphify-out/
+.autoresearch/
+AUTORESEARCH_FINDINGS.md
+autoresearch-memory.md
+__pycache__/
+*.py[cod]
+
+# Dependencies
+node_modules/
+
+# Local OpenCode configuration/plugins
+.opencode/opencode.json
+.opencode/plugins/
 
 # Local implementation worktrees
 .worktrees/

@@ -4,7 +4,8 @@ import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
-const VERSION = (await readFile(join(PACKAGE_ROOT, "VERSION"), "utf8")).trim();
+const packageJson = JSON.parse(await readFile(join(PACKAGE_ROOT, "package.json"), "utf8"));
+const VERSION = `v${packageJson.version ?? "0.0.0"}`;
 function resolveConfigDir() {
     if (process.env.OPENCODE_CONFIG_DIR) {
         return process.env.OPENCODE_CONFIG_DIR;
@@ -94,10 +95,15 @@ async function install() {
         { src: join(PACKAGE_ROOT, "skills"), dest: join(autoshipDir, "skills") },
         { src: join(PACKAGE_ROOT, "plugins"), dest: join(autoshipDir, "plugins") },
         { src: join(PACKAGE_ROOT, "AGENTS.md"), dest: join(autoshipDir, "AGENTS.md") },
-        { src: join(PACKAGE_ROOT, "VERSION"), dest: join(autoshipDir, "VERSION") },
+        { content: `${VERSION}\n`, dest: join(autoshipDir, "VERSION") },
     ];
     for (const item of items) {
         try {
+            if (item.content !== undefined) {
+                await assertWritablePath(item.dest, "OpenCode asset");
+                await writeFile(item.dest, item.content, "utf8");
+                continue;
+            }
             const linkStat = await lstat(item.src);
             if (linkStat.isSymbolicLink()) {
                 throw new Error(`Refusing to copy symlinked package asset: ${item.src}`);

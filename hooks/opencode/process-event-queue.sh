@@ -74,14 +74,14 @@ ensure_array_file() {
   assert_not_symlink "$file"
   if [[ ! -f "$file" ]] || ! jq -e 'type == "array"' "$file" >/dev/null 2>&1; then
     tmp=$(make_tmp)
-    printf '[]\n' > "$tmp"
+    printf '[]\n' >"$tmp"
     mv "$tmp" "$file"
   fi
 }
 
 event_key() {
   local event_type
-  event_type=$(jq -r 'type' <<< "$1" 2>/dev/null || printf 'invalid')
+  event_type=$(jq -r 'type' <<<"$1" 2>/dev/null || printf 'invalid')
   if [[ "$event_type" != "object" ]]; then
     printf 'malformed:%s\n' "$1" | shasum | awk '{print $1}'
     return 0
@@ -92,7 +92,7 @@ event_key() {
     (.data.status // .status // ""),
     (.pr_number // .data.pr_number // ""),
     (.action // "")
-  ]' <<< "$1"
+  ]' <<<"$1"
 }
 
 is_processed() {
@@ -105,7 +105,7 @@ mark_processed() {
   local tmp
   tmp=$(make_tmp)
   jq --arg key "$key" 'if index($key) then . else . + [$key] end' \
-    "$PROCESSED_EVENTS" > "$tmp" && mv "$tmp" "$PROCESSED_EVENTS"
+    "$PROCESSED_EVENTS" >"$tmp" && mv "$tmp" "$PROCESSED_EVENTS"
 }
 
 current_state() {
@@ -149,7 +149,10 @@ discover_test_command() {
   if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
     local configured
     configured=$(jq -r '.test_command // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
-    [[ -n "$configured" ]] && { printf '%s\n' "$configured"; return 0; }
+    [[ -n "$configured" ]] && {
+      printf '%s\n' "$configured"
+      return 0
+    }
   fi
 
   if [[ -f package.json ]]; then
@@ -198,7 +201,7 @@ generate_pr_body() {
     printf -- '- Reviewer: PASS\n'
     printf -- '- Tests: passing or not configured\n'
     printf '\nCloses #%s\n\nDispatched by AutoShip.\n' "$number"
-  } > "$body_path"
+  } >"$body_path"
 }
 
 create_verified_pr() {
@@ -275,7 +278,7 @@ apply_state_once() {
 
   current=$(current_state "$issue")
   case "$current" in
-    "$target_state"|merged)
+    "$target_state" | merged)
       return 0
       ;;
   esac
@@ -286,8 +289,8 @@ apply_state_once() {
 process_event() {
   local event="$1"
   local type issue
-  type=$(jq -r '.type // empty' <<< "$event")
-  issue=$(jq -r '.issue // empty' <<< "$event")
+  type=$(jq -r '.type // empty' <<<"$event")
+  issue=$(jq -r '.issue // empty' <<<"$event")
 
   case "$type" in
     blocked)
@@ -308,7 +311,7 @@ process_event() {
       local state number task_type
       state=$(current_state "$issue")
       case "$state" in
-        queued|running|verifying|completed|merged|blocked)
+        queued | running | verifying | completed | merged | blocked)
           return 0
           ;;
       esac
@@ -326,12 +329,12 @@ process_event() {
 is_malformed_event() {
   local event="$1"
   local type issue
-  [[ "$(jq -r 'type' <<< "$event" 2>/dev/null || printf 'invalid')" == "object" ]] || return 0
-  type=$(jq -r '.type // empty' <<< "$event")
-  issue=$(jq -r '.issue // empty' <<< "$event")
+  [[ "$(jq -r 'type' <<<"$event" 2>/dev/null || printf 'invalid')" == "object" ]] || return 0
+  type=$(jq -r '.type // empty' <<<"$event")
+  issue=$(jq -r '.issue // empty' <<<"$event")
 
   case "$type" in
-    blocked|stuck|verify|force_dispatch)
+    blocked | stuck | verify | force_dispatch)
       valid_issue_key "$issue" || return 0
       ;;
   esac
@@ -343,7 +346,7 @@ ensure_array_file "$EVENT_QUEUE"
 ensure_array_file "$PROCESSED_EVENTS"
 
 remaining_tmp=$(make_tmp)
-printf '[]\n' > "$remaining_tmp"
+printf '[]\n' >"$remaining_tmp"
 
 while IFS= read -r event; do
   [[ -n "$event" ]] || continue
@@ -359,7 +362,7 @@ while IFS= read -r event; do
     mark_processed "$key"
   else
     next_remaining=$(make_tmp)
-    jq --argjson evt "$event" '. + [$evt]' "$remaining_tmp" > "$next_remaining" && mv "$next_remaining" "$remaining_tmp"
+    jq --argjson evt "$event" '. + [$evt]' "$remaining_tmp" >"$next_remaining" && mv "$next_remaining" "$remaining_tmp"
   fi
 done < <(jq -c '.[]' "$EVENT_QUEUE")
 

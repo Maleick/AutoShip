@@ -33,7 +33,7 @@ assert_under_config() {
   mkdir -p "$path"
   real_path="$(cd "$path" && pwd -P)"
   case "$real_path" in
-    "$real_config"|"$real_config"/*) ;;
+    "$real_config" | "$real_config"/*) ;;
     *)
       printf 'Error: refusing to operate outside OpenCode config: %s\n' "$path" >&2
       exit 1
@@ -87,9 +87,9 @@ if [[ "$(cd "$REPO_ROOT" && pwd -P)" == "$(cd "$AUTOSHIP_HOME" && pwd -P)" ]]; t
     cp -f "$AUTOSHIP_HOME/plugins/autoship.ts" "$PLUGIN_DEST"
   fi
   if [[ -f "$AUTOSHIP_HOME/VERSION" ]]; then
-    tr -d '[:space:]' < "$AUTOSHIP_HOME/VERSION" > "$VERSION_FILE"
+    tr -d '[:space:]' <"$AUTOSHIP_HOME/VERSION" >"$VERSION_FILE"
   else
-    printf '%s\n' "installed" > "$VERSION_FILE"
+    printf '%s\n' "installed" >"$VERSION_FILE"
   fi
   exit 0
 fi
@@ -124,7 +124,7 @@ copy_assets() {
 
 copy_assets "$REPO_ROOT"
 if [[ -f "$REPO_ROOT/VERSION" ]]; then
-  tr -d '[:space:]' < "$REPO_ROOT/VERSION" > "$VERSION_FILE"
+  tr -d '[:space:]' <"$REPO_ROOT/VERSION" >"$VERSION_FILE"
 else
-  printf '%s\n' "dev" > "$VERSION_FILE"
+  printf '%s\n' "dev" >"$VERSION_FILE"
 fi

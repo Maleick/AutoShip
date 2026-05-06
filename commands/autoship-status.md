@@ -33,7 +33,7 @@ Uptime:       Xh Ym
 Phase:        N/M
 
 ───────────────────────────────────────────
-AGENTS (N active / 15 max)
+AGENTS (N active / 20 max)
 ───────────────────────────────────────────
   [OpenCode] #42 — Fix login validation
   [OpenCode] #45 — Add rate limiting

@@ -71,9 +71,13 @@ rm -f \
   "$WORKSPACE/status"
 
 mkdir -p "$WORKSPACE/.autoship"
+mkdir -p "$WORKSPACE/config"
 for runtime_file in model-routing.json config.json state.json routing.json; do
   if [[ -f "$AUTOSHIP_DIR/$runtime_file" ]]; then
     cp "$AUTOSHIP_DIR/$runtime_file" "$WORKSPACE/.autoship/$runtime_file"
+  fi
+  if [[ -f "config/$runtime_file" ]]; then
+    cp "config/$runtime_file" "$WORKSPACE/config/$runtime_file"
   fi
 done
 

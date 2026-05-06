@@ -33,7 +33,7 @@ if [[ -d "$WORKSPACES_DIR" ]]; then
       model=$(cat "$ws/model" 2>/dev/null || echo "unknown")
       role=$(cat "$ws/role" 2>/dev/null || echo "unknown")
       started=$(cat "$ws/started_at" 2>/dev/null || echo "unknown")
-      
+
       # Check if it has a Hermes prompt
       if [[ -f "$ws/HERMES_PROMPT.md" ]]; then
         echo "$issue_key: status=$status model=$model role=$role started=$started"

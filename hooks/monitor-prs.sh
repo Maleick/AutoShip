@@ -73,32 +73,32 @@ emit_if_changed() {
   seen=$(jq -r --arg k "$key" '.[$k] // empty' "$SEEN_FILE")
   if [[ -z "$seen" ]]; then
     echo "$event number=$pr_number"
-    jq --arg k "$key" --arg now "$(date -u +%s)" '.[$k] = $now' "$SEEN_FILE" > "$_SEEN_TMP" && \
-      mv "$_SEEN_TMP" "$SEEN_FILE"
+    jq --arg k "$key" --arg now "$(date -u +%s)" '.[$k] = $now' "$SEEN_FILE" >"$_SEEN_TMP" \
+      && mv "$_SEEN_TMP" "$SEEN_FILE"
   fi
 }
 
 reset_pr_seen() {
   local pr_number="$1"
   jq --arg n "$pr_number" 'del(.[$n + ":PR_CI_PASS"]) | del(.[$n + ":PR_CI_FAIL"])' \
-    "$SEEN_FILE" > "$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
+    "$SEEN_FILE" >"$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
 }
 
 while true; do
   gh pr list --label autoship --state open \
     --json number,mergeable,statusCheckRollup \
-    --repo "$REPO_SLUG" 2>/dev/null | \
-    jq -c '.[] | {number: .number, mergeable: .mergeable, checks: (.statusCheckRollup // [])}' | \
-    while IFS= read -r pr_json; do
-      num=$(jq -r '.number' <<< "$pr_json")
-      mergeable=$(jq -r '.mergeable' <<< "$pr_json")
-      checks_json=$(jq -c '.checks' <<< "$pr_json")
+    --repo "$REPO_SLUG" 2>/dev/null \
+    | jq -c '.[] | {number: .number, mergeable: .mergeable, checks: (.statusCheckRollup // [])}' \
+    | while IFS= read -r pr_json; do
+      num=$(jq -r '.number' <<<"$pr_json")
+      mergeable=$(jq -r '.mergeable' <<<"$pr_json")
+      checks_json=$(jq -c '.checks' <<<"$pr_json")
 
       # CI pass: ALL checks must have conclusion == "SUCCESS" (and there must be at least one)
-      check_count=$(jq 'length' <<< "$checks_json")
+      check_count=$(jq 'length' <<<"$checks_json")
       if [[ "$check_count" -gt 0 ]]; then
-        all_pass=$(jq 'all(.conclusion == "SUCCESS")' <<< "$checks_json")
-        any_fail=$(jq 'any(.conclusion == ("FAILURE", "ERROR"))' <<< "$checks_json")
+        all_pass=$(jq 'all(.conclusion == "SUCCESS")' <<<"$checks_json")
+        any_fail=$(jq 'any(.conclusion == ("FAILURE", "ERROR"))' <<<"$checks_json")
         if [[ "$all_pass" == "true" ]]; then
           emit_if_changed "$num" "[PR_CI_PASS]"
         fi
@@ -116,13 +116,13 @@ while true; do
 
   gh pr list --label autoship --state merged \
     --json number,mergedAt \
-    --repo "$REPO_SLUG" 2>/dev/null | \
-    jq -r '.[] | "\(.number) \(.mergedAt)"' | \
-    while read -r num merged_at; do
+    --repo "$REPO_SLUG" 2>/dev/null \
+    | jq -r '.[] | "\(.number) \(.mergedAt)"' \
+    | while read -r num merged_at; do
       # Only emit for merges in the last 60 seconds.
       # macOS `date -j -f` treats input as local time unless -u is set; force UTC.
-      merged_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null || \
-                     date -u -d "$merged_at" "+%s" 2>/dev/null || echo 0)
+      merged_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null \
+        || date -u -d "$merged_at" "+%s" 2>/dev/null || echo 0)
       now_epoch=$(date -u +%s)
       age=$((now_epoch - merged_epoch))
       if [[ $age -lt 60 ]]; then
@@ -143,7 +143,7 @@ while true; do
               autoship_state_set set-merged "$ISSUE_ID" completed_at="$COMPLETED_AT"
               echo "[AUTOSHIP] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
               jq --arg k "$autoship_key" --arg now "$(date -u +%s)" '.[$k] = $now' \
-                "$SEEN_FILE" > "$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
+                "$SEEN_FILE" >"$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
             fi
           fi
         fi

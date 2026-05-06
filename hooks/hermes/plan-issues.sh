@@ -27,7 +27,7 @@ echo "$issues" | jq -r '.[] | "\(.number): \(.title) [\((.labels // []) | map(.n
 
 # Write plan to state
 mkdir -p "$AUTOSHIP_DIR"
-echo "$issues" | jq '{plan: [.[].number], count: length, timestamp: now}' > "$AUTOSHIP_DIR/hermes-plan.json"
+echo "$issues" | jq '{plan: [.[].number], count: length, timestamp: now}' >"$AUTOSHIP_DIR/hermes-plan.json"
 
 echo ""
 echo "Plan written to $AUTOSHIP_DIR/hermes-plan.json"

@@ -10,5 +10,5 @@ autoship_max_agents() {
   if [[ -z "$max_agents" && -f "$autoship_dir/config.json" ]]; then
     max_agents=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$autoship_dir/config.json" 2>/dev/null || true)
   fi
-  printf '%s\n' "${max_agents:-15}"
+  printf '%s\n' "${max_agents:-20}"
 }

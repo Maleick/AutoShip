@@ -48,16 +48,16 @@ for ws_dir in "$WORKSPACES_DIR"/issue-*; do
   if [[ ! -d "$ws_dir" ]]; then
     continue
   fi
-  
+
   issue_key=$(basename "$ws_dir")
   issue_num=$(echo "$issue_key" | sed 's/issue-//')
   status_file="$ws_dir/status"
   status=$(cat "$status_file" 2>/dev/null || echo "unknown")
-  
+
   # Remove if: COMPLETE, BLOCKED, STUCK (terminal states)
   # Keep if: QUEUED, RUNNING (active states)
   case "$status" in
-    COMPLETE|BLOCKED|STUCK|unknown)
+    COMPLETE | BLOCKED | STUCK | unknown)
       if [[ "$DRY_RUN" == true ]]; then
         echo "[DRY-RUN] Would remove workspace: $issue_key (status=$status)"
       else
@@ -78,15 +78,15 @@ log ""
 log "=== Phase 2: Git worktree cleanup ==="
 if [[ -d "$TARGET_REPO" ]]; then
   cd "$TARGET_REPO"
-  
+
   for wt_info in $(git worktree list --porcelain 2>/dev/null | grep -E "^worktree " | awk '{print $2}'); do
     if [[ ! "$wt_info" =~ \.worktrees/issue-[0-9]+$ ]]; then
       continue
     fi
-    
+
     wt_path="$wt_info"
     issue_num=$(basename "$wt_path" | sed 's/issue-//')
-    
+
     # Check if issue is still active (autoship:ready or autoship:running)
     is_active=false
     if command -v gh &>/dev/null; then
@@ -95,7 +95,7 @@ if [[ -d "$TARGET_REPO" ]]; then
         is_active=true
       fi
     fi
-    
+
     # Check if worktree is dirty (has uncommitted changes)
     is_dirty=false
     if [[ -d "$wt_path" ]]; then
@@ -103,19 +103,19 @@ if [[ -d "$TARGET_REPO" ]]; then
         is_dirty=true
       fi
     fi
-    
+
     if [[ "$is_active" == "true" ]]; then
       log "  Skipping worktree: issue-$issue_num (still active in queue)"
       skipped_count=$((skipped_count + 1))
       continue
     fi
-    
+
     if [[ "$is_dirty" == "true" ]]; then
       log "  Skipping worktree: issue-$issue_num (dirty — uncommitted changes)"
       skipped_count=$((skipped_count + 1))
       continue
     fi
-    
+
     if [[ "$DRY_RUN" == true ]]; then
       echo "[DRY-RUN] Would remove worktree: $wt_path (issue-$issue_num)"
     else

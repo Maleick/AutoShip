@@ -34,9 +34,9 @@ cd "$REPO_ROOT"
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 
-# Read Hermes max concurrent from config.yaml
-MAX=3
-if [[ -f "$HOME/.hermes/config.yaml" ]]; then
+# Read Hermes max concurrent from config.yaml; allow AutoShip runs to cap lower.
+MAX="${HERMES_MAX_WORKERS:-20}"
+if [[ -z "${HERMES_MAX_WORKERS:-}" && -f "$HOME/.hermes/config.yaml" ]]; then
   config_max=$(grep 'max_concurrent_children' "$HOME/.hermes/config.yaml" | awk '{print $2}' | tr -d '"')
   if [[ "$config_max" =~ ^[0-9]+$ ]]; then
     MAX="$config_max"
@@ -48,25 +48,25 @@ if [[ -n "${1:-}" ]]; then
   ISSUE_KEY="$1"
   workspace_dir="$WORKSPACES_DIR/$ISSUE_KEY"
   status_file="$workspace_dir/status"
-  
+
   if [[ ! -f "$status_file" ]]; then
     echo "Error: workspace not found for $ISSUE_KEY" >&2
     exit 1
   fi
-  
+
   current_status=$(cat "$status_file" 2>/dev/null || echo "unknown")
   if [[ "$current_status" == "COMPLETE" || "$current_status" == "BLOCKED" ]]; then
     echo "Issue $ISSUE_KEY status=$current_status — not dispatchable"
     exit 0
   fi
-  
+
   # Mark running
-  printf 'RUNNING\n' > "$status_file"
+  printf 'RUNNING\n' >"$status_file"
   autoship_state_set set-running "$ISSUE_KEY" agent="hermes/default"
-  
+
   # Extract issue number from key
   ISSUE_NUM=$(echo "$ISSUE_KEY" | sed 's/issue-//')
-  
+
   # Find the worktree path
   worktree_path=""
   HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
@@ -82,78 +82,73 @@ if [[ -n "${1:-}" ]]; then
       fi
     done
   fi
-  
+
   if [[ -z "$worktree_path" || ! -d "$worktree_path" ]]; then
     echo "Error: worktree not found for issue-$ISSUE_NUM" >&2
-    printf 'BLOCKED\n' > "$status_file"
+    printf 'BLOCKED\n' >"$status_file"
     autoship_state_set set-blocked "$ISSUE_KEY" reason="worktree not found"
     exit 1
   fi
 
   echo "Dispatching $ISSUE_KEY in $worktree_path"
-  
-  # Execute via delegate_task if inside Hermes session, else hermes chat
-  if [[ -n "${HERMES_SESSION_ID:-}" ]]; then
-    # Inside Hermes — use delegate_task for parallel execution
-    echo "Inside Hermes session — using delegate_task..."
 
-    # Read the prompt content
-    prompt_content=$(cat "$workspace_dir/HERMES_PROMPT.md" 2>/dev/null || echo "Complete issue #$ISSUE_NUM in $worktree_path")
-
-    # delegate_task is available in this Hermes session
-    # The parent agent will receive the task and execute it
-    echo "DELEGATE_TASK_READY: $ISSUE_KEY"
-    echo "Worktree: $worktree_path"
-    echo "Prompt: $workspace_dir/HERMES_PROMPT.md"
-
-    # Write a marker file that the parent can detect
-    printf 'DELEGATED\n' > "$status_file"
-
-    # The parent Hermes agent should:
-    # 1. Detect DELEGATED status
-    # 2. Read HERMES_PROMPT.md
-    # 3. Call delegate_task with the prompt as goal
-    # 4. Update status to COMPLETE/BLOCKED/STUCK based on result
-
-    echo "Parent agent should now call delegate_task for $ISSUE_KEY"
-
-  elif command -v hermes &>/dev/null; then
-    # Hermes CLI available — spawn hermes chat
+  # Execute with Hermes CLI in both cron and active-session contexts.
+  if command -v hermes &>/dev/null; then
+    # Hermes CLI available — spawn hermes chat.
     cd "$worktree_path"
-    # Timeout: 10 minutes (600 seconds) for atomic work
+    # Timeout: configurable; default 30 minutes for AutoShip workers
     # Use gtimeout on macOS, timeout on Linux
-    TIMEOUT_CMD="timeout"
+    TIMEOUT_CMD=""
     if command -v gtimeout &>/dev/null; then
       TIMEOUT_CMD="gtimeout"
+    elif command -v timeout &>/dev/null; then
+      TIMEOUT_CMD="timeout"
     fi
-    $TIMEOUT_CMD 600 hermes chat -q "$(cat "$workspace_dir/HERMES_PROMPT.md")" --worktree --quiet || {
+    if [[ -z "$TIMEOUT_CMD" ]]; then
+      echo "Error: timeout/gtimeout required for Hermes runner" >&2
+      printf 'BLOCKED\n' >"$status_file"
+      autoship_state_set set-blocked "$ISSUE_KEY" reason="timeout_unavailable"
+      exit 0
+    fi
+    export GH_TOKEN="${GH_TOKEN:-}"
+    export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
+    HERMES_WORKER_TIMEOUT_SECONDS="${HERMES_WORKER_TIMEOUT_SECONDS:-1800}"
+    HERMES_MODEL_ARGS=()
+    if [[ -n "${HERMES_MODEL:-}" ]]; then
+      HERMES_MODEL_ARGS+=(--model "$HERMES_MODEL")
+    fi
+    if [[ -n "${HERMES_PROVIDER:-}" ]]; then
+      HERMES_MODEL_ARGS+=(--provider "$HERMES_PROVIDER")
+    fi
+    "$TIMEOUT_CMD" "$HERMES_WORKER_TIMEOUT_SECONDS" hermes chat "${HERMES_MODEL_ARGS[@]}" -q "$(cat "$workspace_dir/HERMES_PROMPT.md")" --worktree --quiet || {
       exit_code=$?
       if [[ $exit_code -eq 124 ]]; then
-        echo "TIMEOUT: $ISSUE_KEY exceeded 10 minutes"
-        printf 'STUCK\n' > "$status_file"
-        autoship_state_set set-stuck "$ISSUE_KEY" reason="timeout_10min"
+        echo "TIMEOUT: $ISSUE_KEY exceeded ${HERMES_WORKER_TIMEOUT_SECONDS}s"
+        printf 'STUCK\n' >"$status_file"
+        autoship_state_set set-stuck "$ISSUE_KEY" reason="timeout_${HERMES_WORKER_TIMEOUT_SECONDS}s"
       else
         echo "ERROR: $ISSUE_KEY exited with code $exit_code"
-        printf 'BLOCKED\n' > "$status_file"
+        printf 'BLOCKED\n' >"$status_file"
         autoship_state_set set-blocked "$ISSUE_KEY" reason="exit_code_$exit_code"
       fi
       exit 0
     }
-    
+
     # Check result using absolute path
     result_status=$(cat "$workspace_dir/status" 2>/dev/null || echo "unknown")
     echo "Result: $ISSUE_KEY = $result_status"
-    
+
     # If still RUNNING after successful hermes chat, mark COMPLETE
     if [[ "$result_status" == "RUNNING" ]]; then
-      printf 'COMPLETE\n' > "$workspace_dir/status"
+      printf 'COMPLETE\n' >"$workspace_dir/status"
       result_status="COMPLETE"
     fi
-    
+
     if [[ "$result_status" == "COMPLETE" ]]; then
       autoship_state_set set-complete "$ISSUE_KEY"
-      # Trigger PR creation
-      bash "$SCRIPT_DIR/../opencode/create-pr.sh" "$ISSUE_NUM" "$worktree_path"
+      # Trigger PR creation. Hermes workers write HERMES_RESULT.md, while the
+      # shared OpenCode PR helper defaults to AUTOSHIP_RESULT.md.
+      bash "$SCRIPT_DIR/../opencode/create-pr.sh" "$ISSUE_NUM" "$worktree_path" "$worktree_path/HERMES_RESULT.md"
     elif [[ "$result_status" == "BLOCKED" ]]; then
       autoship_state_set set-blocked "$ISSUE_KEY"
     elif [[ "$result_status" == "STUCK" ]]; then
@@ -161,10 +156,10 @@ if [[ -n "${1:-}" ]]; then
     fi
   else
     echo "Hermes not available — cannot execute"
-    printf 'BLOCKED\n' > "$status_file"
+    printf 'BLOCKED\n' >"$status_file"
     autoship_state_set set-blocked "$ISSUE_KEY" reason="hermes_unavailable"
   fi
-  
+
   exit 0
 fi
 
@@ -191,25 +186,25 @@ for status_file in $queued; do
   if [[ "$started" -ge "$available_slots" ]]; then
     break
   fi
-  
+
   workspace_dir=$(dirname "$status_file")
   issue_key=$(basename "$workspace_dir")
-  
+
   if [[ ! -f "$workspace_dir/HERMES_PROMPT.md" ]]; then
     continue
   fi
-  
+
   # Dispatch this single issue, detached from terminal
   # Log to workspace log file for debugging
   log_file="$workspace_dir/runner.log"
   # Prefer setsid (proper session detachment), fallback to nohup
   if command -v setsid &>/dev/null; then
-    setsid bash "$0" "$issue_key" > "$log_file" 2>&1 &
+    setsid bash "$0" "$issue_key" >"$log_file" 2>&1 &
   else
     # macOS fallback: use nohup + subshell + redirect to detach
-    (nohup bash "$0" "$issue_key" > "$log_file" 2>&1 &) &
+    (nohup bash "$0" "$issue_key" >"$log_file" 2>&1 &) &
   fi
-  
+
   started=$((started + 1))
 done
 
@@ -219,10 +214,10 @@ echo "Started $started Hermes workers"
 # The cron will call runner again to check progress
 
 # Auto-cleanup completed worktrees after batch
-if [[ "$started" -gt  0 ]]; then
+if [[ "$started" -gt 0 ]]; then
   echo "Running worktree cleanup..."
   bash "$SCRIPT_DIR/cleanup-worktrees.sh" --verbose
-  
+
   # Auto-prune if thresholds exceeded
   echo "Checking auto-prune thresholds..."
   bash "$SCRIPT_DIR/auto-prune.sh" || echo "Auto-prune triggered (thresholds exceeded)"

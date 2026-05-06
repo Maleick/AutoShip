@@ -12,7 +12,7 @@ See [AGENT_CATALOG.md](AGENT_CATALOG.md) for the specialized agent roles, inputs
 - Prefer capable free models first, then OpenCode Go role models when available; use Kimi/Kimmy 2.6 only through `opencode-go/*` unless the operator explicitly selects a paid Zen/OpenRouter model.
 - `openai/gpt-5.5-fast` is not allowed.
 - Worker models come from live `opencode models` inventory and are routed free-first with deterministic rotation across compatible workers.
-- Default active worker cap is 15 (OpenCode), 3 (Hermes subagent limit).
+- Default active worker cap is 20 for both OpenCode and Hermes.
 - Plan `agent:ready` issues in ascending issue-number order (unless `AUTOSHIP_PLAN_ORDER` is set).
 
 ## Available Hooks
@@ -71,3 +71,13 @@ bash -n hooks/opencode/*.sh hooks/*.sh
 ## Docs
 
 Keep README, `docs/`, and the GitHub Wiki aligned with OpenCode-only messaging.
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)

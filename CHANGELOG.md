@@ -1,3 +1,104 @@
+## [2.4.7](https://github.com/Maleick/AutoShip/compare/v2.4.6...v2.4.7) (2026-05-06)
+
+
+### Bug Fixes
+
+* **dispatch:** add explicit PR/commit workflow instructions to HERMES_PROMPT ([a0abbab](https://github.com/Maleick/AutoShip/commit/a0abbabbe5cb9b301dad1750c24b024fa2f5c39e))
+
+## [2.4.6](https://github.com/Maleick/AutoShip/compare/v2.4.5...v2.4.6) (2026-05-06)
+
+
+### Bug Fixes
+
+* **dispatch:** add explicit PR/commit workflow to HERMES_PROMPT.md ([9cb635f](https://github.com/Maleick/AutoShip/commit/9cb635f1daf917bb40123ce03968bcd986069490))
+
+## [2.4.5](https://github.com/Maleick/AutoShip/compare/v2.4.4...v2.4.5) (2026-05-06)
+
+
+### Bug Fixes
+
+* **hermes:** make worker timeout configurable ([#355](https://github.com/Maleick/AutoShip/issues/355)) ([cdcb250](https://github.com/Maleick/AutoShip/commit/cdcb2506e1c9c4bca10042066af386ee4b92adbb))
+
+## [2.4.4](https://github.com/Maleick/AutoShip/compare/v2.4.3...v2.4.4) (2026-05-06)
+
+
+### Bug Fixes
+
+* **runner:** export GH_TOKEN and HERMES_TARGET_REPO_PATH to hermes chat subprocess ([e28fd7d](https://github.com/Maleick/AutoShip/commit/e28fd7db46831b3da802916265b11600b760fc6c))
+
+## [2.4.3](https://github.com/Maleick/AutoShip/compare/v2.4.2...v2.4.3) (2026-05-05)
+
+
+### Bug Fixes
+
+* **runner:** increase Hermes timeout from 10min to 30min ([31cfce0](https://github.com/Maleick/AutoShip/commit/31cfce0797ea731c79c8c0a9478e561ad978bfd8))
+
+## [2.4.2](https://github.com/Maleick/AutoShip/compare/v2.4.1...v2.4.2) (2026-05-05)
+
+
+### Bug Fixes
+
+* harden autoship dispatch state ([#354](https://github.com/Maleick/AutoShip/issues/354)) ([1bfef8e](https://github.com/Maleick/AutoShip/commit/1bfef8eab7a339ea0cf8f0f087bbae99070f3b3a))
+
+## [2.4.1](https://github.com/Maleick/AutoShip/compare/v2.4.0...v2.4.1) (2026-05-05)
+
+## v2.4.1
+
+
+### Bug Fixes
+
+* sync package version for CLI ([#353](https://github.com/Maleick/AutoShip/issues/353)) ([3debb00](https://github.com/Maleick/AutoShip/commit/3debb00615276a8885c389ecc43dfa1b8dddbc40))
+
+# [2.4.0](https://github.com/Maleick/AutoShip/compare/v2.3.0...v2.4.0) (2026-05-05)
+
+## v2.4.0
+
+
+### Features
+
+* raise worker concurrency defaults ([#351](https://github.com/Maleick/AutoShip/issues/351)) ([1343475](https://github.com/Maleick/AutoShip/commit/13434758e0775ebacdf47112c9d53d2977ece068))
+
+# [2.3.0](https://github.com/Maleick/AutoShip/compare/v2.2.1...v2.3.0) (2026-05-05)
+
+## v2.3.0
+
+
+### Bug Fixes
+
+* **autoship:** harden release and Hermes runtime ([7cc644a](https://github.com/Maleick/AutoShip/commit/7cc644a96db8fad50c81f70eec492246e28f6714))
+* **hermes:** add gh CLI instructions to HERMES_PROMPT.md ([#318](https://github.com/Maleick/AutoShip/issues/318)) ([7e90063](https://github.com/Maleick/AutoShip/commit/7e90063f9485fdada8d849bb289bc0b234e84608))
+* **hermes:** correct workspace counting in auto-prune and protect queued workspaces ([3cedb63](https://github.com/Maleick/AutoShip/commit/3cedb63b3cb014fc9d7887babe3cc12bf1a66005))
+* **hermes:** correct workspace counting in auto-prune and protect queued workspaces ([#329](https://github.com/Maleick/AutoShip/issues/329)) ([2e84802](https://github.com/Maleick/AutoShip/commit/2e8480256ebbbeddb81cbe3728863b761dc5b6eb))
+* **hermes:** extract model ID from router output correctly ([66405d9](https://github.com/Maleick/AutoShip/commit/66405d97ce038a140cb2d5e281e07a8d8355045f))
+* **hermes:** proper delegate_task dispatch with timeout and config-driven max_concurrent ([90df8b9](https://github.com/Maleick/AutoShip/commit/90df8b9ed9bbbd2fe91b4fa9fac71bb9ffbb6e86))
+* **hermes:** respect MODEL_OVERRIDE parameter for complex tasks ([3ffac9a](https://github.com/Maleick/AutoShip/commit/3ffac9a5af5d2ea991bb8113d30df7fe8e2e036b))
+* **hooks:** enforce clean shell verification ([002dd32](https://github.com/Maleick/AutoShip/commit/002dd32150396f50200ef0a16c32ac0899d598b1))
+* **hooks:** Hermes robustness fixes — set -e guards, model validation, auto-prune portability, label alignment ([6a2ba52](https://github.com/Maleick/AutoShip/commit/6a2ba520e31a2c56ee5215a5717252369a40d549)), closes [#322](https://github.com/Maleick/AutoShip/issues/322) [#323](https://github.com/Maleick/AutoShip/issues/323) [#324](https://github.com/Maleick/AutoShip/issues/324)
+* **runner:** add macOS gtimeout support, fix status file path ([c1dd32e](https://github.com/Maleick/AutoShip/commit/c1dd32eadd054f71cb96688be0cbd7660d3050ef))
+* **runner:** auto-mark COMPLETE after successful hermes chat ([aeb4a7f](https://github.com/Maleick/AutoShip/commit/aeb4a7fe4894b9e78f5ab2154f4e7d0a6cd6a5f3))
+* **runner:** correct hermes chat CLI syntax and status file path ([c0aeedd](https://github.com/Maleick/AutoShip/commit/c0aeeddf97d3e5eba4b8b4889c604820295b4bb9))
+* **runner:** detach workers from terminal session ([05c9378](https://github.com/Maleick/AutoShip/commit/05c93788f571f927bb0b11e6e2b20a8a3f15050e))
+* **runner:** ensure background workers survive parent exit ([71dd583](https://github.com/Maleick/AutoShip/commit/71dd583297cb9349a181780d70263aa488ee9abb))
+* **runner:** fix worktree detection, status checks, and env var defaults ([bb5fdd7](https://github.com/Maleick/AutoShip/commit/bb5fdd7bd9d7ece76e6c0b268d13d726c86e0792))
+* **runner:** remove wait, fire-and-forget dispatch ([f045da7](https://github.com/Maleick/AutoShip/commit/f045da7d29697c18741a190e9d5d0bdf8a634ea5))
+* **runner:** use absolute paths for AUTOSHIP_DIR ([5206a74](https://github.com/Maleick/AutoShip/commit/5206a74f6a7c244f88024076f694ed36180e7f5f))
+
+
+### Features
+
+* **assets:** add runtime icons to banner SVG ([9fb8b3c](https://github.com/Maleick/AutoShip/commit/9fb8b3cb4aeeebdbdf0c578f1a558d0e76d5df36)), closes [#hermes-support](https://github.com/Maleick/AutoShip/issues/hermes-support) [#branding](https://github.com/Maleick/AutoShip/issues/branding)
+* **assets:** complete banner SVG rework from scratch ([562e1b0](https://github.com/Maleick/AutoShip/commit/562e1b06e26c42ee0b9e00904b2b5b9a58413265)), closes [#branding](https://github.com/Maleick/AutoShip/issues/branding) [#hermes-support](https://github.com/Maleick/AutoShip/issues/hermes-support)
+* **bridge:** Kira-Kara Discord cross-agent communication ([e6dade1](https://github.com/Maleick/AutoShip/commit/e6dade132559758398cd24c8708961f00c014a76)), closes [#vanguard](https://github.com/Maleick/AutoShip/issues/vanguard)
+* **hermes:** add auto-prune with configurable thresholds ([#320](https://github.com/Maleick/AutoShip/issues/320)) ([be66595](https://github.com/Maleick/AutoShip/commit/be6659593b1dad45c43c2d2c0609b857566c1abd))
+* **hermes:** add automatic worktree cleanup after burn-down batches ([#317](https://github.com/Maleick/AutoShip/issues/317)) ([3e88b94](https://github.com/Maleick/AutoShip/commit/3e88b9433b005a37ec22a6da1adf00fafd265473))
+* **hermes:** add delegate_task mode for inside-session execution ([52ac20e](https://github.com/Maleick/AutoShip/commit/52ac20ed1ff8feca78a324aa457a88633ce1886a))
+* **hermes:** add Hermes agent runtime support ([14cc45b](https://github.com/Maleick/AutoShip/commit/14cc45b577c9a0853c169eda50f516ef991d584e))
+* **hermes:** add post-merge cleanup hook ([#319](https://github.com/Maleick/AutoShip/issues/319)) ([7d60487](https://github.com/Maleick/AutoShip/commit/7d604876eb5e58513c47b3b1434f242fa5dde30e))
+* **hermes:** auto-close issues after burn-down completion ([d59ece8](https://github.com/Maleick/AutoShip/commit/d59ece884706b2574139e9bc0eecc7a928abf294))
+* **hermes:** intelligent model routing based on task analysis ([7e3c6ae](https://github.com/Maleick/AutoShip/commit/7e3c6aec8e1781dd940af66861e534e02c96c592))
+* **hermes:** intelligent model routing based on task analysis ([#330](https://github.com/Maleick/AutoShip/issues/330)) ([858b922](https://github.com/Maleick/AutoShip/commit/858b922719132a9ccf591c4bd20aa5b290667f68))
+* **hermes:** wire model routing, add Kara skill, cleanup hooks ([dc9e1f6](https://github.com/Maleick/AutoShip/commit/dc9e1f6f9fabe9f5acc825b77ed9539821df9ea1)), closes [#317](https://github.com/Maleick/AutoShip/issues/317)
+
 # Changelog
 
 ## v2.2.1

@@ -5,9 +5,18 @@ FIX=false
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --fix) FIX=true; shift ;;
-    --repo) REPO_ROOT="$2"; shift 2 ;;
-    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+    --fix)
+      FIX=true
+      shift
+      ;;
+    --repo)
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -20,7 +29,10 @@ report() {
   printf 'DRIFT: %s\n' "$1"
 }
 
-[[ -f "$STATE_FILE" ]] || { echo "No .autoship/state.json"; exit 0; }
+[[ -f "$STATE_FILE" ]] || {
+  echo "No .autoship/state.json"
+  exit 0
+}
 
 seen=$(mktemp)
 trap 'rm -f "$seen"' EXIT
@@ -33,7 +45,7 @@ if [[ -d "$WORKSPACES_DIR" ]]; then
     if grep -qx "$issue_num" "$seen" 2>/dev/null; then
       report "duplicate workspace for issue #$issue_num"
     fi
-    printf '%s\n' "$issue_num" >> "$seen"
+    printf '%s\n' "$issue_num" >>"$seen"
     if ! jq -e --arg key "$issue_key" '.issues[$key] != null' "$STATE_FILE" >/dev/null 2>&1; then
       report "$issue_key workspace exists but state.json has no issue entry"
     fi
@@ -42,7 +54,7 @@ if [[ -d "$WORKSPACES_DIR" ]]; then
       if [[ "$state" == "CLOSED" || "$state" == "missing" ]]; then
         report "$issue_key is in-flight locally but GitHub state is $state"
         if [[ "$FIX" == true ]]; then
-          printf 'BLOCKED\n' > "$dir/status"
+          printf 'BLOCKED\n' >"$dir/status"
           bash "$REPO_ROOT/hooks/update-state.sh" set-blocked "$issue_key" reason="audit drift: GitHub state $state" >/dev/null 2>&1 || true
         fi
       fi

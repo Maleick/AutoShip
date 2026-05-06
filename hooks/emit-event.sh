@@ -35,7 +35,7 @@ fi
 
 if [[ ! -f "$QUEUE" ]] || ! jq -e 'type == "array"' "$QUEUE" >/dev/null 2>&1; then
   QUEUE_TMP=$(mktemp "${QUEUE}.tmp.XXXXXX")
-  printf '[]\n' > "$QUEUE_TMP"
+  printf '[]\n' >"$QUEUE_TMP"
   mv "$QUEUE_TMP" "$QUEUE"
 fi
 touch "$LOCK"
@@ -45,7 +45,7 @@ if command -v flock >/dev/null 2>&1; then
   QUEUE_TMP=$(mktemp "${QUEUE}.tmp.XXXXXX")
   (
     flock -x 9
-    jq --argjson evt "$EVENT" '. + [$evt]' "$QUEUE" > "$QUEUE_TMP" \
+    jq --argjson evt "$EVENT" '. + [$evt]' "$QUEUE" >"$QUEUE_TMP" \
       && mv "$QUEUE_TMP" "$QUEUE"
   ) 9>"$LOCK"
 elif command -v lockf >/dev/null 2>&1; then
@@ -58,6 +58,6 @@ elif command -v lockf >/dev/null 2>&1; then
 else
   # No locking available — best-effort append
   QUEUE_TMP=$(mktemp "${QUEUE}.tmp.XXXXXX")
-  jq --argjson evt "$EVENT" '. + [$evt]' "$QUEUE" > "$QUEUE_TMP" \
+  jq --argjson evt "$EVENT" '. + [$evt]' "$QUEUE" >"$QUEUE_TMP" \
     && mv "$QUEUE_TMP" "$QUEUE"
 fi

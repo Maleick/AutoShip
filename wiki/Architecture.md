@@ -31,4 +31,4 @@ AutoShip does not require `openai/gpt-5.5`. Prefer capable free or OpenCode Go r
 
 ## Concurrency
 
-Default active worker cap: 15. Dispatch may queue more work, but the runner starts only available capacity.
+Default active worker cap: 20. Dispatch may queue more work, but the runner starts only available capacity.

@@ -30,7 +30,7 @@ trap 'status=$?; capture_e2e_failure "$status"; rm -rf "$CONFIG_HOME" "$REAL_CON
 export XDG_CONFIG_HOME="$CONFIG_HOME"
 export OPENCODE_CONFIG_DIR="$REAL_CONFIG_DIR/opencode"
 mkdir -p "$OPENCODE_CONFIG_DIR"
-cat > "$OPENCODE_CONFIG_DIR/opencode.json" <<'JSON'
+cat >"$OPENCODE_CONFIG_DIR/opencode.json" <<'JSON'
 {"plugin":["real-user-plugin"]}
 JSON
 BIN_DIR="$CONFIG_HOME/bin"
@@ -74,12 +74,12 @@ git init -q "$INSTALLED_PROJECT"
 
 [[ -f "$STATE_FILE" ]]
 [[ "$(cat "$HOOKS_FILE")" == "$REPO_ROOT/hooks" ]]
-jq -e '.config.maxConcurrentAgents == 15' "$STATE_FILE" >/dev/null
+jq -e '.config.maxConcurrentAgents == 20' "$STATE_FILE" >/dev/null
 jq -e '.cargoConcurrencyCap == 8 and .mergeStrategy == "safe" and .policyProfile == "default"' "$REPO_ROOT/.autoship/config.json" >/dev/null
 [[ -f "$REPO_ROOT/.autoship/model-history.json" ]]
-[[ -f "$REPO_ROOT/config/model-routing.json" ]]
-jq -e '[.models[] | select(.cost == "free")] | length > 0' "$REPO_ROOT/config/model-routing.json" >/dev/null
-jq -e 'all(.models[]; .id | test("^[a-z0-9._-]+/.+"))' "$REPO_ROOT/config/model-routing.json" >/dev/null
+[[ -f "$REPO_ROOT/.autoship/model-routing.json" ]]
+jq -e '[.models[] | select(.cost == "free")] | length > 0' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null
+jq -e 'all(.models[]; .id | test("^[a-z0-9._:-]+(/[a-z0-9._:-]+)?$"))' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null
 
 bash "$REPO_ROOT/hooks/opencode/test-policy.sh" >/dev/null
 

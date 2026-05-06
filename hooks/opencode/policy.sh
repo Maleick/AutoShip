@@ -12,7 +12,10 @@ detect_profile() {
   if [[ -f "$CONFIG_FILE" ]]; then
     local configured
     configured=$(jq -r '.policyProfile // empty' "$CONFIG_FILE" 2>/dev/null || true)
-    [[ -n "$configured" ]] && { printf '%s\n' "$configured"; return 0; }
+    [[ -n "$configured" ]] && {
+      printf '%s\n' "$configured"
+      return 0
+    }
   fi
   if [[ -f "$REPO_ROOT/Cargo.toml" ]] && [[ -d "$REPO_ROOT/textquest-web" || -d "$REPO_ROOT/textquest-dll" ]]; then
     printf '%s\n' textquest
@@ -68,6 +71,15 @@ config_or_policy_value() {
 case "$COMMAND" in
   profile) detect_profile ;;
   json) effective_policy_json ;;
-  value) [[ -n "$KEY" ]] || { echo "value key required" >&2; exit 2; }; config_or_policy_value "$KEY" ;;
-  *) echo "Usage: policy.sh profile|json|value KEY" >&2; exit 2 ;;
+  value)
+    [[ -n "$KEY" ]] || {
+      echo "value key required" >&2
+      exit 2
+    }
+    config_or_policy_value "$KEY"
+    ;;
+  *)
+    echo "Usage: policy.sh profile|json|value KEY" >&2
+    exit 2
+    ;;
 esac

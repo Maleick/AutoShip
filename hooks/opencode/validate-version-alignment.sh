@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
       RELEASE_TAG_FILE="$2"
       shift 2
       ;;
-    --help|-h)
+    --help | -h)
       usage
       exit 0
       ;;
@@ -48,7 +48,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 trim_file() {
-  tr -d '[:space:]' < "$1"
+  tr -d '[:space:]' <"$1"
 }
 
 record_mismatch() {

@@ -38,7 +38,7 @@ CATEGORY="${1:-usage}"
 shift
 
 case "$CATEGORY" in
-  stuck|failed_verification|reviewer_rejection|model_failure|e2e_failure|salvaged_truncation) ;;
+  stuck | failed_verification | reviewer_rejection | model_failure | e2e_failure | salvaged_truncation) ;;
   *)
     echo "Usage: $0 <category> <issue-id> [key=value ...]" >&2
     echo "Categories: stuck, failed_verification, reviewer_rejection, model_failure, e2e_failure, salvaged_truncation" >&2
@@ -154,7 +154,7 @@ jq -n \
     error_summary: $error,
     attempt: $attempt,
     timestamp: $now
-  }' > "$FAILURE_FILE"
+  }' >"$FAILURE_FILE"
 
 if [[ -x "$REPO_ROOT/hooks/opencode/item-record.sh" ]]; then
   bash "$REPO_ROOT/hooks/opencode/item-record.sh" append "$ISSUE_NUMBER" failed "$ATTEMPT" "$MODEL" "$CATEGORY: $ERROR_SUMMARY" >/dev/null 2>&1 || true
