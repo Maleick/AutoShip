@@ -1,3 +1,17 @@
+## [2.4.4](https://github.com/Maleick/AutoShip/compare/v2.4.3...v2.4.4) (2026-05-06)
+
+
+### Bug Fixes
+
+* **runner:** export GH_TOKEN and HERMES_TARGET_REPO_PATH to hermes chat subprocess ([e28fd7d](https://github.com/Maleick/AutoShip/commit/e28fd7db46831b3da802916265b11600b760fc6c))
+
+## [2.4.3](https://github.com/Maleick/AutoShip/compare/v2.4.2...v2.4.3) (2026-05-05)
+
+
+### Bug Fixes
+
+* **runner:** increase Hermes timeout from 10min to 30min ([31cfce0](https://github.com/Maleick/AutoShip/commit/31cfce0797ea731c79c8c0a9478e561ad978bfd8))
+
 ## [2.4.2](https://github.com/Maleick/AutoShip/compare/v2.4.1...v2.4.2) (2026-05-05)
 
 

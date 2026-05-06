@@ -110,6 +110,8 @@ if [[ -n "${1:-}" ]]; then
       autoship_state_set set-blocked "$ISSUE_KEY" reason="timeout_unavailable"
       exit 0
     fi
+    export GH_TOKEN="${GH_TOKEN:-}"
+    export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
     HERMES_WORKER_TIMEOUT_SECONDS="${HERMES_WORKER_TIMEOUT_SECONDS:-1800}"
     HERMES_MODEL_ARGS=()
     if [[ -n "${HERMES_MODEL:-}" ]]; then
