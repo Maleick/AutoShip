@@ -137,8 +137,9 @@ if [[ -n "${1:-}" ]]; then
 
     if [[ "$result_status" == "COMPLETE" ]]; then
       autoship_state_set set-complete "$ISSUE_KEY"
-      # Trigger PR creation
-      bash "$SCRIPT_DIR/../opencode/create-pr.sh" "$ISSUE_NUM" "$worktree_path"
+      # Trigger PR creation. Hermes workers write HERMES_RESULT.md, while the
+      # shared OpenCode PR helper defaults to AUTOSHIP_RESULT.md.
+      bash "$SCRIPT_DIR/../opencode/create-pr.sh" "$ISSUE_NUM" "$worktree_path" "$worktree_path/HERMES_RESULT.md"
     elif [[ "$result_status" == "BLOCKED" ]]; then
       autoship_state_set set-blocked "$ISSUE_KEY"
     elif [[ "$result_status" == "STUCK" ]]; then
