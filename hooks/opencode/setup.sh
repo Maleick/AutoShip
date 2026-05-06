@@ -225,7 +225,7 @@ fi
 
 if ! command -v opencode >/dev/null 2>&1; then
   # Windows detection: if we're in a POSIX shell on Windows but opencode is a PowerShell cmdlet
-  if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "${WSL_DISTRO_NAME:-}" ]] || [[ -f /proc/version && $(cat /proc/version) == *Microsoft* ]]; then
+  if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* || -n "${WSL_DISTRO_NAME:-}" ]] || [[ -f /proc/version && $(cat /proc/version) == *Microsoft* ]]; then
     echo "Error: opencode CLI is not available in this shell environment on Windows." >&2
     echo "" >&2
     echo "AutoShip provides a PowerShell setup script for Windows:" >&2
