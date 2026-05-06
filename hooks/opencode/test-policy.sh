@@ -457,6 +457,45 @@ assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$SALVAGE_REPO/.autoship/workspaces/i
 test -s "$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_RESULT.md" || fail "salvage writes AUTOSHIP_RESULT.md"
 assert_eq "2" "$(git -C "$SALVAGE_REPO/.autoship/workspaces/issue-402" rev-list --count HEAD)" "salvage commits worker changes"
 
+MARKER_ONLY_REPO="$TMP_DIR/marker-only-runner-repo"
+mkdir -p "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403" "$MARKER_ONLY_REPO/hooks/opencode" "$MARKER_ONLY_REPO/hooks" "$MARKER_ONLY_REPO/bin"
+git init -q "$MARKER_ONLY_REPO"
+cp "$SCRIPT_DIR/runner.sh" "$MARKER_ONLY_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$MARKER_ONLY_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$MARKER_ONLY_REPO/hooks/capture-failure.sh"
+chmod +x "$MARKER_ONLY_REPO/hooks/opencode/runner.sh" "$MARKER_ONLY_REPO/hooks/update-state.sh" "$MARKER_ONLY_REPO/hooks/capture-failure.sh"
+git -C "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403" init -q
+git -C "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403" config user.email autoship@example.invalid
+git -C "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403" config user.name AutoShip
+mkdir -p "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/src"
+printf 'base\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/src/lib.rs"
+git -C "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403" add src/lib.rs
+git -C "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403" commit -q -m initial
+cat >"$MARKER_ONLY_REPO/.autoship/state.json" <<'JSON'
+{"issues":{"issue-403":{"state":"queued","model":"opencode/test-free","role":"implementer","task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15,"truncationSalvage":true}}
+JSON
+printf 'QUEUED\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/status"
+printf 'test prompt\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/model"
+cat >"$MARKER_ONLY_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+printf 'paused\n' > PAUSED_REASON.txt
+printf 'retry\n' > RETRY_CONTEXT.md
+touch .autoship-event-COMPLETE.sent
+exit 0
+SH
+chmod +x "$MARKER_ONLY_REPO/bin/opencode"
+(
+  cd "$MARKER_ONLY_REPO"
+  PATH="$MARKER_ONLY_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' <"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "STUCK" "$(tr -d '[:space:]' <"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/status")" "runner rejects marker-only worker exits instead of salvaging complete"
+assert_eq "1" "$(git -C "$MARKER_ONLY_REPO/.autoship/workspaces/issue-403" rev-list --count HEAD)" "runner does not commit marker-only runtime files"
+
 TESTS_ONLY_REPO="$TMP_DIR/tests-only-runner-repo"
 mkdir -p "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" "$TESTS_ONLY_REPO/hooks/opencode" "$TESTS_ONLY_REPO/hooks" "$TESTS_ONLY_REPO/bin"
 git init -q "$TESTS_ONLY_REPO"

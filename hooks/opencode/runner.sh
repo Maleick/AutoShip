@@ -187,7 +187,7 @@ is_test_path() {
 
 is_runtime_path() {
   case "$1" in
-    AUTOSHIP_PROMPT.md | AUTOSHIP_RESULT.md | AUTOSHIP_RUNNER.log | AUTOSHIP_VERIFICATION.log | BLOCKED_REASON.txt | model | role | routing-log.txt | started_at | status | worker.pid | target-isolated | target-isolated/*) return 0 ;;
+    .autoship-event-*.sent | AUTOSHIP_PROMPT.md | AUTOSHIP_RESULT.md | AUTOSHIP_RUNNER.log | AUTOSHIP_VERIFICATION.log | BLOCKED_REASON.txt | PAUSED_REASON.txt | RETRY_CONTEXT.md | model | role | routing-log.txt | started_at | status | worker.pid | target-isolated | target-isolated/*) return 0 ;;
     *) return 1 ;;
   esac
 }
