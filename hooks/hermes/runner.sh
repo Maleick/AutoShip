@@ -110,6 +110,8 @@ if [[ -n "${1:-}" ]]; then
       autoship_state_set set-blocked "$ISSUE_KEY" reason="timeout_unavailable"
       exit 0
     fi
+    export GH_TOKEN="${GH_TOKEN:-}"
+    export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
     "$TIMEOUT_CMD" 1800 hermes chat -q "$(cat "$workspace_dir/HERMES_PROMPT.md")" --worktree --quiet || {
       exit_code=$?
       if [[ $exit_code -eq 124 ]]; then
