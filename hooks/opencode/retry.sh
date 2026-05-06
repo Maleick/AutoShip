@@ -9,13 +9,17 @@ WORKSPACE_DIR="$REPO_ROOT/.autoship/workspaces/$ISSUE_KEY"
 
 mkdir -p "$WORKSPACE_DIR"
 
-# Validate attempt is numeric
+# Validate and normalize attempt to base-10 integer
 if [[ ! "$ATTEMPT" =~ ^[0-9]+$ ]]; then
   ATTEMPT=1
+else
+  ATTEMPT=$((10#$ATTEMPT))
 fi
 
-# Cap at 5 retries (16 min delay)
-if [[ "$ATTEMPT" -gt 5 ]]; then
+# Clamp to supported retry range: 1..5
+if [[ "$ATTEMPT" -lt 1 ]]; then
+  ATTEMPT=1
+elif [[ "$ATTEMPT" -gt 5 ]]; then
   ATTEMPT=5
 fi
 
