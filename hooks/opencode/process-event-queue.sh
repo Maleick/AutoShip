@@ -224,6 +224,21 @@ verify_and_create_pr() {
   if [[ $verification_status -eq 2 ]]; then
     return 0
   fi
+
+  # Record A/B result from trusted post-verification outcome
+  local workspace model task_type ab_outcome
+  workspace="$WORKSPACES_DIR/$issue"
+  model=""
+  [[ -f "$workspace/model" ]] && model=$(tr -d '[:space:]' < "$workspace/model")
+  if [[ -n "$model" ]]; then
+    task_type="medium_code"
+    if [[ -f "$AUTOSHIP_DIR/state.json" ]]; then
+      task_type=$(jq -r --arg key "$issue" '.issues[$key].task_type // "medium_code"' "$AUTOSHIP_DIR/state.json" 2>/dev/null || echo "medium_code")
+    fi
+    ab_outcome=$(if [[ $verification_status -eq 0 ]]; then echo "pass"; else echo "fail"; fi)
+    bash "$SCRIPT_DIR/ab-test.sh" record-result "$issue" "$model" "$task_type" "$ab_outcome" >/dev/null 2>&1 || true
+  fi
+
   if [[ $verification_status -ne 0 ]]; then
     apply_state_once "$issue" set-failed blocked
     return 0

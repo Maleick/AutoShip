@@ -196,6 +196,7 @@ salvage_truncated_worker() {
     } > AUTOSHIP_RESULT.md
   fi
   echo "COMPLETE" > status
+  touch salvaged
   autoship_capture_failure salvaged_truncation "$issue_key" "error_summary=worker exited without terminal status but non-runtime changes were committed"
   return 0
 }
@@ -288,7 +289,7 @@ mark_stuck_unless_terminal() {
     *)
   error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker exited without terminal status")
   autoship_capture_failure stuck "$wid" "error_summary=$error_msg"
-      echo "COMPLETE" > status
+      echo "STUCK" > status
       ;;
   esac
 }
@@ -351,7 +352,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
           salvage_truncated_worker "$issue_id" "$REPO_ROOT" || mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
           current_status=""
           [[ -f status ]] && current_status=$(tr -d '[:space:]' < status)
-          if [[ "$current_status" == "COMPLETE" ]]; then
+          if [[ "$current_status" == "COMPLETE" ]] && [[ ! -f salvaged ]]; then
             bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$model" >/dev/null 2>&1 || true
             bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$model" >/dev/null 2>&1 || true
           else
@@ -373,7 +374,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
                 salvage_truncated_worker "$issue_id" "$REPO_ROOT" || mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
                 current_status=""
                 [[ -f status ]] && current_status=$(tr -d '[:space:]' < status)
-                if [[ "$current_status" == "COMPLETE" ]]; then
+                if [[ "$current_status" == "COMPLETE" ]] && [[ ! -f salvaged ]]; then
                   bash "$SCRIPT_DIR/metrics-collector.sh" record-complete "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
                   bash "$SCRIPT_DIR/circuit-breaker.sh" record-success "$fallback_model" >/dev/null 2>&1 || true
                 else
