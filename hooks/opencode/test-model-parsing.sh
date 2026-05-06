@@ -183,6 +183,9 @@ install_mock_opencode_models_fixture "$FREE_REPO/bin"
 assert_eq "2" "$(jq '[.models[] | select(.cost == "free")] | length' "$FREE_REPO/autoship/.autoship/model-routing.json")" "setup fixture free defaults include only free workers"
 assert_eq "opencode/nemotron-3-super-free" "$(jq -r '.defaultFallback' "$FREE_REPO/autoship/.autoship/model-routing.json")" "setup chooses strongest ranked free model as default fallback"
 assert_eq "opencode/nemotron-3-super-free" "$(jq -r '.roles.orchestrator' "$FREE_REPO/autoship/.autoship/model-routing.json")" "setup defaults role models from live free inventory"
+if ! jq -e '[.models[] | select((.max_task_types // []) | index("rust_unsafe") != null)] | length > 0' "$FREE_REPO/autoship/.autoship/model-routing.json" >/dev/null; then
+  fail "setup free defaults must include rust_unsafe-capable workers"
+fi
 if jq -e '.pools.default.models[] | select(. == "openai/gpt-5.5" or . == "openai/gpt-5.3-spark")' "$FREE_REPO/autoship/.autoship/model-routing.json" >/dev/null; then
   fail "setup default worker pool must not include paid or role models from fixture"
 fi

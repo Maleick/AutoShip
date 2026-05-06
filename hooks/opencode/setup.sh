@@ -320,9 +320,9 @@ def strength(model: str) -> int:
 def task_types(model: str) -> list[str]:
     lower = model.lower()
     if any(token in lower for token in ["nemotron-3-super", "gpt-oss-120b", "llama-3.3-70b"]):
-        return ["docs", "simple_code", "medium_code", "mechanical", "ci_fix", "complex"]
+        return ["docs", "simple_code", "medium_code", "mechanical", "ci_fix", "complex", "rust_unsafe"]
     if any(token in lower for token in ["minimax", "qwen", "glm", "kimi", "mimo"]):
-        return ["docs", "simple_code", "medium_code", "mechanical", "ci_fix"]
+        return ["docs", "simple_code", "medium_code", "mechanical", "ci_fix", "rust_unsafe"]
     if any(token in lower for token in ["ling", "gemma", "mistral", "devstral"]):
         return ["docs", "simple_code", "mechanical", "ci_fix"]
     return ["docs", "simple_code", "mechanical"]

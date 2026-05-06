@@ -41,9 +41,9 @@ autoship_state_set() {
   local action="$1"
   local issue_key="$2"
   shift 2
-  local repo_root
-  repo_root="$(autoship_repo_root)"
-  bash "$repo_root/hooks/update-state.sh" "$action" "$issue_key" "$@"
+  local hook_root
+  hook_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  bash "$hook_root/update-state.sh" "$action" "$issue_key" "$@"
 }
 
 # ── Thin failure capture wrapper ────────────────────────────────
@@ -51,9 +51,9 @@ autoship_capture_failure() {
   local category="$1"
   local issue_id="$2"
   shift 2
-  local repo_root
-  repo_root="$(autoship_repo_root)"
-  bash "$repo_root/hooks/capture-failure.sh" "$category" "$issue_id" "$@" 2>/dev/null || true
+  local hook_root
+  hook_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  bash "$hook_root/capture-failure.sh" "$category" "$issue_id" "$@" 2>/dev/null || true
 }
 
 # ── Config value reader ─────────────────────────────────────────
