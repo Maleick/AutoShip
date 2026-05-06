@@ -231,7 +231,7 @@ if ! command -v opencode >/dev/null 2>&1; then
     echo "AutoShip provides a PowerShell setup script for Windows:" >&2
     echo "  pwsh hooks/opencode/setup.ps1" >&2
     echo "  # or" >&2
-    echo "  .\\hooks\\opencode\\setup.ps1" >&2
+    echo "  .\hooks\opencode\setup.ps1" >&2
     echo "" >&2
     echo "For details see: https://github.com/Maleick/AutoShip/blob/main/INSTALL.md#windows-setup" >&2
   else
