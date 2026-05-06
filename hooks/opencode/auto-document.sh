@@ -32,30 +32,25 @@ HEADER
 
 # Extract type definitions and generate markdown
 awk '
-  /^\/\*\*/ { in_doc = 1; doc = ""; next }
+  /^\/\*\*/ {
+    doc = ""
+    line = $0
+    sub(/^\/\*\* ?/, "", line)
+    if (line ~ /\*\//) {
+      sub(/ ?\*\/.*/, "", line)
+      if (line != "") doc = doc line "\n"
+      in_doc = 0
+      next
+    }
+    in_doc = 1
+    if (line != "") doc = doc line "\n"
+    next
+  }
   /^ \*\// { in_doc = 0; next }
-  in_doc { sub(/^ \* ?/, ""); doc = doc $0 "\n"; next }
-  
-  /^export (type|interface)/ {
-    name = $3
-    sub(/:.*/, "", name)
-    sub(/\{/, "", name)
-    print "### " name
-    if (doc != "") {
-      print ""
-      print doc
-      doc = ""
-    }
-    print "```typescript"
-    print $0
-    getline
-    while ($0 !~ /^}/) {
-      print $0
-      getline
-    }
-    print $0
-    print "```"
-    print ""
+  in_doc {
+    line = $0
+    sub(/^ \* ?/, "", line)
+    if (line != "") doc = doc line "\n"
     next
   }
   
@@ -76,6 +71,28 @@ awk '
       getline
     }
     if ($0 ~ /^;/) print $0
+    print "```"
+    print ""
+    next
+  }
+  
+  /^export interface [A-Z]/ {
+    name = $3
+    sub(/\{/, "", name)
+    print "### " name
+    if (doc != "") {
+      print ""
+      print doc
+      doc = ""
+    }
+    print "```typescript"
+    print $0
+    getline
+    while ($0 !~ /^}/) {
+      print $0
+      getline
+    }
+    print $0
     print "```"
     print ""
     next
