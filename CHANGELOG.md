@@ -1,3 +1,10 @@
+## [2.4.12](https://github.com/Maleick/AutoShip/compare/v2.4.11...v2.4.12) (2026-05-06)
+
+
+### Bug Fixes
+
+* **docs:** handle single-line jsdoc in auto-doc generator ([#361](https://github.com/Maleick/AutoShip/issues/361)) ([981cd60](https://github.com/Maleick/AutoShip/commit/981cd604f954302e5b40cb991223c143d1dff031))
+
 ## [2.4.11](https://github.com/Maleick/AutoShip/compare/v2.4.10...v2.4.11) (2026-05-06)
 
 
