@@ -1,3 +1,10 @@
+## [2.4.19](https://github.com/Maleick/AutoShip/compare/v2.4.18...v2.4.19) (2026-05-06)
+
+
+### Bug Fixes
+
+* **opencode:** reject marker-only salvage ([#369](https://github.com/Maleick/AutoShip/issues/369)) ([f548fad](https://github.com/Maleick/AutoShip/commit/f548fadc709ec1e83f52cb4c30a7b46dd68b6847))
+
 ## [2.4.18](https://github.com/Maleick/AutoShip/compare/v2.4.17...v2.4.18) (2026-05-06)
 
 
