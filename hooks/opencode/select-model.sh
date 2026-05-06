@@ -54,8 +54,8 @@ if [[ "$LOG" == true ]]; then
 def hist($id):
   (($history[0] // {})[$id] // {success: 0, fail: 0});
 def circuit_open($id):
-  if ($circuit[0] // {}) | has($id) then
-    ((($circuit[0] // {})[$id].disabled_until // 0) | tonumber) > ($now | tonumber)
+  if (($circuit[0] // {}).models // {}) | has($id) then
+    ((((($circuit[0] // {}).models // {})[$id].disabled_until) // 0) | tonumber) > ($now | tonumber)
   else
     false
   end;
@@ -126,8 +126,8 @@ jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "
   def hist($id):
     (($history[0] // {})[$id] // {success: 0, fail: 0});
   def circuit_open($id):
-    if ($circuit[0] // {}) | has($id) then
-      ((($circuit[0] // {})[$id].disabled_until // 0) | tonumber) > ($now | tonumber)
+    if (($circuit[0] // {}).models // {}) | has($id) then
+      ((((($circuit[0] // {}).models // {})[$id].disabled_until) // 0) | tonumber) > ($now | tonumber)
     else
       false
     end;
