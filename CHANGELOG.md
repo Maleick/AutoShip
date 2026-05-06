@@ -1,3 +1,10 @@
+## [2.4.6](https://github.com/Maleick/AutoShip/compare/v2.4.5...v2.4.6) (2026-05-06)
+
+
+### Bug Fixes
+
+* **dispatch:** add explicit PR/commit workflow to HERMES_PROMPT.md ([9cb635f](https://github.com/Maleick/AutoShip/commit/9cb635f1daf917bb40123ce03968bcd986069490))
+
 ## [2.4.5](https://github.com/Maleick/AutoShip/compare/v2.4.4...v2.4.5) (2026-05-06)
 
 
