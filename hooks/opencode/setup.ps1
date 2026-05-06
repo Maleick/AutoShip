@@ -113,12 +113,13 @@ function Get-FreeModelRank {
 
 function Get-DefaultFreeModels {
     param([array]$AvailableIds)
-    $AvailableIds |
+    $models = $AvailableIds |
         Where-Object { Test-FreeModel $_ } |
         ForEach-Object { [PSCustomObject]@{ Score = (Get-FreeModelRank $_); Model = $_ } } |
         Sort-Object -Property Score -Descending |
-        Select-Object -ExpandProperty Model |
-        Join-String -Separator ","
+        Select-Object -ExpandProperty Model
+
+    return ($models -join ",")
 }
 
 function Get-DefaultRoleModel {
