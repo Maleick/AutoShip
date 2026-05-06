@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 ISSUE_TITLE="${1:-}"
 ISSUE_BODY="${2:-}"

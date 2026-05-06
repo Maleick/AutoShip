@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/test-fixtures.sh — Shared test fixture utilities for AutoShip tests
 # Source this file in test scripts to reduce boilerplate
+set -euo pipefail
 
 # Create a temporary test repository with standard structure
 # Usage: create_test_repo <base_dir> <repo_name>

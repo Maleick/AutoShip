@@ -116,7 +116,12 @@ if [[ -z "$CHANGED_PATHS" && -z "$COMMITTED_PATHS" ]]; then
 fi
 
 ISSUE_NUMBER="${ISSUE_KEY#issue-}"
-TITLE=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUMBER")
+# Determine target repo from state file or default to current repo
+REPO_SLUG=$(jq -r '.repo // empty' "$REPO_ROOT/.autoship/state.json" 2>/dev/null || echo "")
+if [[ -z "$REPO_SLUG" ]]; then
+  REPO_SLUG=$(git remote get-url origin 2>/dev/null | sed -E 's#^.+[:/]([^/]+/[^/]+)(\.git)?$#\1#' | sed 's/\.git$//')
+fi
+TITLE=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUMBER" --repo "$REPO_SLUG")
 BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT
 CRITERIA_FILE="$WORKTREE_PATH/acceptance-criteria.json"

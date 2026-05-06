@@ -2,6 +2,7 @@
 # lib/common.sh — Lightweight shared utilities for AutoShip hooks
 # Sourced by hooks that need common functionality
 # Minimal dependencies: bash 3.2+, jq (optional)
+set -euo pipefail
 
 # Only initialize if not already loaded
 [[ -n "${_AUTOSHIP_COMMON_LOADED:-}" ]] && return 0

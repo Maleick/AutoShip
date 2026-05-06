@@ -12,6 +12,7 @@
 # - Temp file management
 #
 # Requires: bash 3.2+, jq (optional but recommended)
+set -euo pipefail
 
 # Fail early if not sourced correctly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -5,6 +5,8 @@ ISSUE=""
 TITLE=""
 LABELS=""
 
+REPO_SLUG=""
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --issue)
@@ -19,6 +21,10 @@ while [[ $# -gt 0 ]]; do
       LABELS="$2"
       shift 2
       ;;
+    --repo)
+      REPO_SLUG="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1" >&2
       exit 2
@@ -31,11 +37,17 @@ done
   exit 2
 }
 
+# Build repo flag if specified
+REPO_FLAG=""
+if [[ -n "$REPO_SLUG" ]]; then
+  REPO_FLAG="--repo $REPO_SLUG"
+fi
+
 if [[ -z "$TITLE" ]]; then
-  TITLE=$(gh issue view "$ISSUE" --json title --jq '.title' 2>/dev/null || echo "issue $ISSUE")
+  TITLE=$(gh issue view "$ISSUE" $REPO_FLAG --json title --jq '.title' 2>/dev/null || echo "issue $ISSUE")
 fi
 if [[ -z "$LABELS" ]]; then
-  LABELS=$(gh issue view "$ISSUE" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
+  LABELS=$(gh issue view "$ISSUE" $REPO_FLAG --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
 fi
 
 labels_lower=$(printf '%s' "$LABELS" | tr '[:upper:]' '[:lower:]')
