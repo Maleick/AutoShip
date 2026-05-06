@@ -1,3 +1,10 @@
+## [2.6.1](https://github.com/Maleick/AutoShip/compare/v2.6.0...v2.6.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* **hermes:** generate fallback HERMES_RESULT.md + Windows PowerShell runner ([#371](https://github.com/Maleick/AutoShip/issues/371)) ([8b784be](https://github.com/Maleick/AutoShip/commit/8b784be282a2ff27370ae9cd33b89522b26ce73c))
+
 # [2.6.0](https://github.com/Maleick/AutoShip/compare/v2.5.0...v2.6.0) (2026-05-06)
 
 
