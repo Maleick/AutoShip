@@ -224,7 +224,19 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 
 if ! command -v opencode >/dev/null 2>&1; then
-  echo "Error: opencode is required for AutoShip workers" >&2
+  # Windows detection: if we're in a POSIX shell on Windows but opencode is a PowerShell cmdlet
+  if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "${WSL_DISTRO_NAME:-}" ]] || [[ -f /proc/version && $(cat /proc/version) == *Microsoft* ]]; then
+    echo "Error: opencode CLI is not available in this shell environment on Windows." >&2
+    echo "" >&2
+    echo "AutoShip provides a PowerShell setup script for Windows:" >&2
+    echo "  pwsh hooks/opencode/setup.ps1" >&2
+    echo "  # or" >&2
+    echo "  .\\hooks\\opencode\\setup.ps1" >&2
+    echo "" >&2
+    echo "For details see: https://github.com/Maleick/AutoShip/blob/main/INSTALL.md#windows-setup" >&2
+  else
+    echo "Error: opencode is required for AutoShip workers" >&2
+  fi
   exit 1
 fi
 
