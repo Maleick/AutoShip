@@ -24,7 +24,8 @@ Fetch and follow instructions from https://raw.githubusercontent.com/Maleick/Aut
 - Node.js 18 or newer with npm, or Bun for one-time package execution.
 - Git installed and available in your shell.
 - GitHub CLI (`gh`) authenticated with access to the target repository.
-- `jq` installed and available on `PATH`.
+- `jq` installed and available on `PATH` (Unix-like systems).
+- PowerShell 5.1 or later (Windows).
 - A GitHub repository with issues labeled `agent:ready` (OpenCode) or `autoship:ready-simple` (Hermes).
 
 ## npm Global Install
@@ -75,6 +76,23 @@ Run setup inside the repository you want AutoShip to operate on:
 ```
 
 Setup discovers live models from `opencode models`, writes `.autoship/config.json`, and writes `.autoship/model-routing.json`. Do not commit `.autoship/`; it is local runtime state.
+
+## Windows Setup
+
+On Windows, the `opencode` CLI is a PowerShell cmdlet and is not accessible from bash/WSL/MSYS2 shells. Use the PowerShell setup script instead:
+
+```powershell
+# From the target repository root:
+.\hooks\opencode\setup.ps1
+
+# Non-interactive with defaults:
+.\hooks\opencode\setup.ps1 -NoTui
+
+# Custom configuration:
+.\hooks\opencode\setup.ps1 -NoTui -MaxAgents 10 -Labels "agent:ready,needs-work"
+```
+
+The PowerShell script does not require `jq` and uses `opencode models` directly from PowerShell. All other setup steps remain the same.
 
 ## Verification
 
@@ -134,6 +152,16 @@ opencode-autoship install
 - Open the target GitHub repository in OpenCode.
 - Run `/autoship-setup` from that repository.
 - Confirm `.autoship/config.json` and `.autoship/model-routing.json` exist locally.
+
+### Setup Fails on Windows with "opencode is required"
+
+If `bash hooks/opencode/setup.sh` fails with "opencode is required" on Windows, use the PowerShell script instead:
+
+```powershell
+.\hooks\opencode\setup.ps1
+```
+
+The bash setup script cannot access the PowerShell-based `opencode` CLI. The PowerShell script handles Windows model discovery and config generation natively.
 
 ### No Issues Are Planned
 
