@@ -1,3 +1,10 @@
+## [2.4.8](https://github.com/Maleick/AutoShip/compare/v2.4.7...v2.4.8) (2026-05-06)
+
+
+### Bug Fixes
+
+* scope PR title lookup to target repo ([#356](https://github.com/Maleick/AutoShip/issues/356)) ([20fd194](https://github.com/Maleick/AutoShip/commit/20fd1946a8c0b1863874a2b4f7ddd0abfdddd4c4))
+
 ## [2.4.7](https://github.com/Maleick/AutoShip/compare/v2.4.6...v2.4.7) (2026-05-06)
 
 
