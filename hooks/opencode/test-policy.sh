@@ -1663,6 +1663,11 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   jq -e '.plugin | index("opencode-autoship")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer registers opencode-autoship plugin"
   jq -e '.plugin | index("other-plugin")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer preserves unrelated plugins"
   jq -e '.customSetting == true' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer preserves unrelated config"
+  for command in autoship autoship-setup autoship-status autoship-stop autoship-plan autoship-apply autoship-audit autoship-cancel autoship-clean autoship-dashboard autoship-retry; do
+    jq -e --arg command "$command" '.command[$command].template == ("{file:commands/" + $command + ".md}\n\n$ARGUMENTS")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer registers /$command command"
+  done
+  jq -e '.enabled_providers == ["kimi-for-coding", "nvidia", "openai", "opencode", "opencode-go", "openrouter"]' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer writes provider allowlist"
+  jq -e '.disabled_providers == ["github-copilot"]' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer disables github-copilot provider"
   test -d "$CONFIG_DIR/.autoship/hooks" || fail "package installer copies hooks"
   test -d "$CONFIG_DIR/.autoship/commands" || fail "package installer copies commands"
   test -d "$CONFIG_DIR/.autoship/skills" || fail "package installer copies skills"
