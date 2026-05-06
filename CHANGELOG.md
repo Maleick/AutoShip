@@ -1,3 +1,10 @@
+## [2.4.13](https://github.com/Maleick/AutoShip/compare/v2.4.12...v2.4.13) (2026-05-06)
+
+
+### Bug Fixes
+
+* add v2.2.0 changelog heading for version alignment ([#360](https://github.com/Maleick/AutoShip/issues/360)) ([c08f6a4](https://github.com/Maleick/AutoShip/commit/c08f6a4665d35de8df9fbfd4d54f32081b8c92fb))
+
 ## [2.4.12](https://github.com/Maleick/AutoShip/compare/v2.4.11...v2.4.12) (2026-05-06)
 
 
