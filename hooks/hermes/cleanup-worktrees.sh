@@ -52,7 +52,8 @@ for ws_dir in "$WORKSPACES_DIR"/issue-*; do
   issue_key=$(basename "$ws_dir")
   issue_num=$(echo "$issue_key" | sed 's/issue-//')
   status_file="$ws_dir/status"
-  status=$(cat "$status_file" 2>/dev/null || echo "unknown")
+  # Strip \r from CRLF line endings before reading status
+  status=$(cat "$status_file" 2>/dev/null | tr -d '\r' || echo "unknown")
 
   # Remove if: COMPLETE, BLOCKED, STUCK (terminal states)
   # Keep if: QUEUED, RUNNING (active states)

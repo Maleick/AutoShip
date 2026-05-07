@@ -206,13 +206,94 @@ if [[ ! "$running_count" =~ ^[0-9]+$ ]]; then
   running_count=0
 fi
 
+# --- STUCK retry logic: reset stale STUCK workspaces to QUEUED ---
+stuck_reset=0
+while IFS= read -r status_file; do
+  if [[ -z "$status_file" ]]; then continue; fi
+  workspace_dir=$(dirname "$status_file")
+  issue_key=$(basename "$workspace_dir")
+  # Only retry STUCK workspaces that have no active runner process
+  # and no runner.log newer than 30 minutes
+  log_file="$workspace_dir/runner.log"
+  retry_allowed=true
+  if [[ -f "$log_file" ]]; then
+    # If log exists and was modified in the last 30 minutes, do NOT retry.
+    # WSL 9pfs find -mmin is broken (always returns true for -N), so use
+    # Python stat to compute actual age in minutes.
+    log_age_min=$(python3 -c "import os,time; st=os.stat('$log_file'); print(int((time.time()-st.st_mtime)/60))" 2>/dev/null || echo "99999")
+    if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 30 ]]; then
+      # Log is recent, but if there's NO active hermes process, the log age
+      # is just from a previous run that finished. Allow retry in that case.
+      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes chat" | grep -F "$workspace_dir" || true)
+      if [[ -n "$active_hermes" ]]; then
+        retry_allowed=false
+      fi
+    fi
+  fi
+  # Also check for an active process via runner.log PID if available
+  if [[ -f "$log_file" && "$retry_allowed" == true ]]; then
+    # Look for a PID line in the log (e.g., "PID: 12345") and verify it's still running
+    pid=$(grep -m1 -oP 'PID:\s*\K[0-9]+' "$log_file" 2>/dev/null || true)
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      retry_allowed=false
+    fi
+  fi
+  # Check for an active hermes process in the workspace (process-based validation)
+  if [[ "$retry_allowed" == true ]]; then
+    # Look for any hermes chat process that has this workspace as its CWD
+    active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes chat" | grep -F "$workspace_dir" || true)
+    if [[ -n "$active_hermes" ]]; then
+      # Process is alive but status is STUCK — this is a false-positive STUCK.
+      # Reset to RUNNING so the runner doesn't keep retrying it.
+      printf 'RUNNING\n' >"$status_file"
+      echo "Corrected STUCK→RUNNING $issue_key (active hermes process detected)"
+      # Skip QUEUED retry for this workspace since it already has a live worker
+      retry_allowed=false
+    fi
+  fi
+  # Also check if the runner.log was modified in the last 5 minutes — if so, a worker may still be starting up
+  if [[ "$retry_allowed" == true && -f "$log_file" ]]; then
+    log_age_min=$(python3 -c "import os,time; st=os.stat('$log_file'); print(int((time.time()-st.st_mtime)/60))" 2>/dev/null || echo "99999")
+    if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 5 ]]; then
+      # Even if log is <5min old, if there's no active hermes process, the log
+      # is from a previous run that finished. Allow retry in that case.
+      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes chat" | grep -F "$workspace_dir" || true)
+      if [[ -n "$active_hermes" ]]; then
+        retry_allowed=false
+      fi
+    fi
+  fi
+  # NEW: If workspace has a COMPLETE result (AUTOSHIP_RESULT.md or HERMES_RESULT.md) but status is STUCK/QUEUED,
+  # skip dispatch — it's a completed workspace that was incorrectly reset.
+  if [[ "$retry_allowed" == true ]]; then
+    if [[ -f "$workspace_dir/AUTOSHIP_RESULT.md" || -f "$workspace_dir/HERMES_RESULT.md" ]]; then
+      result_header=$(head -n 5 "$workspace_dir/AUTOSHIP_RESULT.md" "$workspace_dir/HERMES_RESULT.md" 2>/dev/null | grep -i "^## Status" | head -n1 | tr -d '\r')
+      if [[ "$result_header" == *"COMPLETE"* ]]; then
+        printf 'COMPLETE\n' >"$status_file"
+        echo "Corrected QUEUED→COMPLETE $issue_key (result file shows COMPLETE)"
+        retry_allowed=false
+      fi
+    fi
+  fi
+  if [[ "$retry_allowed" == true ]]; then
+    printf 'QUEUED\n' >"$status_file"
+    stuck_reset=$((stuck_reset + 1))
+    echo "Retried STUCK→QUEUED $issue_key (no recent activity)"
+  fi
+done <<< "$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^STUCK$"' _ {} \; -print 2>/dev/null || true)"
+
+# Re-count queued after STUCK retry
+if [[ "$stuck_reset" -gt 0 ]]; then
+  queued=$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^QUEUED$"' _ {} \; -print 2>/dev/null || true)
+fi
+
 available_slots=$((MAX - running_count))
 if [[ "$available_slots" -le 0 ]]; then
   echo "Max concurrent reached: $running_count / $MAX"
   exit 0
 fi
 
-echo "Hermes runner: $running_count running, $available_slots slots available (max=$MAX)"
+echo "Hermes runner: $running_count running, $available_slots slots available (max=$MAX), $stuck_reset stuck→queued retries"
 
 # Start up to available_slots queued workspaces
 started=0
@@ -232,6 +313,8 @@ while IFS= read -r status_file; do
   elif [[ -f "$workspace_dir/AUTOSHIP_PROMPT.md" ]]; then
     prompt_file="$workspace_dir/AUTOSHIP_PROMPT.md"
   else
+    # No prompt file — skip dispatch but log why
+    echo "Skipping $issue_key: no prompt file (HERMES_PROMPT.md or AUTOSHIP_PROMPT.md)"
     continue
   fi
 
@@ -241,6 +324,51 @@ while IFS= read -r status_file; do
     if grep -q "x86_64-pc-windows-msvc" "$workspace_dir/.cargo/config.toml" 2>/dev/null; then
       is_windows_repo=true
     fi
+  fi
+
+  # --- Prompt file discovery: look in workspace_dir and in the actual git worktree ---
+  prompt_file=""
+  if [[ -f "$workspace_dir/HERMES_PROMPT.md" ]]; then
+    prompt_file="$workspace_dir/HERMES_PROMPT.md"
+  elif [[ -f "$workspace_dir/AUTOSHIP_PROMPT.md" ]]; then
+    prompt_file="$workspace_dir/AUTOSHIP_PROMPT.md"
+  fi
+  # If no prompt in workspace_dir, resolve the real git worktree path for this issue
+  # and look there.  The workspace_dir may be a bare status container (issue-3059)
+  # or a full worktree checkout (issue-3057).
+  if [[ -z "$prompt_file" ]]; then
+    ISSUE_NUM=$(echo "$issue_key" | sed 's/issue-//')
+    worktree_path=""
+    HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
+    if [[ -n "$HERMES_TARGET_REPO_PATH" ]]; then
+      worktree_path=$(git -C "$HERMES_TARGET_REPO_PATH" worktree list --porcelain 2>/dev/null | grep -B1 "autoship/issue-${ISSUE_NUM}$" | grep "^worktree " | awk '{print $2}' || echo "")
+    fi
+    if [[ -z "$worktree_path" || ! -d "$worktree_path" ]]; then
+      for base in "$REPO_ROOT/.autoship/workspaces" "$REPO_ROOT/.worktrees" "$HOME/Projects/AutoShip/.autoship/workspaces" "$HERMES_TARGET_REPO_PATH/.autoship/workspaces"; do
+        if [[ -d "$base/issue-$ISSUE_NUM" ]]; then
+          worktree_path="$base/issue-$ISSUE_NUM"
+          break
+        fi
+      done
+    fi
+    if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
+      if [[ -f "$worktree_path/HERMES_PROMPT.md" ]]; then
+        prompt_file="$worktree_path/HERMES_PROMPT.md"
+      elif [[ -f "$worktree_path/AUTOSHIP_PROMPT.md" ]]; then
+        prompt_file="$worktree_path/AUTOSHIP_PROMPT.md"
+      fi
+    fi
+  fi
+
+  # Fallback: if the workspace_dir itself is a full worktree (has subdirs like textquest/),
+  # the prompt may have been consumed or renamed.  Check for any *PROMPT*.md file.
+  if [[ -z "$prompt_file" ]]; then
+    prompt_file=$(find "$workspace_dir" -maxdepth 1 -type f \( -name "*PROMPT*.md" -o -name "*prompt*.md" \) 2>/dev/null | head -n1)
+  fi
+
+  if [[ -z "$prompt_file" ]]; then
+    echo "Skipping $issue_key: no prompt file (HERMES_PROMPT.md or AUTOSHIP_PROMPT.md)"
+    continue
   fi
 
   # Mark as RUNNING before dispatch
@@ -266,12 +394,11 @@ echo "Started $started Hermes workers"
 # Don't wait — let workers run in background
 # The cron will call runner again to check progress
 
-# Auto-cleanup completed worktrees after batch
-if [[ "$started" -gt 0 ]]; then
-  echo "Running worktree cleanup..."
-  bash "$SCRIPT_DIR/cleanup-worktrees.sh" --verbose
+# Auto-cleanup completed worktrees after batch — ALWAYS run, not just when started>0
+# This prevents terminal workspaces from accumulating and blocking queue replenishment
+echo "Running worktree cleanup..."
+bash "$SCRIPT_DIR/cleanup-worktrees.sh" --verbose || true
 
-  # Auto-prune if thresholds exceeded
-  echo "Checking auto-prune thresholds..."
-  bash "$SCRIPT_DIR/auto-prune.sh" || echo "Auto-prune triggered (thresholds exceeded)"
-fi
+# Auto-prune if thresholds exceeded
+echo "Checking auto-prune thresholds..."
+bash "$SCRIPT_DIR/auto-prune.sh" || echo "Auto-prune triggered (thresholds exceeded)"
