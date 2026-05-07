@@ -1,3 +1,10 @@
+## [2.6.8](https://github.com/Maleick/AutoShip/compare/v2.6.7...v2.6.8) (2026-05-07)
+
+
+### Bug Fixes
+
+* **autoship:** stabilize Hermes dispatch ([#377](https://github.com/Maleick/AutoShip/issues/377)) ([c9b8c8f](https://github.com/Maleick/AutoShip/commit/c9b8c8f05dd18c29c2852cb063de6f53f6bdf6ab))
+
 ## [2.6.7](https://github.com/Maleick/AutoShip/compare/v2.6.6...v2.6.7) (2026-05-07)
 
 
