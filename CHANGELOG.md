@@ -1,3 +1,10 @@
+## [2.6.6](https://github.com/Maleick/AutoShip/compare/v2.6.5...v2.6.6) (2026-05-07)
+
+
+### Bug Fixes
+
+* **hermes:** strip \r from all status file reads ([1758e63](https://github.com/Maleick/AutoShip/commit/1758e636aab198f0fcccb1a3507391927f078ada)), closes [4150-#4156](https://github.com/4150-/issues/4156)
+
 ## [2.6.5](https://github.com/Maleick/AutoShip/compare/v2.6.4...v2.6.5) (2026-05-07)
 
 
