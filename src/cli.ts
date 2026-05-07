@@ -252,7 +252,7 @@ async function doctor() {
   }
 
   try {
-    await access(join(autoshipDir, ".onboarded"));
+    await access(join(projectAutoshipDir, ".onboarded"));
     checks.push({ name: "onboarding", status: "PASS", message: "AutoShip is onboarded" });
   } catch {
     checks.push({ name: "onboarding", status: "WARN", message: "AutoShip has not been onboarded yet" });

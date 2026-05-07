@@ -205,7 +205,7 @@ async function doctor() {
         hasFailure = true;
     }
     try {
-        await access(join(autoshipDir, ".onboarded"));
+        await access(join(projectAutoshipDir, ".onboarded"));
         checks.push({ name: "onboarding", status: "PASS", message: "AutoShip is onboarded" });
     }
     catch {
