@@ -77,6 +77,10 @@ if grep -F -- '--base master' "$REPO_ROOT/hooks/hermes/dispatch.sh" >/dev/null; 
 fi
 grep -F 'HERMES_BASE_BRANCH' "$REPO_ROOT/hooks/hermes/dispatch.sh" >/dev/null \
   || fail "Hermes dispatch must support configurable or detected base branch"
+grep -F 'node scripts/sync-version.mjs' "$REPO_ROOT/.releaserc.json" >/dev/null \
+  || fail "release pipeline must sync VERSION after semantic-release bumps package.json"
+grep -F -- '--package @semantic-release/exec@' "$REPO_ROOT/.github/workflows/release.yml" >/dev/null \
+  || fail "release workflow must install @semantic-release/exec"
 if grep -F 'git add -A' "$REPO_ROOT/hooks/hermes/dispatch.sh" >/dev/null; then
   fail "Hermes prompt must not instruct workers to stage transient files with git add -A"
 fi
@@ -1866,6 +1870,7 @@ SH
   grep -F 'opencode-autoship install' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor failure output includes package install remediation"
   mkdir -p .autoship config
   printf '{}\n' >.autoship/config.json
+  date -u +%Y-%m-%dT%H:%M:%SZ >.autoship/.onboarded
   printf '%s\n' '{"models":[{"id":"opencode/minimax-m2.5-free"}]}' >.autoship/model-routing.json
   printf '%s\n' '{"plugin":["opencode-autoship"]}' >"$DOCTOR_CONFIG/opencode.json"
   mkdir -p "$DOCTOR_CONFIG/.autoship/hooks" "$DOCTOR_CONFIG/.autoship/commands" "$DOCTOR_CONFIG/.autoship/skills" "$DOCTOR_CONFIG/config"
@@ -1873,9 +1878,9 @@ SH
   printf '%s\n' '{"models":[{"id":"opencode/minimax-m2.5-free"}]}' >"$DOCTOR_CONFIG/config/model-routing.json"
   cp AGENTS.md "$DOCTOR_CONFIG/.autoship/AGENTS.md"
   cp VERSION "$DOCTOR_CONFIG/.autoship/VERSION"
-  date -u +%Y-%m-%dT%H:%M:%SZ >"$DOCTOR_CONFIG/.autoship/.onboarded"
   PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-pass.txt"
   grep -F '[PASS]' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor prints PASS checks"
+  grep -F '[PASS] onboarding' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor reads project onboarding marker written by setup"
   grep -F '0 failed' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor summary reports zero failures"
   grep -F 'model-inventory' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates OpenCode model inventory"
   grep -F 'gh-auth' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates GitHub auth"

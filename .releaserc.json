@@ -5,11 +5,17 @@
     "@semantic-release/release-notes-generator",
     "@semantic-release/changelog",
     "@semantic-release/npm",
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "node scripts/sync-version.mjs"
+      }
+    ],
     "@semantic-release/github",
     [
       "@semantic-release/git",
       {
-          "assets": ["CHANGELOG.md", "package.json", "package-lock.json", "VERSION"],
+        "assets": ["CHANGELOG.md", "package.json", "package-lock.json", "VERSION"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ]
