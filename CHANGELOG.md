@@ -1,3 +1,10 @@
+## [2.6.5](https://github.com/Maleick/AutoShip/compare/v2.6.4...v2.6.5) (2026-05-07)
+
+
+### Bug Fixes
+
+* **hermes:** auto-detect TextQuest workspaces when AutoShip is orchestrator ([93f4cf4](https://github.com/Maleick/AutoShip/commit/93f4cf42e5d4972782730e820c960df4b5587e2a)), closes [4150-#4156](https://github.com/4150-/issues/4156)
+
 ## [2.6.4](https://github.com/Maleick/AutoShip/compare/v2.6.3...v2.6.4) (2026-05-07)
 
 
