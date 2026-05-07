@@ -31,6 +31,17 @@ fi
 REPO_ROOT=$(autoship_repo_root) || exit 1
 cd "$REPO_ROOT"
 
+log_age_minutes() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+import time
+
+st = os.stat(sys.argv[1])
+print(int((time.time() - st.st_mtime) / 60))
+PY
+}
+
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 # Allow overriding workspaces directory via HERMES_TARGET_REPO_PATH
 # Default to TextQuest repo if AutoShip is the orchestrator (detect by repo name)
@@ -220,11 +231,11 @@ while IFS= read -r status_file; do
     # If log exists and was modified in the last 30 minutes, do NOT retry.
     # WSL 9pfs find -mmin is broken (always returns true for -N), so use
     # Python stat to compute actual age in minutes.
-    log_age_min=$(python3 -c "import os,time; st=os.stat('$log_file'); print(int((time.time()-st.st_mtime)/60))" 2>/dev/null || echo "99999")
+    log_age_min=$(log_age_minutes "$log_file" 2>/dev/null || echo "99999")
     if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 30 ]]; then
-      # Log is recent, but if there's NO active hermes process, the log age
+      # Log is recent, but if there's NO active Hermes process, the log age
       # is just from a previous run that finished. Allow retry in that case.
-      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes chat" | grep -F "$workspace_dir" || true)
+      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes" | grep -F "$workspace_dir" || true)
       if [[ -n "$active_hermes" ]]; then
         retry_allowed=false
       fi
@@ -238,10 +249,10 @@ while IFS= read -r status_file; do
       retry_allowed=false
     fi
   fi
-  # Check for an active hermes process in the workspace (process-based validation)
+  # Check for an active Hermes process in the workspace (process-based validation)
   if [[ "$retry_allowed" == true ]]; then
-    # Look for any hermes chat process that has this workspace as its CWD
-    active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes chat" | grep -F "$workspace_dir" || true)
+    # Look for any Hermes process that has this workspace as its CWD
+    active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes" | grep -F "$workspace_dir" || true)
     if [[ -n "$active_hermes" ]]; then
       # Process is alive but status is STUCK — this is a false-positive STUCK.
       # Reset to RUNNING so the runner doesn't keep retrying it.
@@ -253,11 +264,11 @@ while IFS= read -r status_file; do
   fi
   # Also check if the runner.log was modified in the last 5 minutes — if so, a worker may still be starting up
   if [[ "$retry_allowed" == true && -f "$log_file" ]]; then
-    log_age_min=$(python3 -c "import os,time; st=os.stat('$log_file'); print(int((time.time()-st.st_mtime)/60))" 2>/dev/null || echo "99999")
+    log_age_min=$(log_age_minutes "$log_file" 2>/dev/null || echo "99999")
     if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 5 ]]; then
       # Even if log is <5min old, if there's no active hermes process, the log
       # is from a previous run that finished. Allow retry in that case.
-      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes chat" | grep -F "$workspace_dir" || true)
+      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes" | grep -F "$workspace_dir" || true)
       if [[ -n "$active_hermes" ]]; then
         retry_allowed=false
       fi
@@ -280,7 +291,7 @@ while IFS= read -r status_file; do
     stuck_reset=$((stuck_reset + 1))
     echo "Retried STUCK→QUEUED $issue_key (no recent activity)"
   fi
-done <<< "$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^STUCK$"' _ {} \; -print 2>/dev/null || true)"
+done <<<"$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^STUCK$"' _ {} \; -print 2>/dev/null || true)"
 
 # Re-count queued after STUCK retry
 if [[ "$stuck_reset" -gt 0 ]]; then
@@ -307,16 +318,6 @@ while IFS= read -r status_file; do
 
   workspace_dir=$(dirname "$status_file")
   issue_key=$(basename "$workspace_dir")
-
-  if [[ -f "$workspace_dir/HERMES_PROMPT.md" ]]; then
-    prompt_file="$workspace_dir/HERMES_PROMPT.md"
-  elif [[ -f "$workspace_dir/AUTOSHIP_PROMPT.md" ]]; then
-    prompt_file="$workspace_dir/AUTOSHIP_PROMPT.md"
-  else
-    # No prompt file — skip dispatch but log why
-    echo "Skipping $issue_key: no prompt file (HERMES_PROMPT.md or AUTOSHIP_PROMPT.md)"
-    continue
-  fi
 
   # Check if this is a Windows-target repo (has .cargo/config.toml with x86_64-pc-windows-msvc)
   is_windows_repo=false

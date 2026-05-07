@@ -62,12 +62,34 @@ if ! grep -A4 'actions/setup-node@v4' "$REPO_ROOT/.github/workflows/release.yml"
 fi
 grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" >/dev/null \
   || fail "check.sh syntax check must include Hermes hooks"
+grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" | grep -F 'shellcheck' >/dev/null \
+  || fail "check.sh shellcheck must include Hermes hooks"
 if grep -Eq 'DELEGATED|DELEGATE_TASK_READY|Parent agent should now call delegate_task' "$REPO_ROOT/hooks/hermes/runner.sh"; then
   fail "Hermes runner must execute production work instead of writing delegate_task markers"
 fi
 if grep -F 'hermes chat' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
   fail "Hermes runner must use cron dispatch instead of hermes chat"
 fi
+if grep -F 'python3 -c "import os,time; st=os.stat(' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
+  fail "Hermes runner must pass log paths to Python safely"
+fi
+if grep -F 'COMPLETE | BLOCKED | STUCK | unknown)' "$REPO_ROOT/hooks/hermes/cleanup-worktrees.sh" >/dev/null; then
+  fail "Hermes cleanup must not delete retryable STUCK workspaces"
+fi
+if grep -F 'PLUGIN_URL="file://$PLUGIN_DEST"' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null; then
+  fail "source install must not register copied plugin with broken relative imports"
+fi
+if grep -F 'PLUGIN_URL="file://$REPO_ROOT/plugins/autoship.ts"' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null; then
+  fail "source install must not register mutable checkout plugin paths"
+fi
+grep -F 'pathToFileURL' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null \
+  || fail "source install must write encoded file plugin URLs"
+grep -F 'contains("autoship")) | not' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null \
+  || fail "source install must remove legacy AutoShip file plugin registrations"
+grep -F '. != "opencode-autoship@latest"' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null \
+  || fail "source install must remove legacy opencode-autoship@latest registrations"
+grep -F 'cp -R "$src/src" "$AUTOSHIP_HOME/src"' "$REPO_ROOT/hooks/opencode/sync-release.sh" >/dev/null \
+  || fail "source install must sync plugin source dependencies into config-owned assets"
 grep -F 'hermes cron create' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
   || fail "Hermes runner must create one-shot cronjobs"
 grep -F 'current_status" == "STUCK"' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \

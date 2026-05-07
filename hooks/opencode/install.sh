@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-for dep in jq gh; do
+for dep in jq gh node; do
   if ! command -v "$dep" >/dev/null 2>&1; then
     echo "Error: $dep is required" >&2
     exit 1
@@ -20,7 +20,10 @@ fi
 PLUGIN_DIR="$CONFIG_DIR/plugins"
 PLUGIN_DEST="$PLUGIN_DIR/autoship.ts"
 CONFIG_FILE="$CONFIG_DIR/opencode.json"
-PLUGIN_URL="file://$PLUGIN_DEST"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+AUTOSHIP_HOME="$CONFIG_DIR/.autoship"
+PLUGIN_PATH="$AUTOSHIP_HOME/plugins/autoship.ts"
+PLUGIN_URL="$(node -e 'const { pathToFileURL } = require("url"); console.log(pathToFileURL(process.argv[1]).href)' "$PLUGIN_PATH")"
 
 mkdir -p "$PLUGIN_DIR"
 
@@ -38,7 +41,9 @@ else
     if has("plugin") and (.plugin | type != "array") then
       error("opencode.json plugin must be an array")
     else
-      .plugin = ((.plugin // []) | if index($plugin) then . else . + [$plugin] end)
+      .plugin = ((.plugin // [])
+        | map(select((type != "string") or (. != "opencode-autoship@latest" and ((startswith("file://") and contains("autoship")) | not))))
+        | if index($plugin) then . else . + [$plugin] end)
     end
   ' "$CONFIG_FILE" >"$CONFIG_FILE.tmp"
   mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"

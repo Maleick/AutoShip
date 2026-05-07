@@ -111,14 +111,14 @@ fi
 copy_assets() {
   local src="$1"
   local managed
-  for managed in hooks skills commands plugins; do
+  for managed in hooks skills commands plugins policies src; do
     assert_not_symlink "$src/$managed"
     assert_no_source_symlinks "$src/$managed"
   done
   assert_not_symlink "$src/plugins/autoship.ts"
   rm -f "$PLUGIN_DEST"
   cp -f "$src/plugins/autoship.ts" "$PLUGIN_DEST"
-  for managed in hooks skills commands plugins; do
+  for managed in hooks skills commands plugins policies src; do
     remove_managed_path "$AUTOSHIP_HOME/$managed"
   done
   mkdir -p "$AUTOSHIP_HOME"
@@ -126,6 +126,8 @@ copy_assets() {
   cp -R "$src/skills" "$AUTOSHIP_HOME/skills"
   cp -R "$src/commands" "$AUTOSHIP_HOME/commands"
   cp -R "$src/plugins" "$AUTOSHIP_HOME/plugins"
+  cp -R "$src/policies" "$AUTOSHIP_HOME/policies"
+  cp -R "$src/src" "$AUTOSHIP_HOME/src"
   cp -R "$src/commands/." "$COMMANDS_DIR/"
   cp -R "$src/skills/." "$SKILLS_DIR/"
   assert_not_symlink "$AUTOSHIP_HOME/AGENTS.md"

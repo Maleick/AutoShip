@@ -55,10 +55,9 @@ for ws_dir in "$WORKSPACES_DIR"/issue-*; do
   # Strip \r from CRLF line endings before reading status
   status=$(cat "$status_file" 2>/dev/null | tr -d '\r' || echo "unknown")
 
-  # Remove if: COMPLETE, BLOCKED, STUCK (terminal states)
-  # Keep if: QUEUED, RUNNING (active states)
+  # Remove terminal states only. STUCK remains retryable and must be preserved.
   case "$status" in
-    COMPLETE | BLOCKED | STUCK | unknown)
+    COMPLETE | BLOCKED | unknown)
       if [[ "$DRY_RUN" == true ]]; then
         echo "[DRY-RUN] Would remove workspace: $issue_key (status=$status)"
       else
@@ -91,7 +90,11 @@ if [[ -d "$TARGET_REPO" ]]; then
     # Check if issue is still active (autoship:ready or autoship:running)
     is_active=false
     if command -v gh &>/dev/null; then
-      labels=$(gh issue view "$issue_num" --json labels --jq '[.labels[].name]' 2>/dev/null || echo "[]")
+      labels=$(gh issue view "$issue_num" --json labels --jq '[.labels[].name]' 2>/dev/null) || {
+        log "  Skipping worktree: issue-$issue_num (could not verify GitHub labels)"
+        skipped_count=$((skipped_count + 1))
+        continue
+      }
       if echo "$labels" | grep -qE "autoship:ready|autoship:running"; then
         is_active=true
       fi
