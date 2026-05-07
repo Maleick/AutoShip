@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, writeFile, readFile, copyFile, readdir, stat, lstat, access, } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
@@ -21,6 +21,9 @@ const AUTOSHIP_COMMANDS = {
 };
 const ENABLED_PROVIDERS = ["kimi-for-coding", "nvidia", "openai", "opencode", "opencode-go", "openrouter"];
 const DISABLED_PROVIDERS = ["github-copilot"];
+const LEGACY_PLUGIN_REGISTRATIONS = new Set([
+    "opencode-autoship@latest",
+]);
 function resolveConfigDir() {
     if (process.env.OPENCODE_CONFIG_DIR) {
         return process.env.OPENCODE_CONFIG_DIR;
@@ -113,11 +116,13 @@ async function install() {
         { src: join(PACKAGE_ROOT, "skills"), dest: join(configDir, "skills") },
         { src: join(PACKAGE_ROOT, "AGENTS.md"), dest: join(autoshipDir, "AGENTS.md") },
         { content: `${VERSION}\n`, dest: join(autoshipDir, "VERSION") },
+        { content: `${VERSION}\n`, dest: join(configDir, "plugins", "autoship.version") },
     ];
     for (const item of items) {
         try {
             if (item.content !== undefined) {
                 await assertWritablePath(item.dest, "OpenCode asset");
+                await mkdir(dirname(item.dest), { recursive: true });
                 await writeFile(item.dest, item.content, "utf8");
                 continue;
             }
@@ -149,6 +154,7 @@ async function install() {
     if (typeof plugins === "string") {
         plugins = [plugins];
     }
+    plugins = plugins.filter((plugin) => !isLegacyPluginRegistration(plugin));
     if (!plugins.includes(newPlugin)) {
         plugins = [...plugins, newPlugin];
     }
@@ -166,6 +172,12 @@ async function install() {
     console.log(`\nSuccessfully installed opencode-autoship ${VERSION}`);
     console.log(`Config: ${configPath}`);
     console.log("\nNext: Run 'opencode-autoship --help' to get started");
+}
+function isLegacyPluginRegistration(plugin) {
+    if (LEGACY_PLUGIN_REGISTRATIONS.has(plugin)) {
+        return true;
+    }
+    return plugin.startsWith("file://") && plugin.includes("autoship");
 }
 async function doctor() {
     console.log("opencode-autoship doctor");

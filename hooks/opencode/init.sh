@@ -22,7 +22,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
 }
 cd "$REPO_ROOT"
 
-echo "AutoShip v${AUTOSHIP_VERSION} initializing for OpenCode..."
+echo "AutoShip ${AUTOSHIP_VERSION} initializing for OpenCode..."
 
 bash "$SCRIPT_DIR/sync-release.sh"
 
