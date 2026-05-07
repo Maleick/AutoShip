@@ -1,3 +1,10 @@
+## [2.6.12](https://github.com/Maleick/AutoShip/compare/v2.6.11...v2.6.12) (2026-05-07)
+
+
+### Bug Fixes
+
+* **autoship:** harden worker readiness ([#380](https://github.com/Maleick/AutoShip/issues/380)) ([9993317](https://github.com/Maleick/AutoShip/commit/9993317a86af1c7cfd3956c477e0bd1c3350c678))
+
 ## [2.6.11](https://github.com/Maleick/AutoShip/compare/v2.6.10...v2.6.11) (2026-05-07)
 
 
