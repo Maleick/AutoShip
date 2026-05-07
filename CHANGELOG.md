@@ -1,3 +1,10 @@
+## [2.6.4](https://github.com/Maleick/AutoShip/compare/v2.6.3...v2.6.4) (2026-05-07)
+
+
+### Bug Fixes
+
+* **hermes:** handle CRLF line endings in status files ([9d393c7](https://github.com/Maleick/AutoShip/commit/9d393c78a9efa131c3de0c3d0083e68b0ee2cfd6)), closes [4150-#4156](https://github.com/4150-/issues/4156)
+
 ## [2.6.3](https://github.com/Maleick/AutoShip/compare/v2.6.2...v2.6.3) (2026-05-07)
 
 
