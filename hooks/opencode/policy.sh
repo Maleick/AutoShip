@@ -3,16 +3,22 @@ set -euo pipefail
 
 COMMAND="${1:-}"
 KEY="${2:-}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 CONFIG_FILE="$AUTOSHIP_DIR/config.json"
 POLICY_DIR="$REPO_ROOT/policies"
+PACKAGED_POLICY_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)/policies"
+
+if [[ ! -f "$POLICY_DIR/default.json" && -f "$PACKAGED_POLICY_DIR/default.json" ]]; then
+  POLICY_DIR="$PACKAGED_POLICY_DIR"
+fi
 
 detect_profile() {
   if [[ -f "$CONFIG_FILE" ]]; then
     local configured
     configured=$(jq -r '.policyProfile // empty' "$CONFIG_FILE" 2>/dev/null || true)
-    [[ -n "$configured" ]] && {
+    [[ -n "$configured" && "$configured" != "default" ]] && {
       printf '%s\n' "$configured"
       return 0
     }
