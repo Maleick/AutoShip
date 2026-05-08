@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Run full release publish (use with caution). Publishing only happens on main; on other refs semantic-release is a no-op.'
+        required: false
+        default: false
+        type: boolean
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -44,11 +51,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
-        run: >-
-          npx
-          --package semantic-release@25.0.3
-          --package @semantic-release/changelog@6.0.3
-          --package @semantic-release/github@12.0.6
-          --package @semantic-release/npm@13.1.5
-          --package @semantic-release/exec@7.1.0
-          semantic-release
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.publish }}" != "true" ]; then
+            npx \
+              --package semantic-release@25.0.3 \
+              --package @semantic-release/changelog@6.0.3 \
+              --package @semantic-release/github@12.0.6 \
+              --package @semantic-release/npm@13.1.5 \
+              --package @semantic-release/exec@7.1.0 \
+              semantic-release --dry-run --no-ci
+          else
+            npx \
+              --package semantic-release@25.0.3 \
+              --package @semantic-release/changelog@6.0.3 \
+              --package @semantic-release/github@12.0.6 \
+              --package @semantic-release/npm@13.1.5 \
+              --package @semantic-release/exec@7.1.0 \
+              semantic-release
+          fi
