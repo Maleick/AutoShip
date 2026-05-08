@@ -26,6 +26,7 @@
     "AGENTS.md",
     "VERSION",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
