@@ -1,3 +1,10 @@
+## [2.7.1](https://github.com/Maleick/AutoShip/compare/v2.7.0...v2.7.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* **hermes:** add cronjob-script-helper to write no-agent scripts to disk ([#382](https://github.com/Maleick/AutoShip/issues/382)) ([86f3d6e](https://github.com/Maleick/AutoShip/commit/86f3d6e03fe8dac3ddf199a9641373ec6b145088))
+
 # [2.7.0](https://github.com/Maleick/AutoShip/compare/v2.6.12...v2.7.0) (2026-05-07)
 
 
