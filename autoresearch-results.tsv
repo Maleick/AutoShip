@@ -1,2 +1,4 @@
 timestamp	iteration	decision	metric_value	verify_status	guard_status	hypothesis	change_summary	labels	note
 2026-05-06T13:24:50.994Z	1	keep	61	pass	pass		Remove unused REPO_ROOT assignment from hooks/opencode/install.sh to resolve its sole SC2034 ShellCheck issue		
+2026-05-08T20:20:26.681Z	2	keep	0.00	pass	pass	Adding auto_retry_stuck_workspaces to supervisor loop will eliminate stuck workspace accumulation	Added auto_retry_stuck_workspaces function to supervisor-loop.sh: resets STUCK workspaces to QUEUED after 5min cooldown with max 3 retries	supervisor,auto-retry	
+2026-05-08T20:23:27.093Z	3	keep	0.00	pass	pass	Adding automatic branch push to create-pr.sh will prevent PR creation failures due to unpushed branches	Added git push logic to create-pr.sh: checks if branch exists on origin, pushes if missing before creating PR	pr-creation,branch-push	

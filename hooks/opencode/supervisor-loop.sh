@@ -219,6 +219,51 @@ clear_stale_running_workspaces() {
   done
 }
 
+auto_retry_stuck_workspaces() {
+  [[ -d "$WORKSPACES_DIR" ]] || return 0
+  local dir issue status retry_count retry_after now_epoch stuck_at_epoch cooldown
+  cooldown="${AUTOSHIP_STUCK_COOLDOWN_SECONDS:-300}"
+  now=$(date +%s)
+  for dir in "$WORKSPACES_DIR"/*/; do
+    [[ -d "$dir" ]] || continue
+    issue=$(basename "$dir")
+    [[ "$issue" =~ ^issue-[0-9]+$ ]] || continue
+    status=$(status_of "$dir")
+    [[ "$status" == "STUCK" ]] || continue
+    
+    retry_count=0
+    [[ -f "$dir/retry_count" ]] && retry_count=$(tr -d '[:space:]' <"$dir/retry_count")
+    [[ "$retry_count" =~ ^[0-9]+$ ]] || retry_count=0
+    
+    # Max retries per workspace
+    if ((retry_count >= 3)); then
+      continue
+    fi
+    
+    # Check cooldown since last stuck event or status change
+    stuck_at_epoch=0
+    if [[ -f "$dir/.autoship-event-STUCK.sent" ]]; then
+      stuck_at_epoch=$(file_mtime_epoch "$dir/.autoship-event-STUCK.sent")
+    elif [[ -f "$dir/status" ]]; then
+      stuck_at_epoch=$(file_mtime_epoch "$dir/status")
+    fi
+    
+    if [[ "$stuck_at_epoch" =~ ^[0-9]+$ && "$stuck_at_epoch" -gt 0 ]]; then
+      local elapsed=$((now - stuck_at_epoch))
+      if ((elapsed < cooldown)); then
+        continue
+      fi
+    fi
+    
+    # Reset to QUEUED
+    printf 'QUEUED\n' >"$dir/status"
+    printf '%d\n' $((retry_count + 1)) >"$dir/retry_count"
+    rm -f "$dir/.autoship-event-STUCK.sent"
+    rm -f "$dir/BLOCKED_REASON.txt"
+    log_supervisor "auto-retry stuck workspace issue=$issue retry=$((retry_count + 1))"
+  done
+}
+
 run_hook_if_present() {
   local hook="$1"
   if [[ -x "$SCRIPT_DIR/$hook" ]]; then
@@ -283,9 +328,9 @@ supervisor_pass() {
   run_hook_if_present monitor-agents.sh
   emit_report
   clear_stale_running_workspaces
+  auto_retry_stuck_workspaces
   run_hook_if_present process-event-queue.sh
   run_hook_if_present reconcile-state.sh
-  run_hook_if_present notify-discord.sh || log_supervisor "discord notification failed"
   dispatch_missing_queued_workspaces
   run_hook_if_present runner.sh
   log_supervisor "pass finished"
