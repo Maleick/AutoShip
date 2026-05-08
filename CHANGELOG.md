@@ -1,3 +1,15 @@
+# [2.8.0](https://github.com/Maleick/AutoShip/compare/v2.7.1...v2.8.0) (2026-05-08)
+
+
+### Bug Fixes
+
+* **hermes:** use direct hermes chat execution instead of broken cron create ([5e09404](https://github.com/Maleick/AutoShip/commit/5e094046ecd0c71d0d13999775c73ff336a043fd))
+
+
+### Features
+
+* merge Kira's runner-direct-execution fix ([9cd6d23](https://github.com/Maleick/AutoShip/commit/9cd6d2300c2bdc3ba06d2bf6332c0de6497f0a4f))
+
 ## [2.7.1](https://github.com/Maleick/AutoShip/compare/v2.7.0...v2.7.1) (2026-05-08)
 
 
