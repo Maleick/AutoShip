@@ -57,7 +57,7 @@ assert_canonical_inventory
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-if ! grep -A4 'actions/setup-node@v4' "$REPO_ROOT/.github/workflows/release.yml" | grep -Eq "node-version: ['\"]?(22|24)['\"]?"; then
+if ! grep -E -A4 'actions/setup-node@v(4|6)' "$REPO_ROOT/.github/workflows/release.yml" | grep -Eq "node-version: ['\"]?(22|24)['\"]?"; then
   fail "release workflow must use Node 22 or 24 for semantic-release"
 fi
 grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" >/dev/null \
@@ -237,6 +237,7 @@ printf '{"policy":"textquest"}\n' >"$PACKAGE_VERIFY_REPO/policies/textquest.json
 printf 'agents\n' >"$PACKAGE_VERIFY_REPO/AGENTS.md"
 printf '1.0.0\n' >"$PACKAGE_VERIFY_REPO/VERSION"
 printf 'readme\n' >"$PACKAGE_VERIFY_REPO/README.md"
+printf 'changelog\n' >"$PACKAGE_VERIFY_REPO/CHANGELOG.md"
 printf 'install\n' >"$PACKAGE_VERIFY_REPO/INSTALL.md"
 printf 'license\n' >"$PACKAGE_VERIFY_REPO/LICENSE"
 printf 'install\n' >"$PACKAGE_VERIFY_REPO/.opencode/INSTALL.md"
@@ -719,6 +720,45 @@ printf '999999\n' >"$MONITOR_REPO/.autoship/workspaces/issue-997/worker.pid"
 )
 assert_eq "STUCK" "$(tr -d '[:space:]' <"$MONITOR_REPO/.autoship/workspaces/issue-997/status")" "monitor marks RUNNING workspace stuck when worker pid is no longer live"
 assert_eq "stuck" "$(jq -r '.issues["issue-997"].state' "$MONITOR_REPO/.autoship/state.json")" "monitor reconciles stale RUNNING workspace state"
+
+MONITOR_LIVE_CHILD_REPO="$TMP_DIR/monitor-live-child-repo"
+mkdir -p "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" "$MONITOR_LIVE_CHILD_REPO/hooks/opencode" "$MONITOR_LIVE_CHILD_REPO/hooks" "$MONITOR_LIVE_CHILD_REPO/bin"
+git init -q "$MONITOR_LIVE_CHILD_REPO"
+cp "$SCRIPT_DIR/monitor-agents.sh" "$MONITOR_LIVE_CHILD_REPO/hooks/opencode/monitor-agents.sh"
+cp "$SCRIPT_DIR/reconcile-state.sh" "$MONITOR_LIVE_CHILD_REPO/hooks/opencode/reconcile-state.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$MONITOR_LIVE_CHILD_REPO/hooks/update-state.sh"
+chmod +x "$MONITOR_LIVE_CHILD_REPO/hooks/opencode/monitor-agents.sh" "$MONITOR_LIVE_CHILD_REPO/hooks/opencode/reconcile-state.sh" "$MONITOR_LIVE_CHILD_REPO/hooks/update-state.sh"
+cat >"$MONITOR_LIVE_CHILD_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-999":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf '[]\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/event-queue.json"
+printf 'RUNNING\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/status"
+printf '999999\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/worker.pid"
+cat >"$MONITOR_LIVE_CHILD_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+sleep 30
+SH
+chmod +x "$MONITOR_LIVE_CHILD_REPO/bin/opencode"
+"$MONITOR_LIVE_CHILD_REPO/bin/opencode" run --model opencode/test-free "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" &
+live_child_pid=$!
+# Wait until the child is visible in ps to avoid a race on slow/loaded systems
+_live_wait=0
+while [ "$_live_wait" -lt 50 ]; do
+  kill -0 "$live_child_pid" 2>/dev/null \
+    && ps -axo command= 2>/dev/null \
+         | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \
+    && break
+  sleep 0.1
+  _live_wait=$((_live_wait + 1))
+done
+(
+  cd "$MONITOR_LIVE_CHILD_REPO"
+  bash hooks/opencode/monitor-agents.sh >/dev/null
+)
+kill "$live_child_pid" 2>/dev/null || true
+wait "$live_child_pid" 2>/dev/null || true
+assert_eq "RUNNING" "$(tr -d '[:space:]' <"$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/status")" "monitor preserves RUNNING when stale wrapper pid has live opencode child for workspace"
+
 mkdir -p "$MONITOR_REPO/.autoship/workspaces/not-an-issue"
 printf 'COMPLETE\n' >"$MONITOR_REPO/.autoship/workspaces/not-an-issue/status"
 (
@@ -807,7 +847,7 @@ touch -t 202604240000 "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/sta
 assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status")" "monitor marks dead worker complete when fresh result artifact exists"
 
 SUPERVISOR_REPO="$TMP_DIR/supervisor-repo"
-mkdir -p "$SUPERVISOR_REPO/.autoship/workspaces/issue-1101" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1102" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1103" "$SUPERVISOR_REPO/hooks/opencode" "$SUPERVISOR_REPO/hooks"
+mkdir -p "$SUPERVISOR_REPO/.autoship/workspaces/issue-1101" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1102" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1103" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1104" "$SUPERVISOR_REPO/hooks/opencode" "$SUPERVISOR_REPO/hooks"
 git init -q "$SUPERVISOR_REPO"
 cp "$SCRIPT_DIR/supervisor-loop.sh" "$SUPERVISOR_REPO/hooks/opencode/supervisor-loop.sh"
 cat >"$SUPERVISOR_REPO/hooks/opencode/monitor-agents.sh" <<'SH'
@@ -845,6 +885,18 @@ assert_eq "STUCK" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/i
 assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/issue-1103/status")" "supervisor preserves fresh results from stale RUNNING workspace"
 assert_eq $'monitor\nevents\nreconcile\nrunner' "$(cat "$SUPERVISOR_REPO/.autoship/order.log")" "supervisor runs monitor, event processing, reconcile, and runner in order"
 test -s "$SUPERVISOR_REPO/.autoship/logs/supervisor-loop.log" || fail "supervisor writes a lifecycle log"
+supervisor_report=$(
+  cd "$SUPERVISOR_REPO"
+  bash hooks/opencode/supervisor-loop.sh --once --report
+)
+case "$supervisor_report" in
+  *"complete_ready=1"*) ;;
+  *) fail "supervisor report flags complete workspaces ready for verification" ;;
+esac
+case "$supervisor_report" in
+  *"queued_dispatch_eligible=1"*) ;;
+  *) fail "supervisor report flags queued dispatch eligibility below cap" ;;
+esac
 
 QUEUE_REPO="$TMP_DIR/queue-repo"
 mkdir -p "$QUEUE_REPO/.autoship" "$QUEUE_REPO/hooks/opencode" "$QUEUE_REPO/hooks"

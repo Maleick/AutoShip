@@ -162,6 +162,19 @@ is_worker_live() {
   kill -0 "$pid" 2>/dev/null
 }
 
+has_live_opencode_child() {
+  local dir="$1" real_dir
+  real_dir=$(cd "$dir" && pwd -P 2>/dev/null || printf '%s' "$dir")
+  [[ -n "$real_dir" ]] || return 1
+  ps -axo command= 2>/dev/null | while IFS= read -r command; do
+    case "$command" in
+      *opencode*" run "*)
+        printf '%s\n' "$command"
+        ;;
+    esac
+  done | grep -F -q -- "$real_dir"
+}
+
 has_fresh_result() {
   local dir="$1"
   local result_file
@@ -179,7 +192,9 @@ reconcile_exited_worker() {
   key=$(basename "$dir")
   local status_file="$dir/status"
 
-  is_worker_live "$dir" && return 0
+  if is_worker_live "$dir" || has_live_opencode_child "$dir"; then
+    return 0
+  fi
 
   if has_fresh_result "$dir"; then
     echo "COMPLETE" >"$status_file"

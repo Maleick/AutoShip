@@ -44,4 +44,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
-        run: npx semantic-release
+        run: >-
+          npx
+          --package semantic-release@25.0.3
+          --package @semantic-release/changelog@6.0.3
+          --package @semantic-release/git@10.0.1
+          --package @semantic-release/github@12.0.6
+          --package @semantic-release/npm@13.1.5
+          --package @semantic-release/exec@7.1.0
+          semantic-release

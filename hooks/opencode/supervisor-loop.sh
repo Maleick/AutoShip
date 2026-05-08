@@ -20,13 +20,14 @@ WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 LOCK_FILE="$AUTOSHIP_DIR/supervisor-loop.lock"
 LOG_FILE="$AUTOSHIP_DIR/logs/supervisor-loop.log"
 INTERVAL_SECONDS="${AUTOSHIP_SUPERVISOR_INTERVAL_SECONDS:-30}"
+REPORT=false
 ONCE=false
 DAEMON=false
 ORIGINAL_ARGS=("$@")
 
 usage() {
   cat <<'EOF'
-Usage: supervisor-loop.sh [--once] [--daemon] [--interval SECONDS]
+Usage: supervisor-loop.sh [--once] [--daemon] [--interval SECONDS] [--report]
 
 Runs AutoShip supervision passes:
   monitor agents -> process event queue -> reconcile state -> runner refill
@@ -41,6 +42,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --daemon)
       DAEMON=true
+      shift
+      ;;
+    --report)
+      REPORT=true
       shift
       ;;
     --interval)
@@ -71,7 +76,10 @@ log_supervisor() {
 
 status_of() {
   local status_file="$1/status"
-  [[ -f "$status_file" ]] || return 1
+  [[ -f "$status_file" ]] || {
+    printf ''
+    return 0
+  }
   tr -d '[:space:]' <"$status_file" 2>/dev/null || true
 }
 
@@ -93,6 +101,94 @@ worker_is_live() {
   pid_matches_command "$pid" "$dir/worker.command"
 }
 
+has_live_opencode_child() {
+  local dir="$1" real_dir
+  real_dir=$(cd "$dir" && pwd -P 2>/dev/null || printf '%s' "$dir")
+  ps -axo command= 2>/dev/null | while IFS= read -r command; do
+    case "$command" in
+      *opencode*" run "*) ;;
+      *) continue ;;
+    esac
+    if printf '%s\n' "$command" | grep -F -- "$real_dir" >/dev/null 2>&1; then
+      printf 'found\n'
+      break
+    fi
+  done | grep -q '^found$'
+}
+
+workspace_has_live_worker() {
+  local dir="$1"
+  worker_is_live "$dir" || has_live_opencode_child "$dir"
+}
+
+max_agents() {
+  local max=""
+  if [[ -f "$AUTOSHIP_DIR/state.json" ]]; then
+    max=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$AUTOSHIP_DIR/state.json" 2>/dev/null || true)
+  fi
+  if [[ -z "$max" && -f "$AUTOSHIP_DIR/config.json" ]]; then
+    max=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
+  fi
+  [[ "$max" =~ ^[0-9]+$ ]] || max=20
+  printf '%s\n' "$max"
+}
+
+file_mtime_epoch() {
+  local file="$1"
+  stat -f %m "$file" 2>/dev/null || stat -c %Y "$file" 2>/dev/null || printf '0\n'
+}
+
+emit_report() {
+  [[ "$REPORT" == "true" ]] || return 0
+  [[ -d "$WORKSPACES_DIR" ]] || return 0
+  local max running queued complete_ready stale_running live_no_log now stale_after
+  max=$(max_agents)
+  running=0
+  queued=0
+  complete_ready=0
+  stale_running=0
+  live_no_log=0
+  now=$(date +%s)
+  stale_after="${AUTOSHIP_SUPERVISOR_STALE_LOG_SECONDS:-300}"
+  [[ "$stale_after" =~ ^[0-9]+$ ]] || stale_after=300
+
+  local dir issue status log_file mtime age
+  for dir in "$WORKSPACES_DIR"/*/; do
+    [[ -d "$dir" ]] || continue
+    issue=$(basename "$dir")
+    [[ "$issue" =~ ^issue-[0-9]+$ ]] || continue
+    status=$(status_of "$dir")
+    case "$status" in
+      RUNNING)
+        running=$((running + 1))
+        if workspace_has_live_worker "$dir"; then
+          log_file="$dir/AUTOSHIP_RUNNER.log"
+          if [[ -f "$log_file" ]]; then
+            mtime=$(file_mtime_epoch "$log_file")
+            [[ "$mtime" =~ ^[0-9]+$ ]] || mtime=0
+            age=$((now - mtime))
+            ((age > stale_after)) && live_no_log=$((live_no_log + 1))
+          else
+            live_no_log=$((live_no_log + 1))
+          fi
+        else
+          stale_running=$((stale_running + 1))
+        fi
+        ;;
+      QUEUED) queued=$((queued + 1)) ;;
+      COMPLETE) complete_ready=$((complete_ready + 1)) ;;
+    esac
+  done
+
+  local above_cap queued_eligible
+  above_cap=0
+  queued_eligible=0
+  ((running > max)) && above_cap=1
+  ((queued > 0 && running < max)) && queued_eligible=1
+  printf 'AUTOSHIP_MONITOR running=%s max=%s queued=%s complete_ready=%s stale_running=%s live_no_log=%s active_above_cap=%s queued_dispatch_eligible=%s\n' \
+    "$running" "$max" "$queued" "$complete_ready" "$stale_running" "$live_no_log" "$above_cap" "$queued_eligible"
+}
+
 has_fresh_result() {
   local dir="$1" result_file started_file="$1/started_at"
   for result_file in "$dir/AUTOSHIP_RESULT.md" "$dir/HERMES_RESULT.md"; do
@@ -111,7 +207,7 @@ clear_stale_running_workspaces() {
     [[ "$issue" =~ ^issue-[0-9]+$ ]] || continue
     status=$(status_of "$dir")
     [[ "$status" == "RUNNING" ]] || continue
-    if ! worker_is_live "$dir"; then
+    if ! workspace_has_live_worker "$dir"; then
       if has_fresh_result "$dir"; then
         printf 'COMPLETE\n' >"$dir/status"
         log_supervisor "marked stale running workspace complete issue=$issue"
@@ -135,6 +231,7 @@ run_hook_if_present() {
 supervisor_pass() {
   log_supervisor "pass started"
   run_hook_if_present monitor-agents.sh
+  emit_report
   clear_stale_running_workspaces
   run_hook_if_present process-event-queue.sh
   run_hook_if_present reconcile-state.sh
