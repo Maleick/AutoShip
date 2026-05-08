@@ -17,8 +17,8 @@ const packResult = JSON.parse(raw);
 const entries = Array.isArray(packResult) ? packResult : [packResult];
 const files = entries.flatMap((entry) => Array.isArray(entry.files) ? entry.files : []);
 
-const allowedRoots = new Set(["dist", "hooks", "commands", "skills", "plugins", "policies"]);
-const allowedFiles = new Set(["package.json", "README.md", "INSTALL.md", "LICENSE", "AGENTS.md", "VERSION"]);
+const allowedRoots = new Set(["dist", "hooks", "commands", "skills", "plugins", "policies", ".vscode"]);
+const allowedFiles = new Set(["package.json", "README.md", "INSTALL.md", "LICENSE", "AGENTS.md", "VERSION", "CHANGELOG.md", ".editorconfig", ".gitattributes"]);
 const requiredFiles = [
   "dist/index.js",
   "dist/cli.js",
@@ -27,6 +27,7 @@ const requiredFiles = [
   "LICENSE",
   "AGENTS.md",
   "VERSION",
+  "CHANGELOG.md",
   ".opencode/INSTALL.md",
   "plugins/autoship.ts",
   "hooks/opencode/install.sh",

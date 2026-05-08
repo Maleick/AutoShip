@@ -11,7 +11,6 @@
         "prepareCmd": "node scripts/sync-version.mjs"
       }
     ],
-    "@semantic-release/github",
     [
       "@semantic-release/git",
       {
