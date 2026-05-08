@@ -626,7 +626,7 @@ chmod +x "$TESTS_ONLY_REPO/bin/opencode"
   PATH="$TESTS_ONLY_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" == "STUCK" ]] && break
   sleep 1
 done
 assert_eq "STUCK" "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" "runner rejects tests-only complete results"
