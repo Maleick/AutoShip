@@ -285,6 +285,7 @@ supervisor_pass() {
   clear_stale_running_workspaces
   run_hook_if_present process-event-queue.sh
   run_hook_if_present reconcile-state.sh
+  run_hook_if_present notify-discord.sh || log_supervisor "discord notification failed"
   dispatch_missing_queued_workspaces
   run_hook_if_present runner.sh
   log_supervisor "pass finished"
