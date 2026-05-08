@@ -906,6 +906,51 @@ touch -t 202604240000 "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/sta
 )
 assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status")" "monitor marks dead worker complete when fresh result artifact exists"
 
+DISCORD_NOTIFY_REPO="$TMP_DIR/discord-notify-repo"
+mkdir -p "$DISCORD_NOTIFY_REPO/.autoship" "$DISCORD_NOTIFY_REPO/hooks/opencode" "$DISCORD_NOTIFY_REPO/bin"
+git init -q "$DISCORD_NOTIFY_REPO"
+cp "$SCRIPT_DIR/notify-discord.sh" "$DISCORD_NOTIFY_REPO/hooks/opencode/notify-discord.sh"
+chmod +x "$DISCORD_NOTIFY_REPO/hooks/opencode/notify-discord.sh"
+cat >"$DISCORD_NOTIFY_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-1":{"state":"running"},"issue-2":{"state":"queued"},"issue-3":{"state":"verifying"},"issue-4":{"state":"stuck"}},"stats":{},"config":{"maxConcurrentAgents":5}}
+JSON
+cat >"$DISCORD_NOTIFY_REPO/.autoship/config.json" <<'JSON'
+{"discordNotifyIntervalSeconds":900}
+JSON
+cat >"$DISCORD_NOTIFY_REPO/bin/curl" <<'SH'
+#!/usr/bin/env bash
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --data)
+      printf '%s\n' "$2" >"$DISCORD_CAPTURE"
+      shift 2
+      ;;
+    *) shift ;;
+  esac
+done
+exit "${DISCORD_CURL_EXIT:-0}"
+SH
+chmod +x "$DISCORD_NOTIFY_REPO/bin/curl"
+(
+  cd "$DISCORD_NOTIFY_REPO"
+  AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/test/token" DISCORD_CAPTURE="$TMP_DIR/discord-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
+)
+jq -e '.content | contains("AutoShip status for owner/repo")' "$TMP_DIR/discord-payload.json" >/dev/null || fail "Discord notifier posts repo status"
+jq -e '.content | contains("Running: 1") and contains("Queued: 1") and contains("Verifying: 1") and contains("Stuck: 1")' "$TMP_DIR/discord-payload.json" >/dev/null || fail "Discord notifier posts state counts"
+jq -e '.allowed_mentions.parse == []' "$TMP_DIR/discord-payload.json" >/dev/null || fail "Discord notifier disables mentions"
+test -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier records checkpoint state"
+rm -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json"
+(
+  cd "$DISCORD_NOTIFY_REPO"
+  AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/test/token" DISCORD_CAPTURE="$TMP_DIR/discord-failed-payload.json" DISCORD_CURL_EXIT=28 PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
+)
+test ! -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier does not checkpoint failed sends"
+(
+  cd "$DISCORD_NOTIFY_REPO"
+  AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" DISCORD_CAPTURE="$TMP_DIR/discord-invalid-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
+)
+test ! -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier does not checkpoint invalid webhook URLs"
+
 SUPERVISOR_REPO="$TMP_DIR/supervisor-repo"
 mkdir -p "$SUPERVISOR_REPO/.autoship/workspaces/issue-1101" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1102" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1103" "$SUPERVISOR_REPO/.autoship/workspaces/issue-1104" "$SUPERVISOR_REPO/hooks/opencode" "$SUPERVISOR_REPO/hooks"
 git init -q "$SUPERVISOR_REPO"
@@ -921,6 +966,11 @@ SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/reconcile-state.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'reconcile\n' >>.autoship/order.log
+SH
+cat >"$SUPERVISOR_REPO/hooks/opencode/notify-discord.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'notify\n' >>.autoship/order.log
+exit 7
 SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/classify-issue.sh" <<'SH'
 #!/usr/bin/env bash
@@ -954,7 +1004,7 @@ touch -t 202605070001 "$SUPERVISOR_REPO/.autoship/workspaces/issue-1103/AUTOSHIP
 )
 assert_eq "STUCK" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/issue-1101/status")" "supervisor marks RUNNING workspace without worker pid stuck"
 assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/issue-1103/status")" "supervisor preserves fresh results from stale RUNNING workspace"
-assert_eq $'monitor\nevents\nreconcile\nclassify:1105\ndispatch:1105:docs\nrunner' "$(cat "$SUPERVISOR_REPO/.autoship/order.log")" "supervisor runs monitor, event processing, queued materialization, reconcile, and runner in order"
+assert_eq $'monitor\nevents\nreconcile\nnotify\nclassify:1105\ndispatch:1105:docs\nrunner' "$(cat "$SUPERVISOR_REPO/.autoship/order.log")" "supervisor runs notification before materializing/refilling work"
 assert_eq "QUEUED" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/issue-1105/status")" "supervisor materializes queued state entries without workspaces"
 test -s "$SUPERVISOR_REPO/.autoship/logs/supervisor-loop.log" || fail "supervisor writes a lifecycle log"
 supervisor_report=$(

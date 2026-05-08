@@ -120,6 +120,26 @@ AutoShip maintains state in `.autoship/`:
 - `routing.json` — Task type routing metadata
 - `model-routing.json` — Live OpenCode model selections
 
+## Discord Status Notifications
+
+AutoShip can post status summaries to a Discord incoming webhook from the supervisor loop.
+
+Configure the webhook URL with an environment variable so the secret is not copied into worker worktrees:
+
+```bash
+export AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+```
+
+Optionally configure the summary interval in project config:
+
+```json
+{
+  "discordNotifyIntervalSeconds": 900
+}
+```
+
+The notifier stores its last send timestamp in `.autoship/discord-notify-state.json`.
+
 ## Routing Matrix
 
 Configure available models with setup:
