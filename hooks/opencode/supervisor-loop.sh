@@ -102,20 +102,17 @@ worker_is_live() {
 }
 
 has_live_opencode_child() {
-  local dir="$1" issue real_dir
-  issue=$(basename "$dir")
+  local dir="$1" real_dir
   real_dir=$(cd "$dir" && pwd -P 2>/dev/null || printf '%s' "$dir")
   ps -axo command= 2>/dev/null | while IFS= read -r command; do
     case "$command" in
       *opencode*" run "*) ;;
       *) continue ;;
     esac
-    case "$command" in
-      *"$real_dir"* | *"$issue"*)
-        printf 'found\n'
-        break
-        ;;
-    esac
+    if printf '%s\n' "$command" | grep -F -- "$real_dir" >/dev/null 2>&1; then
+      printf 'found\n'
+      break
+    fi
   done | grep -q '^found$'
 }
 
