@@ -181,14 +181,23 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     exit 0
   fi
 
-  # No Hermes session — try hermes chat CLI as a subprocess
+  # No Hermes session — try hermes chat CLI in headless mode
   if command -v hermes &>/dev/null; then
-    echo "Executing worker via hermes chat..."
+    echo "Executing worker via hermes chat (headless)..."
     printf 'RUNNING\n' >"$workspace_dir/status"
 
-    # Run hermes chat with the prompt file; capture exit code
+    # Use -q for single-query mode (reads prompt from file, non-interactive)
+    # Use -Q for quiet mode (no TTY/spinner, banner suppressed)
+    # Use --max-turns to prevent runaway sessions
     HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
-    hermes chat --workdir "$worktree_path" --timeout "$HERMES_TIMEOUT" < "$prompt_file" > "$workspace_dir/hermes-worker.log" 2>&1
+    HERMES_MAX_TURNS="${HERMES_WORKER_MAX_TURNS:-90}"
+    hermes chat \
+      --workdir "$worktree_path" \
+      -q "$(cat "$prompt_file")" \
+      -Q \
+      --max-turns "$HERMES_MAX_TURNS" \
+      -t terminal,file,web \
+      > "$workspace_dir/hermes-worker.log" 2>&1
     worker_exit=$?
 
     if [[ $worker_exit -eq 0 ]]; then
