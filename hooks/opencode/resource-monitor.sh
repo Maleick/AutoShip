@@ -33,14 +33,20 @@ get_mem_pct() {
   local mem_pct=""
   if command -v vm_stat >/dev/null 2>&1; then
     # macOS
-    local pages_free pages_active pages_inactive pages_wired
+    local pages_free pages_active pages_inactive pages_speculative pages_wired pages_compressor
     pages_free=$(vm_stat | awk '/Pages free/ {gsub(/\./,""); print $3}')
     pages_active=$(vm_stat | awk '/Pages active/ {gsub(/\./,""); print $3}')
     pages_inactive=$(vm_stat | awk '/Pages inactive/ {gsub(/\./,""); print $3}')
+    pages_speculative=$(vm_stat | awk '/Pages speculative/ {gsub(/\./,""); print $3}')
     pages_wired=$(vm_stat | awk '/Pages wired down/ {gsub(/\./,""); print $4}')
+    pages_compressor=$(vm_stat | awk '/Pages occupied by compressor/ {gsub(/\./,""); print $5}')
+    pages_speculative=${pages_speculative:-0}
+    pages_compressor=${pages_compressor:-0}
     local total_used total
-    total_used=$((pages_active + pages_inactive + pages_wired))
-    total=$((pages_free + total_used))
+    # Inactive and speculative pages are reclaimable cache on macOS; counting
+    # them as used falsely throttles workers on otherwise healthy systems.
+    total_used=$((pages_active + pages_wired + pages_compressor))
+    total=$((pages_free + pages_inactive + pages_speculative + total_used))
     if [[ "$total" -gt 0 ]]; then
       mem_pct=$(awk "BEGIN {printf \"%.0f\", 100 * $total_used / $total}")
     fi

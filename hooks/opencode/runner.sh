@@ -156,11 +156,11 @@ run_worker() {
     env -i \
       HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
       CARGO_TARGET_DIR="$cargo_target_dir" \
-      opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+      opencode run --dir "$PWD" --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
   else
     env -i \
       HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
-      opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+      opencode run --dir "$PWD" --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
   fi
 }
 
