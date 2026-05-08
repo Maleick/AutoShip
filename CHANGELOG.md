@@ -1,3 +1,10 @@
+## [2.9.1](https://github.com/Maleick/AutoShip/compare/v2.9.0...v2.9.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* **autoship:** align Hermes setup policy ([#384](https://github.com/Maleick/AutoShip/issues/384)) ([05ce8e2](https://github.com/Maleick/AutoShip/commit/05ce8e299f5525f2b745a8cde2edc8d705111ffc))
+
 # [2.9.0](https://github.com/Maleick/AutoShip/compare/v2.8.0...v2.9.0) (2026-05-08)
 
 
