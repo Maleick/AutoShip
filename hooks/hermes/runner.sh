@@ -133,20 +133,23 @@ if [[ -n "${1:-}" ]]; then
 
   echo "Dispatching $ISSUE_KEY in $worktree_path"
 
-  # Execute via hermes chat directly for immediate worker execution.
-  # The worker runs in background (detached) so the runner can continue.
-  if command -v hermes &>/dev/null; then
-    cd "$worktree_path"
-    export GH_TOKEN="${GH_TOKEN:-}"
-    export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
+  # Setup complete — mark workspace ready for manual delegate_task dispatch.
+  # The caller (Hermes session operator) must invoke delegate_task via
+  # the Hermes tool API with:
+  #   --workdir "$worktree_path"
+  #   --toolsets '["terminal", "file", "web"]'
+  #   --prompt "$(cat "$prompt_file")"
+  #   --timeout 600
+  cd "$worktree_path"
+  export GH_TOKEN="${GH_TOKEN:-}"
+  export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
 
-    # WINDOWS BRIDGE: For repos that require Windows-native builds (MSVC),
-    # use the windows_bridge.py script instead of direct WSL validation.
-    WINDOWS_BRIDGE="${WINDOWS_BRIDGE_PATH:-$HOME/.hermes/scripts/windows_bridge.py}"
-    if [[ -f "$WINDOWS_BRIDGE" && -f "$worktree_path/.cargo/config.toml" ]]; then
-      if grep -q "x86_64-pc-windows-msvc" "$worktree_path/.cargo/config.toml" 2>/dev/null; then
-        echo "Windows target detected — using bridge: $WINDOWS_BRIDGE"
-        bridge_instructions="
+  # WINDOWS BRIDGE: append bridge instructions to prompt file if needed
+  WINDOWS_BRIDGE="${WINDOWS_BRIDGE_PATH:-$HOME/.hermes/scripts/windows_bridge.py}"
+  if [[ -f "$WINDOWS_BRIDGE" && -f "$worktree_path/.cargo/config.toml" ]]; then
+    if grep -q "x86_64-pc-windows-msvc" "$worktree_path/.cargo/config.toml" 2>/dev/null; then
+      echo "Windows target detected — appending bridge instructions to prompt"
+      bridge_instructions="
 
 ## WINDOWS BUILD INSTRUCTIONS
 This repository requires Windows-native builds. When running cargo check or cargo test,
@@ -155,39 +158,22 @@ use the Windows bridge instead of direct invocation:
 The bridge writes PowerShell scripts to Windows temp and executes via cmd.exe /c powershell.exe -File.
 Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (lib.exe).
 "
-        cp "$prompt_file" "$workspace_dir/prompt.bak"
-        echo "$bridge_instructions" >>"$prompt_file"
-      fi
+      echo "$bridge_instructions" >>"$prompt_file"
     fi
-
-    # Run hermes chat in background with nohup, capture PID
-    log_file="$workspace_dir/runner.log"
-    (
-      cd "$worktree_path"
-      nohup hermes chat \
-        --accept-hooks \
-        < "$prompt_file" \
-        >> "$log_file" 2>&1
-    ) &
-    worker_pid=$!
-    echo "PID: $worker_pid" >> "$log_file"
-    echo "$worker_pid" > "$workspace_dir/.pid"
-
-    # Restore original prompt if we modified it
-    if [[ -f "$workspace_dir/prompt.bak" ]]; then
-      mv "$workspace_dir/prompt.bak" "$prompt_file"
-    fi
-
-    echo "Started Hermes worker PID=$worker_pid for $ISSUE_KEY"
-    echo "Logs: $log_file"
-    exit 0
-
-  else
-    echo "Hermes not available — cannot execute"
-    printf 'BLOCKED\n' >"$status_file"
-    autoship_state_set set-blocked "$ISSUE_KEY" reason="hermes_unavailable"
   fi
 
+  # Mark workspace as ready for manual dispatch
+  printf 'DELEGATE_TASK_READY\n' > "$workspace_dir/status"
+  autoship_state_set set-running "$ISSUE_KEY" agent="hermes" model="delegate_task"
+
+  echo "Workspace ready for delegate_task: $ISSUE_KEY"
+  echo "Worktree: $worktree_path"
+  echo "Prompt: $prompt_file"
+  echo "Status: DELEGATE_TASK_READY"
+  echo ""
+  echo "Dispatch command:"
+  echo "  delegate_task --workdir \"$worktree_path\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
+  exit 0
   exit 0
 fi
 
