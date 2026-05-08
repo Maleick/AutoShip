@@ -64,11 +64,12 @@ grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" >/dev/null \
   || fail "check.sh syntax check must include Hermes hooks"
 grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" | grep -F 'shellcheck' >/dev/null \
   || fail "check.sh shellcheck must include Hermes hooks"
-if grep -Eq 'DELEGATED|DELEGATE_TASK_READY|Parent agent should now call delegate_task' "$REPO_ROOT/hooks/hermes/runner.sh"; then
-  fail "Hermes runner must execute production work instead of writing delegate_task markers"
-fi
+grep -F 'DELEGATE_TASK_READY' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
+  || fail "Hermes runner setup-only mode must mark workspaces ready for manual delegate_task dispatch"
+grep -F 'delegate_task --workdir' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
+  || fail "Hermes runner setup-only mode must print manual delegate_task dispatch instructions"
 if grep -F 'hermes chat' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
-  fail "Hermes runner must use cron dispatch instead of hermes chat"
+  fail "Hermes runner setup-only mode must not use hermes chat"
 fi
 if grep -F 'python3 -c "import os,time; st=os.stat(' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
   fail "Hermes runner must pass log paths to Python safely"
@@ -126,8 +127,8 @@ grep -F '&& mv "$tmp" "$EVENT_QUEUE"' "$REPO_ROOT/hooks/opencode/monitor-agents.
   || fail "monitor must only replace event queue after successful jq write"
 grep -F 'env -i' "$REPO_ROOT/hooks/opencode/runner.sh" >/dev/null \
   || fail "runner must use an allowlisted worker environment"
-grep -F 'hermes cron create' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
-  || fail "Hermes runner must create one-shot cronjobs"
+grep -F 'DELEGATE_TASK_READY' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
+  || fail "Hermes runner must leave setup-only workspaces ready for delegate_task"
 grep -F 'current_status" == "STUCK"' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
   || fail "Hermes runner must allow retrying STUCK workspaces"
 if grep -F -- '--base master' "$REPO_ROOT/hooks/hermes/dispatch.sh" >/dev/null; then
@@ -2056,8 +2057,8 @@ assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'package.json version'
 VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment-changelog"
 mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
 cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
-perl -0pi -e 's/^## (?:\[[0-9][^\]]*\]|v[0-9][^\n]*)/## v0.0.0/mg' "$VERSION_ALIGNMENT_DIR/CHANGELOG.md"
-perl -0pi -e 's/^## v[0-9][^\n]*/## v0.0.0/m' "$VERSION_ALIGNMENT_DIR/CHANGELOG.md"
+perl -0pi -e 's/^#+ (?:\[[0-9][^\]]*\]|v[0-9][^\n]*)/## v0.0.0/mg' "$VERSION_ALIGNMENT_DIR/CHANGELOG.md"
+perl -0pi -e 's/^#+ v[0-9][^\n]*/## v0.0.0/m' "$VERSION_ALIGNMENT_DIR/CHANGELOG.md"
 cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
 printf '%s\n' "$(tr -d '[:space:]' <VERSION)" >"$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
 assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'CHANGELOG release heading'

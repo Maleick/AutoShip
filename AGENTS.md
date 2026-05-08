@@ -33,7 +33,7 @@ Hermes runtime hooks in `hooks/hermes/`:
 - `setup.sh` - Discover Hermes capabilities, write `hermes-model-routing.json`
 - `plan-issues.sh` - Plan issues for Hermes dispatch (uses `autoship:ready-simple` label)
 - `dispatch.sh` - Create worktree and write `HERMES_PROMPT.md`
-- `runner.sh` - Execute Hermes workers (delegate_task or cronjob)
+- `runner.sh` - Prepare Hermes workspaces for manual delegate_task dispatch
 - `status.sh` - Show Hermes runtime status
 - `cronjob-dispatch.sh` - Generate Hermes cronjob specs for queued issues
 
