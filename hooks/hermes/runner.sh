@@ -177,17 +177,17 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
 
   # No Hermes session - try hermes chat CLI in headless mode
   if command -v hermes &>/dev/null; then
-    echo "Executing worker via hermes chat (headless)..."
+    echo "Executing worker via delegate_task..."
     printf 'RUNNING\n' >"$workspace_dir/status"
 
-    # Use -q for single-query mode (reads prompt from file, non-interactive)
-    # Use -Q for quiet mode (no TTY/spinner, banner suppressed)
-    # Use --max-turns to prevent runaway sessions
+    # Write PID file for process tracking
+    printf '%s\n' "$$" >"$workspace_dir/runner.pid"
+
     HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
     HERMES_MAX_TURNS="${HERMES_WORKER_MAX_TURNS:-90}"
-    # Run hermes chat in the existing worktree directory.
+    # Run delegate_task in the existing worktree directory.
     # Do NOT use --worktree - the workspace is already a git worktree.
-    hermes_cmd=(hermes chat -q "$(cat "$prompt_file")" -Q --max-turns "$HERMES_MAX_TURNS" -t terminal,file,web)
+    hermes_cmd=(delegate_task --goal "$(cat "$prompt_file")" --toolsets terminal,file,web)
     if command -v timeout >/dev/null 2>&1; then
       hermes_cmd=(timeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
     elif command -v gtimeout >/dev/null 2>&1; then
@@ -196,15 +196,18 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
     "${hermes_cmd[@]}" >"$workspace_dir/hermes-worker.log" 2>&1
     worker_exit=$?
 
+    # Clean up PID file
+    rm -f "$workspace_dir/runner.pid"
+
     if [[ $worker_exit -eq 0 ]]; then
       WORKER_RESULT="COMPLETE"
-      WORKER_REASON="hermes chat completed successfully"
+      WORKER_REASON="delegate_task completed successfully"
     elif [[ $worker_exit -eq 124 ]]; then
       WORKER_RESULT="STUCK"
-      WORKER_REASON="hermes chat timed out (exit 124)"
+      WORKER_REASON="delegate_task timed out (exit 124)"
     else
       WORKER_RESULT="BLOCKED"
-      WORKER_REASON="hermes chat failed (exit $worker_exit)"
+      WORKER_REASON="delegate_task failed (exit $worker_exit)"
     fi
   fi
 
