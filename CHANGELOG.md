@@ -1,3 +1,10 @@
+## [2.9.3](https://github.com/Maleick/AutoShip/compare/v2.9.2...v2.9.3) (2026-05-08)
+
+
+### Bug Fixes
+
+* remove OpenRouter from defaults ([#386](https://github.com/Maleick/AutoShip/issues/386)) ([01797f9](https://github.com/Maleick/AutoShip/commit/01797f95eab287573c5a6187b5e641153d4ff2a4))
+
 ## [2.9.2](https://github.com/Maleick/AutoShip/compare/v2.9.1...v2.9.2) (2026-05-08)
 
 
