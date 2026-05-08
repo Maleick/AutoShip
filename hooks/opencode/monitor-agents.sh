@@ -163,21 +163,16 @@ is_worker_live() {
 }
 
 has_live_opencode_child() {
-  local dir="$1" key real_dir
-  key=$(basename "$dir")
+  local dir="$1" real_dir
   real_dir=$(cd "$dir" && pwd -P 2>/dev/null || printf '%s' "$dir")
+  [[ -n "$real_dir" ]] || return 1
   ps -axo command= 2>/dev/null | while IFS= read -r command; do
     case "$command" in
-      *opencode*" run "*) ;;
-      *) continue ;;
-    esac
-    case "$command" in
-      *"$real_dir"* | *"$key"*)
-        printf 'found\n'
-        break
+      *opencode*" run "*)
+        printf '%s\n' "$command"
         ;;
     esac
-  done | grep -q '^found$'
+  done | grep -F -q -- "$real_dir"
 }
 
 has_fresh_result() {
