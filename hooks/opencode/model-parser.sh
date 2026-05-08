@@ -8,6 +8,7 @@ normalize_model_ids() {
 is_free_model() {
   local model
   model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  [[ "$model" == openrouter/* ]] && return 1
   [[ "$model" == *":free" || "$model" == *"/free"* || "$model" == *"-free"* || "$model" == "opencode/big-pickle" || "$model" == "opencode/gpt-5-nano" ]]
 }
 
@@ -104,7 +105,6 @@ free_model_rank() {
 
   case "$model" in
     opencode/*) score=$((score + 6)) ;;
-    openrouter/*) score=$((score + 3)) ;;
   esac
 
   printf '%s\n' "$score"

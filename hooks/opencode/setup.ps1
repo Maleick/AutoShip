@@ -98,6 +98,7 @@ function Get-ModelIds {
 function Test-FreeModel {
     param([string]$Model)
     $m = $Model.ToLower()
+    if ($m.StartsWith("openrouter/")) { return $false }
     return ($m -like "*:free*" -or $m -like "*/free*" -or $m -like "*-free*" -or
             $m -eq "opencode/big-pickle" -or $m -eq "opencode/gpt-5-nano")
 }
@@ -128,7 +129,6 @@ function Get-FreeModelRank {
     }
 
     if ($m.StartsWith("opencode/")) { $score += 6 }
-    elseif ($m.StartsWith("openrouter/")) { $score += 3 }
 
     return $score
 }

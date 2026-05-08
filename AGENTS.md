@@ -9,7 +9,7 @@ See [AGENT_CATALOG.md](AGENT_CATALOG.md) for the specialized agent roles, inputs
 - **OpenCode** is the primary supported worker runtime.
 - **Hermes** is supported as an alternative runtime via `hooks/hermes/`.
 - Role models are selected from live `opencode models` inventory and `.autoship/model-routing.json`; do not assume `openai/gpt-5.5` is available or preferred.
-- Prefer capable free models first, then OpenCode Go role models when available; use Kimi/Kimmy 2.6 only through `opencode-go/*` unless the operator explicitly selects a paid Zen/OpenRouter model.
+- Prefer capable free models first, then OpenCode Go role models when available; use Kimi/Kimmy 2.6 only through `opencode-go/*` unless the operator explicitly selects another supported provider model.
 - `openai/gpt-5.5-fast` is not allowed.
 - Worker models come from live `opencode models` inventory and are routed free-first with deterministic rotation across compatible workers.
 - Default active worker cap is 20 for both OpenCode and Hermes.

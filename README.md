@@ -146,7 +146,7 @@ AutoShip also loads committed policy profiles from `policies/`. Policies enrich 
 - Queue ordering: lowest issue number first
 - Model routing (OpenCode): ranked free OpenCode models first, with deterministic rotation across compatible workers
 - Model routing (Hermes): inherits from `~/.hermes/config.yaml`, no per-issue selection
-- Role selection: best available role model from `opencode models`, preferring free models first, then OpenCode Go models; paid Zen/OpenRouter Kimi models require explicit selection
+- Role selection: best available role model from `opencode models`, preferring free models first, then OpenCode Go models; paid provider models require explicit selection
 - Free detection: `:free`/`-free` IDs and bundled free Zen models such as `opencode/big-pickle` and `opencode/gpt-5-nano`
 - Go routing: `opencode-go/*` models are included as low-cost subscription fallback models, not free models
 - Orchestrator/reviewer: prompted during first-run setup and configurable independently
