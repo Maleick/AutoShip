@@ -133,30 +133,19 @@ if [[ -n "${1:-}" ]]; then
 
   echo "Dispatching $ISSUE_KEY in $worktree_path"
 
-  # Execute via Hermes cronjob so workers get full tool access.
+  # Execute via hermes chat directly for immediate worker execution.
+  # The worker runs in background (detached) so the runner can continue.
   if command -v hermes &>/dev/null; then
     cd "$worktree_path"
     export GH_TOKEN="${GH_TOKEN:-}"
     export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
-    HERMES_MODEL_ARGS=()
-    if [[ -n "${HERMES_MODEL:-}" ]]; then
-      HERMES_MODEL_ARGS+=(--model "$HERMES_MODEL")
-    fi
-    if [[ -n "${HERMES_PROVIDER:-}" ]]; then
-      HERMES_MODEL_ARGS+=(--provider "$HERMES_PROVIDER")
-    fi
 
     # WINDOWS BRIDGE: For repos that require Windows-native builds (MSVC),
     # use the windows_bridge.py script instead of direct WSL validation.
-    # The bridge writes .ps1 scripts to Windows temp and executes via powershell -File.
     WINDOWS_BRIDGE="${WINDOWS_BRIDGE_PATH:-$HOME/.hermes/scripts/windows_bridge.py}"
     if [[ -f "$WINDOWS_BRIDGE" && -f "$worktree_path/.cargo/config.toml" ]]; then
-      # Detect Windows-targeted cargo config
       if grep -q "x86_64-pc-windows-msvc" "$worktree_path/.cargo/config.toml" 2>/dev/null; then
         echo "Windows target detected — using bridge: $WINDOWS_BRIDGE"
-        # The bridge runs cargo check on Windows host; the worker prompt tells
-        # Hermes to use it for validation when needed.
-        # Prepend bridge instructions to the prompt.
         bridge_instructions="
 
 ## WINDOWS BUILD INSTRUCTIONS
@@ -166,36 +155,31 @@ use the Windows bridge instead of direct invocation:
 The bridge writes PowerShell scripts to Windows temp and executes via cmd.exe /c powershell.exe -File.
 Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (lib.exe).
 "
-        # Append bridge instructions to prompt file temporarily
         cp "$prompt_file" "$workspace_dir/prompt.bak"
         echo "$bridge_instructions" >>"$prompt_file"
       fi
     fi
 
-    job_name="autoship-${ISSUE_KEY}-$(date +%s)"
-    deliver_target="${HERMES_DELIVER_TARGET:-origin}"
-    hermes cron create \
-      --name "$job_name" \
-      --workdir "$worktree_path" \
-      --deliver "$deliver_target" \
-      --repeat 1 \
-      "1m" \
-      "$(cat "$prompt_file")" \
-      "${HERMES_MODEL_ARGS[@]}"
-    exit_code=$?
+    # Run hermes chat in background with nohup, capture PID
+    log_file="$workspace_dir/runner.log"
+    (
+      cd "$worktree_path"
+      nohup hermes chat \
+        --accept-hooks \
+        < "$prompt_file" \
+        >> "$log_file" 2>&1
+    ) &
+    worker_pid=$!
+    echo "PID: $worker_pid" >> "$log_file"
+    echo "$worker_pid" > "$workspace_dir/.pid"
+
     # Restore original prompt if we modified it
     if [[ -f "$workspace_dir/prompt.bak" ]]; then
       mv "$workspace_dir/prompt.bak" "$prompt_file"
     fi
 
-    if [[ $exit_code -ne 0 ]]; then
-      echo "ERROR: $ISSUE_KEY cron creation exited with code $exit_code"
-      printf 'BLOCKED\n' >"$workspace_dir/status"
-      autoship_state_set set-blocked "$ISSUE_KEY" reason="cron_create_exit_$exit_code"
-      exit 0
-    fi
-
-    echo "Created Hermes cronjob $job_name for $ISSUE_KEY"
+    echo "Started Hermes worker PID=$worker_pid for $ISSUE_KEY"
+    echo "Logs: $log_file"
     exit 0
 
   else
