@@ -362,8 +362,8 @@ case "$ACTION" in
   set-queued)
     NEW_STATE="queued"
     STAT_KEY=""
-    ADD_LABEL=""
-    REMOVE_LABELS=()
+    ADD_LABEL="agent:ready"
+    REMOVE_LABELS=("autoship:in-progress" "autoship:blocked" "autoship:paused" "autoship:done")
     ;;
   set-running)
     NEW_STATE="running"

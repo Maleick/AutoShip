@@ -474,7 +474,8 @@ chmod +x "$AUTOCOMMIT_REPO/bin/opencode"
   PATH="$AUTOCOMMIT_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" == "COMPLETE" ]] && \
+    [[ "$(git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" rev-list --count HEAD)" == "2" ]] && break
   sleep 1
 done
 assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" "runner keeps complete status after auto-committing production changes"
@@ -625,7 +626,7 @@ chmod +x "$TESTS_ONLY_REPO/bin/opencode"
   PATH="$TESTS_ONLY_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" != "RUNNING" ]] && break
+  [[ "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" == "STUCK" ]] && break
   sleep 1
 done
 assert_eq "STUCK" "$(tr -d '[:space:]' <"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" "runner rejects tests-only complete results"
