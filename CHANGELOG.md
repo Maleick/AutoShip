@@ -1,3 +1,10 @@
+## [2.9.2](https://github.com/Maleick/AutoShip/compare/v2.9.1...v2.9.2) (2026-05-08)
+
+
+### Bug Fixes
+
+* recover stuck workspace retries ([#385](https://github.com/Maleick/AutoShip/issues/385)) ([3feff69](https://github.com/Maleick/AutoShip/commit/3feff69d5b432c1bd0418e7b787bb6b42a86b716))
+
 ## [2.9.1](https://github.com/Maleick/AutoShip/compare/v2.9.0...v2.9.1) (2026-05-08)
 
 
