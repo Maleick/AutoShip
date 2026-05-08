@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hermes setup runner — prepare workspaces for manual delegate_task dispatch
+# Hermes setup runner - prepare workspaces for manual delegate_task dispatch
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -70,12 +70,12 @@ if [[ -n "${1:-}" ]]; then
 
   current_status=$(cat "$status_file" 2>/dev/null | tr -d '\r\n' || echo "unknown")
   if [[ "$current_status" == "COMPLETE" || "$current_status" == "BLOCKED" ]]; then
-    echo "Issue $ISSUE_KEY status=$current_status — not dispatchable"
+    echo "Issue $ISSUE_KEY status=$current_status - not dispatchable"
     exit 0
   fi
 
   if [[ "$current_status" == "STUCK" ]]; then
-    echo "Issue $ISSUE_KEY was STUCK — resetting to QUEUED for retry"
+    echo "Issue $ISSUE_KEY was STUCK - resetting to QUEUED for retry"
     printf 'QUEUED\n' >"$status_file"
     current_status="QUEUED"
   fi
@@ -94,7 +94,7 @@ if [[ -n "${1:-}" ]]; then
     worktree_path=$(git -C "$HERMES_TARGET_REPO_PATH" worktree list --porcelain 2>/dev/null | grep -B1 "branch refs/heads/autoship/issue-${ISSUE_NUM}$" | grep "^worktree " | awk '{print $2}' || echo "")
   fi
   if [[ -z "$worktree_path" || ! -d "$worktree_path" ]]; then
-    # Fallback: search AutoShip workspace locations — include HERMES_TARGET_REPO_PATH workspaces
+    # Fallback: search AutoShip workspace locations - include HERMES_TARGET_REPO_PATH workspaces
     for base in "$REPO_ROOT/.autoship/workspaces" "$REPO_ROOT/.worktrees" "$HOME/Projects/AutoShip/.autoship/workspaces" "$HERMES_TARGET_REPO_PATH/.autoship/workspaces"; do
       if [[ -d "$base/issue-$ISSUE_NUM" ]]; then
         worktree_path="$base/issue-$ISSUE_NUM"
@@ -135,7 +135,7 @@ if [[ -n "${1:-}" ]]; then
   WINDOWS_BRIDGE="${WINDOWS_BRIDGE_PATH:-$HOME/.hermes/scripts/windows_bridge.py}"
   if [[ -f "$WINDOWS_BRIDGE" && -f "$worktree_path/.cargo/config.toml" ]]; then
     if grep -q "x86_64-pc-windows-msvc" "$worktree_path/.cargo/config.toml" 2>/dev/null; then
-      echo "Windows target detected — appending bridge instructions to prompt"
+      echo "Windows target detected - appending bridge instructions to prompt"
       bridge_instructions="
 
 ## WINDOWS BUILD INSTRUCTIONS
@@ -143,7 +143,7 @@ This repository requires Windows-native builds. When running cargo check or carg
 use the Windows bridge instead of direct invocation:
   python3 $WINDOWS_BRIDGE check
 The bridge writes PowerShell scripts to Windows temp and executes via cmd.exe /c powershell.exe -File.
-Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (lib.exe).
+Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.exe).
 "
       echo "$bridge_instructions" >>"$prompt_file"
     fi
@@ -160,7 +160,7 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
   WORKER_REASON="no execution method available"
 
   if [[ -n "${HERMES_SESSION_ID:-}" ]]; then
-    echo "Hermes session detected — executing via delegate_task..."
+    echo "Hermes session detected - executing via delegate_task..."
     # delegate_task is a Hermes tool; we cannot call it from bash.
     # Instead, write a ready marker and exit so the parent Hermes process
     # can poll for DELEGATE_TASK_READY workspaces and invoke delegate_task.
@@ -175,7 +175,7 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     exit 0
   fi
 
-  # No Hermes session — try hermes chat CLI in headless mode
+  # No Hermes session - try hermes chat CLI in headless mode
   if command -v hermes &>/dev/null; then
     echo "Executing worker via hermes chat (headless)..."
     printf 'RUNNING\n' >"$workspace_dir/status"
@@ -186,7 +186,7 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
     HERMES_MAX_TURNS="${HERMES_WORKER_MAX_TURNS:-90}"
     # Run hermes chat in the existing worktree directory.
-    # Do NOT use --worktree — the workspace is already a git worktree.
+    # Do NOT use --worktree - the workspace is already a git worktree.
     hermes_cmd=(hermes chat -q "$(cat "$prompt_file")" -Q --max-turns "$HERMES_MAX_TURNS" -t terminal,file,web)
     if command -v timeout >/dev/null 2>&1; then
       hermes_cmd=(timeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
@@ -227,7 +227,7 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
   if [[ "$WORKER_RESULT" != "COMPLETE" && "$WORKER_RESULT" != "BLOCKED" ]]; then
     commit_count=$(git -C "$worktree_path" rev-list --count autoship/issue-${ISSUE_NUM}...HEAD 2>/dev/null || echo 0)
     if [[ "$commit_count" -gt 0 ]]; then
-      # Worker made commits but didn't finish workflow — mark STUCK for retry
+      # Worker made commits but didn't finish workflow - mark STUCK for retry
       WORKER_RESULT="STUCK"
       WORKER_REASON="worker made $commit_count commit(s) but did not complete PR/status workflow"
     fi
@@ -244,7 +244,7 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     autoship_state_set set-stuck "$ISSUE_KEY" reason="$WORKER_REASON"
   fi
 
-  echo "Worker finished: $ISSUE_KEY → $WORKER_RESULT ($WORKER_REASON)"
+  printf 'Worker finished: %s -> %s (%s)\n' "$ISSUE_KEY" "$WORKER_RESULT" "$WORKER_REASON"
   echo "Log: $workspace_dir/hermes-worker.log"
   exit 0
 fi
@@ -252,8 +252,25 @@ fi
 # Batch mode: find and dispatch all queued workspaces
 # Use tr to strip \r from CRLF line endings before grepping
 queued=$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^QUEUED$"' _ {} \; -print 2>/dev/null || true)
-running=$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^RUNNING$"' _ {} \; -print 2>/dev/null || true)
-running_count=$(echo "$running" | grep -c "^$WORKSPACES_DIR" || echo 0)
+# Count running workers via PID files (more accurate than status file alone)
+running_count=0
+while IFS= read -r status_file; do
+  if [[ -z "$status_file" ]]; then continue; fi
+  workspace_dir=$(dirname "$status_file")
+  pid_file="$workspace_dir/runner.pid"
+  if [[ -f "$pid_file" ]]; then
+    pid=$(cat "$pid_file" 2>/dev/null || echo "")
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      running_count=$((running_count + 1))
+    fi
+  fi
+done <<<"$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^RUNNING$"' _ {} \; -print 2>/dev/null || true)"
+
+# Fallback: if no PID files, count by status file alone
+if [[ "$running_count" -eq 0 ]]; then
+  running=$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^RUNNING$"' _ {} \; -print 2>/dev/null || true)
+  running_count=$(echo "$running" | grep -c "^$WORKSPACES_DIR" || echo 0)
+fi
 
 if [[ ! "$running_count" =~ ^[0-9]+$ ]]; then
   running_count=0
@@ -283,12 +300,17 @@ while IFS= read -r status_file; do
       fi
     fi
   fi
-  # Also check for an active process via runner.log PID if available
-  if [[ -f "$log_file" && "$retry_allowed" == true ]]; then
-    # Look for a PID line in the log (e.g., "PID: 12345") and verify it's still running
-    pid=$(grep -m1 -oP 'PID:\s*\K[0-9]+' "$log_file" 2>/dev/null || true)
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      retry_allowed=false
+  # Check for an active runner via PID file
+  if [[ "$retry_allowed" == true ]]; then
+    pid_file="$workspace_dir/runner.pid"
+    if [[ -f "$pid_file" ]]; then
+      pid=$(cat "$pid_file" 2>/dev/null || echo "")
+      if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+        retry_allowed=false
+        # Update status to RUNNING since process is alive
+        printf 'RUNNING\n' >"$status_file"
+        printf 'Corrected STUCK to RUNNING for %s (PID %s is alive)\n' "$issue_key" "$pid"
+      fi
     fi
   fi
   # Check for an active Hermes process in the workspace (process-based validation)
@@ -296,15 +318,15 @@ while IFS= read -r status_file; do
     # Look for any Hermes process that has this workspace as its CWD
     active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes" | grep -F "$workspace_dir" || true)
     if [[ -n "$active_hermes" ]]; then
-      # Process is alive but status is STUCK — this is a false-positive STUCK.
+      # Process is alive but status is STUCK - this is a false-positive STUCK.
       # Reset to RUNNING so the runner doesn't keep retrying it.
       printf 'RUNNING\n' >"$status_file"
-      echo "Corrected STUCK→RUNNING $issue_key (active hermes process detected)"
+      printf 'Corrected STUCK to RUNNING for %s (active hermes process detected)\n' "$issue_key"
       # Skip QUEUED retry for this workspace since it already has a live worker
       retry_allowed=false
     fi
   fi
-  # Also check if the runner.log was modified in the last 5 minutes — if so, a worker may still be starting up
+  # Also check if the runner.log was modified in the last 5 minutes - if so, a worker may still be starting up
   if [[ "$retry_allowed" == true && -f "$log_file" ]]; then
     log_age_min=$(log_age_minutes "$log_file" 2>/dev/null || echo "99999")
     if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 5 ]]; then
@@ -317,13 +339,13 @@ while IFS= read -r status_file; do
     fi
   fi
   # NEW: If workspace has a COMPLETE result (AUTOSHIP_RESULT.md or HERMES_RESULT.md) but status is STUCK/QUEUED,
-  # skip dispatch — it's a completed workspace that was incorrectly reset.
+  # skip dispatch - it's a completed workspace that was incorrectly reset.
   if [[ "$retry_allowed" == true ]]; then
     if [[ -f "$workspace_dir/AUTOSHIP_RESULT.md" || -f "$workspace_dir/HERMES_RESULT.md" ]]; then
       result_header=$(head -n 5 "$workspace_dir/AUTOSHIP_RESULT.md" "$workspace_dir/HERMES_RESULT.md" 2>/dev/null | grep -i "^## Status" | head -n1 | tr -d '\r')
       if [[ "$result_header" == *"COMPLETE"* ]]; then
         printf 'COMPLETE\n' >"$status_file"
-        echo "Corrected QUEUED→COMPLETE $issue_key (result file shows COMPLETE)"
+        printf 'Corrected QUEUED to COMPLETE for %s (result file shows COMPLETE)\n' "$issue_key"
         retry_allowed=false
       fi
     fi
@@ -331,7 +353,7 @@ while IFS= read -r status_file; do
   if [[ "$retry_allowed" == true ]]; then
     printf 'QUEUED\n' >"$status_file"
     stuck_reset=$((stuck_reset + 1))
-    echo "Retried STUCK→QUEUED $issue_key (no recent activity)"
+    printf 'Retried STUCK to QUEUED for %s (no recent activity)\n' "$issue_key"
   fi
 done <<<"$(find "$WORKSPACES_DIR" -maxdepth 2 -name "status" -exec sh -c 'cat "$1" | tr -d "\r" | grep -q "^STUCK$"' _ {} \; -print 2>/dev/null || true)"
 
@@ -346,7 +368,7 @@ if [[ "$available_slots" -le 0 ]]; then
   exit 0
 fi
 
-echo "Hermes runner: $running_count running, $available_slots slots available (max=$MAX), $stuck_reset stuck→queued retries"
+echo "Hermes runner: $running_count running, $available_slots slots available (max=$MAX), $stuck_reset stuck-to-queued retries"
 
 # Start up to available_slots queued workspaces
 started=0
@@ -420,24 +442,32 @@ while IFS= read -r status_file; do
   # Dispatch this single issue, detached from terminal
   # Log to workspace log file for debugging
   log_file="$workspace_dir/runner.log"
+  pid_file="$workspace_dir/runner.pid"
+
   # Prefer setsid (proper session detachment), fallback to nohup
   if command -v setsid &>/dev/null; then
     setsid bash "$0" "$issue_key" >"$log_file" 2>&1 &
+    worker_pid=$!
   else
     # macOS fallback: use nohup + subshell + redirect to detach
     (nohup bash "$0" "$issue_key" >"$log_file" 2>&1 &) &
+    worker_pid=$!
   fi
 
+  # Record PID for status tracking
+  echo "$worker_pid" >"$pid_file"
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) PID: $worker_pid" >>"$log_file"
+
   started=$((started + 1))
-  echo "Dispatched $issue_key (prompt=$prompt_file)"
+  echo "Dispatched $issue_key (prompt=$prompt_file, pid=$worker_pid)"
 done <<<"$queued"
 
 echo "Started $started Hermes workers"
 
-# Don't wait — let workers run in background
-# The cron will call runner again to check progress
+# Do not block - let workers run in background
+# The cron will call runner again to check progress via PID files
 
-# Auto-cleanup completed worktrees after batch — ALWAYS run, not just when started>0
+# Auto-cleanup completed worktrees after batch - ALWAYS run, not just when started>0
 # This prevents terminal workspaces from accumulating and blocking queue replenishment
 echo "Running worktree cleanup..."
 bash "$SCRIPT_DIR/cleanup-worktrees.sh" --verbose || true
