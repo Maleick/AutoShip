@@ -228,6 +228,56 @@ run_hook_if_present() {
   fi
 }
 
+dispatch_missing_queued_workspaces() {
+  local state_file="$AUTOSHIP_DIR/state.json"
+  [[ -f "$state_file" && -x "$SCRIPT_DIR/dispatch.sh" ]] || return 0
+
+  local max running queued capacity key number task_type workspace
+  max=$(max_agents)
+  running=0
+  queued=0
+  if [[ -d "$WORKSPACES_DIR" ]]; then
+    local dir status
+    for dir in "$WORKSPACES_DIR"/*/; do
+      [[ -d "$dir" ]] || continue
+      status=$(status_of "$dir")
+      case "$status" in
+        RUNNING) running=$((running + 1)) ;;
+        QUEUED) queued=$((queued + 1)) ;;
+      esac
+    done
+  fi
+
+  capacity=$((max - running - queued))
+  ((capacity > 0)) || return 0
+
+  while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    workspace="$WORKSPACES_DIR/$key"
+    [[ -d "$workspace" ]] && continue
+    number="${key#issue-}"
+    [[ "$number" =~ ^[0-9]+$ ]] || continue
+    task_type=$(jq -r --arg key "$key" '.issues[$key].task_type // ""' "$state_file" 2>/dev/null || true)
+    if [[ -z "$task_type" && -x "$SCRIPT_DIR/classify-issue.sh" ]]; then
+      task_type=$(bash "$SCRIPT_DIR/classify-issue.sh" "$number" 2>/dev/null || true)
+    fi
+    task_type="${task_type:-medium_code}"
+    if bash "$SCRIPT_DIR/dispatch.sh" "$number" "$task_type"; then
+      capacity=$((capacity - 1))
+    else
+      log_supervisor "dispatch failed issue=$key task_type=$task_type"
+      continue
+    fi
+    ((capacity > 0)) || break
+  done < <(jq -r '
+    (.issues // {})
+    | to_entries
+    | map(select((.value.state // .value.status // "") == "queued"))
+    | sort_by((.key | sub("^issue-"; "") | tonumber? // 0))
+    | .[].key
+  ' "$state_file" 2>/dev/null || true)
+}
+
 supervisor_pass() {
   log_supervisor "pass started"
   run_hook_if_present monitor-agents.sh
@@ -235,6 +285,7 @@ supervisor_pass() {
   clear_stale_running_workspaces
   run_hook_if_present process-event-queue.sh
   run_hook_if_present reconcile-state.sh
+  dispatch_missing_queued_workspaces
   run_hook_if_present runner.sh
   log_supervisor "pass finished"
 }

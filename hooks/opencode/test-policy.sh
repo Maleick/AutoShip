@@ -922,13 +922,24 @@ cat >"$SUPERVISOR_REPO/hooks/opencode/reconcile-state.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'reconcile\n' >>.autoship/order.log
 SH
+cat >"$SUPERVISOR_REPO/hooks/opencode/classify-issue.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'classify:%s\n' "$1" >>.autoship/order.log
+printf 'docs\n'
+SH
+cat >"$SUPERVISOR_REPO/hooks/opencode/dispatch.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'dispatch:%s:%s\n' "$1" "$2" >>.autoship/order.log
+mkdir -p ".autoship/workspaces/issue-$1"
+printf 'QUEUED\n' >".autoship/workspaces/issue-$1/status"
+SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/runner.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'runner\n' >>.autoship/order.log
 SH
 chmod +x "$SUPERVISOR_REPO/hooks/opencode/"*.sh
 cat >"$SUPERVISOR_REPO/.autoship/state.json" <<'JSON'
-{"repo":"owner/repo","issues":{"issue-1101":{"state":"running"},"issue-1102":{"state":"queued"},"issue-1103":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":2}}
+{"repo":"owner/repo","issues":{"issue-1101":{"state":"running"},"issue-1102":{"state":"queued"},"issue-1103":{"state":"running"},"issue-1105":{"state":"queued"}},"stats":{},"config":{"maxConcurrentAgents":2}}
 JSON
 printf 'RUNNING\n' >"$SUPERVISOR_REPO/.autoship/workspaces/issue-1101/status"
 printf 'QUEUED\n' >"$SUPERVISOR_REPO/.autoship/workspaces/issue-1102/status"
@@ -943,7 +954,8 @@ touch -t 202605070001 "$SUPERVISOR_REPO/.autoship/workspaces/issue-1103/AUTOSHIP
 )
 assert_eq "STUCK" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/issue-1101/status")" "supervisor marks RUNNING workspace without worker pid stuck"
 assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/issue-1103/status")" "supervisor preserves fresh results from stale RUNNING workspace"
-assert_eq $'monitor\nevents\nreconcile\nrunner' "$(cat "$SUPERVISOR_REPO/.autoship/order.log")" "supervisor runs monitor, event processing, reconcile, and runner in order"
+assert_eq $'monitor\nevents\nreconcile\nclassify:1105\ndispatch:1105:docs\nrunner' "$(cat "$SUPERVISOR_REPO/.autoship/order.log")" "supervisor runs monitor, event processing, queued materialization, reconcile, and runner in order"
+assert_eq "QUEUED" "$(tr -d '[:space:]' <"$SUPERVISOR_REPO/.autoship/workspaces/issue-1105/status")" "supervisor materializes queued state entries without workspaces"
 test -s "$SUPERVISOR_REPO/.autoship/logs/supervisor-loop.log" || fail "supervisor writes a lifecycle log"
 supervisor_report=$(
   cd "$SUPERVISOR_REPO"
