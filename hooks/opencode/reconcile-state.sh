@@ -96,7 +96,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
 
   current_state=$(jq -r --arg key "$key" '.issues[$key].state // empty' "$tmp" 2>/dev/null || true)
   increment_stats=true
-  if [[ "$current_state" != "$new_state" && -x "$REPO_ROOT/hooks/update-state.sh" && -d "$REPO_ROOT/.git" ]]; then
+  if [[ "$current_state" != "$new_state" && -d "$REPO_ROOT/.git" ]]; then
     if (cd "$REPO_ROOT" && autoship_state_set "$action" "$key") >/dev/null 2>&1; then
       cp "$STATE_FILE" "$tmp"
       increment_stats=false

@@ -170,6 +170,17 @@ is_billing_or_quota_failure() {
   grep -Eiq 'insufficient balance|billing|quota|rate limit|credit' "$log_file"
 }
 
+write_failure_reason() {
+  local category="$1"
+  local log_file="${2:-AUTOSHIP_RUNNER.log}"
+  local summary
+  summary=$(tail -8 "$log_file" 2>/dev/null || echo "worker run failed")
+  {
+    printf 'category=%s\n' "$category"
+    printf 'summary<<EOF\n%s\nEOF\n' "$summary"
+  } >BLOCKED_REASON.txt
+}
+
 annotate_session_failure() {
   local log_file="${1:-AUTOSHIP_RUNNER.log}"
   [[ -f "$log_file" ]] || return 1
@@ -353,6 +364,7 @@ mark_stuck_unless_terminal() {
     COMPLETE | BLOCKED | STUCK) ;;
     *)
       error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker exited without terminal status")
+      write_failure_reason stuck AUTOSHIP_RUNNER.log
       autoship_capture_failure stuck "$wid" "error_summary=$error_msg"
       echo "STUCK" >status
       ;;
@@ -450,6 +462,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
               else
                 echo "STUCK" >status
                 error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "fallback worker run failed")
+                write_failure_reason model_failure AUTOSHIP_RUNNER.log
                 autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
                 bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$fallback_model" >/dev/null 2>&1 || true
                 bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true
@@ -457,6 +470,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
             else
               echo "STUCK" >status
               error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
+              write_failure_reason model_failure AUTOSHIP_RUNNER.log
               autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
               bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
             fi
@@ -464,6 +478,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
             annotate_session_failure AUTOSHIP_RUNNER.log || true
             echo "STUCK" >status
             error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
+            write_failure_reason model_failure AUTOSHIP_RUNNER.log
             autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
             bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
             bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
@@ -472,6 +487,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
       else
         echo "opencode CLI not found" >AUTOSHIP_RUNNER.log
         echo "STUCK" >status
+        write_failure_reason missing_opencode AUTOSHIP_RUNNER.log
         autoship_capture_failure model_failure "$issue_id" "error_summary=opencode CLI not found"
         bash "$SCRIPT_DIR/metrics-collector.sh" record-failure "$issue_id" "$model" >/dev/null 2>&1 || true
         bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
