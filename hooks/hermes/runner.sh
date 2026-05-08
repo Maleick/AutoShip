@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hermes agent runner — execute Hermes workers via one-shot cronjobs
+# Hermes setup runner — prepare workspaces for manual delegate_task dispatch
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
