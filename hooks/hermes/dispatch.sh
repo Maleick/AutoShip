@@ -59,6 +59,11 @@ if [[ -z "$BASE_BRANCH" ]]; then
 fi
 BASE_BRANCH="${BASE_BRANCH:-main}"
 
+is_git_worktree_path() {
+  local path="$1"
+  [[ -n "$path" ]] && git -C "$path" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
 # Read Hermes max concurrent from config.yaml
 MAX=20
 if [[ -f "$HOME/.hermes/config.yaml" ]]; then
@@ -139,14 +144,14 @@ if [[ -z "$TARGET_REPO_PATH" ]]; then
   if [[ "$REPO" == */* ]]; then
     REPO_NAME="${REPO#*/}"
     for candidate in "$HOME/Projects/$REPO_NAME" "$HOME/projects/$REPO_NAME" "$HOME/$REPO_NAME"; do
-      if [[ -d "$candidate/.git" ]]; then
+      if is_git_worktree_path "$candidate"; then
         TARGET_REPO_PATH="$candidate"
         break
       fi
     done
   fi
 fi
-if [[ -z "$TARGET_REPO_PATH" || ! -d "$TARGET_REPO_PATH/.git" ]]; then
+if ! is_git_worktree_path "$TARGET_REPO_PATH"; then
   echo "Error: target repo not found. Set HERMES_TARGET_REPO_PATH to the local clone path." >&2
   echo "Tried: $TARGET_REPO_PATH" >&2
   exit 1
@@ -255,9 +260,12 @@ prompt = f"""# Hermes Agent Prompt — AutoShip Issue #{issue_num}
    - files_changed: list of files modified/created
    - validation_results: output of test commands
    - pr_url: the created PR URL
-7. Update status file: `echo "COMPLETE" > status`
+7. **MANDATORY FINAL STEP — Update status file**: `echo "COMPLETE" > {workspace_path}/status`
+   - This step is REQUIRED. The runner cannot detect completion without it.
+   - Write the status file LAST, after HERMES_RESULT.md and after the PR is created.
+   - If you do not write this file, the runner will mark the issue STUCK and retry.
 
-If you cannot complete, write HERMES_RESULT.md with status BLOCKED and reason.
+If you cannot complete, write HERMES_RESULT.md with status BLOCKED and reason, then write `echo "BLOCKED" > {workspace_path}/status`.
 
 ## Instructions
 - Work only in this worktree: {worktree_path}

@@ -141,6 +141,43 @@ grep -F -- '--package @semantic-release/exec@' "$REPO_ROOT/.github/workflows/rel
 if grep -F 'git add -A' "$REPO_ROOT/hooks/hermes/dispatch.sh" >/dev/null; then
   fail "Hermes prompt must not instruct workers to stage transient files with git add -A"
 fi
+
+HERMES_DISPATCH_TARGET="$TMP_DIR/hermes-dispatch-target"
+HERMES_DISPATCH_TARGET_WORKTREE="$TMP_DIR/hermes-dispatch-target-worktree"
+HERMES_DISPATCH_REPO="$TMP_DIR/hermes-dispatch-repo"
+git init -q "$HERMES_DISPATCH_TARGET"
+printf 'target repo\n' >"$HERMES_DISPATCH_TARGET/README.md"
+git -C "$HERMES_DISPATCH_TARGET" add README.md
+git -C "$HERMES_DISPATCH_TARGET" -c user.email=test@example.com -c user.name='Test User' commit -q -m 'init target repo'
+git -C "$HERMES_DISPATCH_TARGET" worktree add -q "$HERMES_DISPATCH_TARGET_WORKTREE" HEAD
+git init -q "$HERMES_DISPATCH_REPO"
+mkdir -p "$HERMES_DISPATCH_REPO/.autoship" "$HERMES_DISPATCH_REPO/hooks/hermes" "$HERMES_DISPATCH_REPO/hooks" "$HERMES_DISPATCH_REPO/bin"
+printf '{"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}\n' >"$HERMES_DISPATCH_REPO/.autoship/state.json"
+cp "$REPO_ROOT/hooks/hermes/dispatch.sh" "$HERMES_DISPATCH_REPO/hooks/hermes/dispatch.sh"
+cp "$REPO_ROOT/hooks/update-state.sh" "$HERMES_DISPATCH_REPO/hooks/update-state.sh"
+chmod +x "$HERMES_DISPATCH_REPO/hooks/hermes/dispatch.sh" "$HERMES_DISPATCH_REPO/hooks/update-state.sh"
+cat >"$HERMES_DISPATCH_REPO/bin/hermes" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+cat >"$HERMES_DISPATCH_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *"repo view"*) printf 'main\n' ;;
+  *"--json title"*) printf 'Target repo dispatch\n' ;;
+  *"--json body"*) printf 'Issue body\n' ;;
+  *"--json labels"*) printf 'agent:ready\n' ;;
+  *) printf '{}\n' ;;
+esac
+SH
+chmod +x "$HERMES_DISPATCH_REPO/bin/hermes" "$HERMES_DISPATCH_REPO/bin/gh"
+(
+  cd "$HERMES_DISPATCH_REPO"
+  PATH="$HERMES_DISPATCH_REPO/bin:$PATH" HERMES_TARGET_REPO_PATH="$HERMES_DISPATCH_TARGET_WORKTREE" HERMES_TARGET_REPO="owner/target" bash hooks/hermes/dispatch.sh 424 medium_code opencode/test-free >/dev/null
+)
+assert_eq "target repo" "$(tr -d '\r\n' <"$HERMES_DISPATCH_REPO/.autoship/workspaces/issue-424/README.md")" "Hermes dispatch creates worktrees from target repo worktrees"
+assert_eq "QUEUED" "$(tr -d '[:space:]' <"$HERMES_DISPATCH_REPO/.autoship/workspaces/issue-424/status")" "Hermes dispatch queues target repo worktree workspace"
+
 grep -F 'HERMES_PROMPT.md' "$REPO_ROOT/hooks/opencode/create-pr.sh" >/dev/null \
   || fail "PR creation must ignore Hermes prompt artifacts"
 grep -F 'HERMES_RESULT.md' "$REPO_ROOT/hooks/opencode/create-pr.sh" >/dev/null \

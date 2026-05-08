@@ -133,13 +133,6 @@ if [[ -n "${1:-}" ]]; then
 
   echo "Dispatching $ISSUE_KEY in $worktree_path"
 
-  # Setup complete — mark workspace ready for manual delegate_task dispatch.
-  # The caller (Hermes session operator) must invoke delegate_task via
-  # the Hermes tool API with:
-  #   --workdir "$worktree_path"
-  #   --toolsets '["terminal", "file", "web"]'
-  #   --prompt "$(cat "$prompt_file")"
-  #   --timeout 600
   cd "$worktree_path"
   export GH_TOKEN="${GH_TOKEN:-}"
   export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
@@ -162,18 +155,92 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     fi
   fi
 
-  # Mark workspace as ready for manual dispatch
-  printf 'DELEGATE_TASK_READY\n' >"$workspace_dir/status"
+  # Mark workspace as running
+  printf 'RUNNING\n' >"$workspace_dir/status"
   autoship_state_set set-running "$ISSUE_KEY" agent="hermes" model="delegate_task"
 
-  echo "Workspace ready for delegate_task: $ISSUE_KEY"
-  echo "Worktree: $worktree_path"
-  echo "Prompt: $prompt_file"
-  echo "Status: DELEGATE_TASK_READY"
-  echo ""
-  echo "Dispatch command:"
-  echo "  delegate_task --workdir \"$worktree_path\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
-  exit 0
+  # --- EXECUTE WORKER ---
+  # If inside a Hermes session, use delegate_task directly.
+  # Otherwise, fall back to hermes chat with the prompt file.
+  WORKER_RESULT="BLOCKED"
+  WORKER_REASON="no execution method available"
+
+  if [[ -n "${HERMES_SESSION_ID:-}" ]]; then
+    echo "Hermes session detected — executing via delegate_task..."
+    # delegate_task is a Hermes tool; we cannot call it from bash.
+    # Instead, write a ready marker and exit so the parent Hermes process
+    # can poll for DELEGATE_TASK_READY workspaces and invoke delegate_task.
+    printf 'DELEGATE_TASK_READY\n' >"$workspace_dir/status"
+    echo "Workspace ready for delegate_task: $ISSUE_KEY"
+    echo "Worktree: $worktree_path"
+    echo "Prompt: $prompt_file"
+    echo "Status: DELEGATE_TASK_READY"
+    echo ""
+    echo "Dispatch command:"
+    echo "  delegate_task --workdir \"$worktree_path\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
+    exit 0
+  fi
+
+  # No Hermes session — try hermes chat CLI as a subprocess
+  if command -v hermes &>/dev/null; then
+    echo "Executing worker via hermes chat..."
+    printf 'RUNNING\n' >"$workspace_dir/status"
+
+    # Run hermes chat with the prompt file; capture exit code
+    HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
+    hermes chat --workdir "$worktree_path" --timeout "$HERMES_TIMEOUT" < "$prompt_file" > "$workspace_dir/hermes-worker.log" 2>&1
+    worker_exit=$?
+
+    if [[ $worker_exit -eq 0 ]]; then
+      WORKER_RESULT="COMPLETE"
+      WORKER_REASON="hermes chat completed successfully"
+    elif [[ $worker_exit -eq 124 ]]; then
+      WORKER_RESULT="STUCK"
+      WORKER_REASON="hermes chat timed out (exit 124)"
+    else
+      WORKER_RESULT="BLOCKED"
+      WORKER_REASON="hermes chat failed (exit $worker_exit)"
+    fi
+  fi
+
+  # --- POST-EXECUTION: detect result files if worker wrote them ---
+  if [[ -f "$workspace_dir/HERMES_RESULT.md" ]]; then
+    result_status=$(head -n 20 "$workspace_dir/HERMES_RESULT.md" | grep -i "^## Status" | head -n1 | sed 's/.*://' | tr -d ' \r' || echo "")
+    if [[ -n "$result_status" ]]; then
+      WORKER_RESULT="$result_status"
+      WORKER_REASON="HERMES_RESULT.md reports status: $result_status"
+    fi
+  elif [[ -f "$workspace_dir/AUTOSHIP_RESULT.md" ]]; then
+    result_status=$(head -n 20 "$workspace_dir/AUTOSHIP_RESULT.md" | grep -i "^## Status" | head -n1 | sed 's/.*://' | tr -d ' \r' || echo "")
+    if [[ -n "$result_status" ]]; then
+      WORKER_RESULT="$result_status"
+      WORKER_REASON="AUTOSHIP_RESULT.md reports status: $result_status"
+    fi
+  fi
+
+  # Also check for git commits as evidence of work done
+  if [[ "$WORKER_RESULT" != "COMPLETE" && "$WORKER_RESULT" != "BLOCKED" ]]; then
+    commit_count=$(git -C "$worktree_path" rev-list --count autoship/issue-${ISSUE_NUM}...HEAD 2>/dev/null || echo 0)
+    if [[ "$commit_count" -gt 0 ]]; then
+      # Worker made commits but didn't finish workflow — mark STUCK for retry
+      WORKER_RESULT="STUCK"
+      WORKER_REASON="worker made $commit_count commit(s) but did not complete PR/status workflow"
+    fi
+  fi
+
+  # --- FINALIZE STATUS ---
+  printf '%s\n' "$WORKER_RESULT" >"$workspace_dir/status"
+
+  if [[ "$WORKER_RESULT" == "COMPLETE" ]]; then
+    autoship_state_set set-complete "$ISSUE_KEY"
+  elif [[ "$WORKER_RESULT" == "BLOCKED" ]]; then
+    autoship_state_set set-blocked "$ISSUE_KEY" reason="$WORKER_REASON"
+  else
+    autoship_state_set set-stuck "$ISSUE_KEY" reason="$WORKER_REASON"
+  fi
+
+  echo "Worker finished: $ISSUE_KEY → $WORKER_RESULT ($WORKER_REASON)"
+  echo "Log: $workspace_dir/hermes-worker.log"
   exit 0
 fi
 
