@@ -19,11 +19,18 @@ concurrency:
 jobs:
   hooks:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       matrix:
         shard: [syntax, policy]
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
       - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt jq
       - name: Run AutoShip shard
