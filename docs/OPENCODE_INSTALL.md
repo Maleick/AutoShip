@@ -136,7 +136,7 @@ AUTOSHIP_REFRESH_MODELS=1 bash hooks/opencode/setup.sh
 
 `setup.sh` writes `.autoship/model-routing.json`. This file is intentionally user-editable and is preserved on later setup runs unless `AUTOSHIP_REFRESH_MODELS=1` or `AUTOSHIP_MODELS=...` is provided.
 
-By default, setup chooses the best available role model from `opencode models`, preferring capable free models first and OpenCode Go models second. First-run setup asks which models to use for orchestrator and reviewer; they can be the same model or different models. Worker models are selected per task by the model selector using task compatibility, configured strength, cost class, previous success/failure history, and deterministic issue-number rotation across compatible workers. Free models, OpenCode Go models, and explicitly selected provider models can be configured. Paid Zen/OpenRouter Kimi models require explicit selection. `openai/gpt-5.5-fast` is rejected.
+By default, setup chooses the best available role model from `opencode models`, preferring capable free models first and OpenCode Go models second. First-run setup asks which models to use for orchestrator and reviewer; they can be the same model or different models. Worker models are selected per task by the model selector using task compatibility, configured strength, cost class, previous success/failure history, and deterministic issue-number rotation across compatible workers. Free models, OpenCode Go models, and explicitly selected provider models can be configured. Paid provider models require explicit selection. `openai/gpt-5.5-fast` is rejected.
 
 ## Troubleshooting
 

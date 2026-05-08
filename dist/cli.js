@@ -19,7 +19,7 @@ const AUTOSHIP_COMMANDS = {
     "autoship-dashboard": { description: "Show AutoShip dashboard metrics", agent: "build", subtask: false },
     "autoship-retry": { description: "Retry a blocked or stuck AutoShip issue", agent: "build", subtask: false },
 };
-const ENABLED_PROVIDERS = ["kimi-for-coding", "nvidia", "openai", "opencode", "opencode-go", "openrouter"];
+const ENABLED_PROVIDERS = ["kimi-for-coding", "nvidia", "openai", "opencode", "opencode-go"];
 const DISABLED_PROVIDERS = ["github-copilot"];
 const LEGACY_PLUGIN_REGISTRATIONS = new Set([
     "opencode-autoship@latest",

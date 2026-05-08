@@ -10,7 +10,7 @@ AutoShip supports OpenCode as its only worker runtime.
 - Operators may explicitly select model IDs with `AUTOSHIP_MODELS`.
 - Selected models must exist in the current OpenCode model list.
 - Selected routing is saved in `.autoship/model-routing.json`, which is user-editable and preserved by setup unless refresh is requested.
-- Role models are selected from live `opencode models` inventory. Setup prefers capable free models first, then OpenCode Go models, instead of requiring `openai/gpt-5.5`. Paid Zen/OpenRouter Kimi models require explicit selection.
+- Role models are selected from live `opencode models` inventory. Setup prefers capable free models first, then OpenCode Go models, instead of requiring `openai/gpt-5.5`. Paid provider models require explicit selection.
 - First-run setup prompts for orchestrator and reviewer models; they may be the same model or different models.
 - Worker models are selected per task by `select-model.sh`, which scores task compatibility, cost class, configured strength, prior success/failure history, and rotates deterministically by issue number across compatible workers.
 - Complex tasks require a sufficiently strong compatible worker; otherwise `select-model.sh` falls back to the configured orchestrator model as an advisor.

@@ -24,7 +24,7 @@ source "$SCRIPT_DIR/test-fixtures/mock-opencode-models.sh"
 
 AVAILABLE="opencode/nemotron-3-super-free
 opencode/minimax-m2.5-free
-openrouter/google/gemma-3-27b-it:free
+nvidia/google/gemma-3-27b-it
 openai/gpt-5.5
 openai/gpt-5.3-spark"
 AVAILABLE_IDS=$(normalize_model_ids "$AVAILABLE")
@@ -32,8 +32,8 @@ AVAILABLE_IDS=$(normalize_model_ids "$AVAILABLE")
 echo "=== Test: free model IDs ==="
 DEFAULT_FREE=$(default_free_models "$AVAILABLE_IDS")
 DEFAULT_FREE_NL=$(printf '%s\n' "$DEFAULT_FREE" | tr ',' '\n')
-assert_eq "3" "$(classify_models "$DEFAULT_FREE_NL" | grep -c ':free' || true)" "default model pool prefers free models"
-assert_eq "opencode/nemotron-3-super-free,opencode/minimax-m2.5-free,openrouter/google/gemma-3-27b-it:free" "$DEFAULT_FREE" "default free models are ranked by capability before provider order"
+assert_eq "2" "$(classify_models "$DEFAULT_FREE_NL" | grep -c ':free' || true)" "default model pool prefers non-OpenRouter free models"
+assert_eq "opencode/nemotron-3-super-free,opencode/minimax-m2.5-free" "$DEFAULT_FREE" "default free models exclude OpenRouter models"
 
 echo "=== Test: explicit selected model IDs ==="
 SELECTED_INPUT="openai/gpt-5.5,openai/gpt-5.3-spark"
@@ -57,7 +57,7 @@ assert_eq "2" "$(classify_models "$OPENCODE_GO_INPUT" | grep -c ':go' || true)" 
 echo "=== Test: default role model prefers Kimi/Ling 2.6 when available ==="
 ROLE_AVAILABLE="openai/gpt-5.5
 opencode-go/kimi-k2.6
-openrouter/other-model:free"
+nvidia/other-model"
 assert_eq "opencode-go/kimi-k2.6" "$(default_role_model "$ROLE_AVAILABLE")" "default role model prefers Kimi 2.6-compatible Go models"
 
 echo "=== Test: default role model does not auto-select paid Zen Kimi ==="
@@ -74,6 +74,11 @@ echo "=== Test: forbidden model IDs ==="
 if reject_forbidden_models "openai/gpt-5.5-fast" 2>/dev/null; then
   fail "gpt-5.5-fast must be rejected"
 fi
+
+echo "=== Test: OpenRouter is excluded from defaults ==="
+OPENROUTER_INPUT="openrouter/google/gemma-3-27b-it:free
+opencode/minimax-m2.5-free"
+assert_eq "opencode/minimax-m2.5-free" "$(default_free_models "$OPENROUTER_INPUT")" "OpenRouter models must not be selected by default"
 
 echo "=== Test: role selection is separate from worker selection ==="
 ROLE_ROUTING="$TMP_DIR/role-routing.json"

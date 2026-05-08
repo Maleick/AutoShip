@@ -1473,14 +1473,14 @@ chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
   printf '%s\n' "$setup_output" | grep -F 'opencode-autoship doctor' >/dev/null || fail "setup prints doctor next step"
   printf '%s\n' "$setup_output" | grep -F '/autoship-setup' >/dev/null || fail "setup prints setup next step"
   printf '%s\n' "$setup_output" | grep -F '/autoship' >/dev/null || fail "setup prints autoship next step"
-  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup writes all live free models by default"
+  jq -e '.models | length == 3' .autoship/model-routing.json >/dev/null || fail "setup writes non-OpenRouter live free models by default"
   jq -e '.maxConcurrentAgents == 20 and .max_agents == 20' .autoship/config.json >/dev/null || fail "setup writes default concurrency cap consumed by runtime"
   jq -e '.roles.planner == "opencode/nemotron-3-super-free" and .roles.coordinator == "opencode/nemotron-3-super-free" and .roles.orchestrator == "opencode/nemotron-3-super-free" and .roles.reviewer == "opencode/nemotron-3-super-free" and .roles.lead == "opencode/nemotron-3-super-free"' .autoship/model-routing.json >/dev/null || fail "setup configures live free-first role defaults"
   jq -e '.pools != null and .pools.default != null and .pools.frontend != null and .pools.backend != null and .pools.docs != null' .autoship/model-routing.json >/dev/null || fail "setup writes worker pools"
   jq -e 'all(.models[]; .cost == "free")' .autoship/model-routing.json >/dev/null || fail "default setup excludes paid worker models"
   jq -e 'all(.models[]; .id != "openai/gpt-5.5")' .autoship/model-routing.json >/dev/null || fail "planner model is not used as a default worker"
   jq -e '.models[0].id == "opencode/nemotron-3-super-free" and .defaultFallback == "opencode/nemotron-3-super-free"' .autoship/model-routing.json >/dev/null || fail "setup ranks strongest free worker first"
-  jq -e 'any(.models[]; .id == "openrouter/google/gemma-3-27b-it:free")' .autoship/model-routing.json >/dev/null || fail "setup includes OpenRouter free models from live OpenCode list"
+  jq -e 'all(.models[]; (.id | startswith("openrouter/") | not))' .autoship/model-routing.json >/dev/null || fail "setup excludes OpenRouter models from live OpenCode list"
   jq -e 'any(.models[]; .id == "zen/some-free-model:free")' .autoship/model-routing.json >/dev/null || fail "setup includes free models from any live OpenCode provider"
   jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json >.autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
@@ -1488,10 +1488,10 @@ chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --max-agents=9 >/dev/null
   jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "noninteractive setup preserves manual model-routing edits by default"
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models >/dev/null
-  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup --refresh-models regenerates manual model routing when explicitly requested"
+  jq -e '.models | length == 3' .autoship/model-routing.json >/dev/null || fail "setup --refresh-models regenerates manual model routing when explicitly requested"
   jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json >.autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   AUTOSHIP_REFRESH_MODELS=1 PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
-  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup refreshes generated model routing when requested"
+  jq -e '.models | length == 3' .autoship/model-routing.json >/dev/null || fail "setup refreshes generated model routing when requested"
   AUTOSHIP_MODELS='opencode/gpt-5,opencode-go/qwen3.6-plus,openai/gpt-5.3-spark' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
   jq -e '.models[0].id == "opencode/gpt-5" and .models[0].cost == "selected" and .models[1].id == "opencode-go/qwen3.6-plus" and .models[2].id == "openai/gpt-5.3-spark"' .autoship/model-routing.json >/dev/null || fail "setup allows explicit selected non-free and Spark models from live list"
   if AUTOSHIP_MODELS='missing/model' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null 2>&1; then
@@ -1911,7 +1911,7 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   for command in autoship autoship-setup autoship-status autoship-stop autoship-plan autoship-apply autoship-audit autoship-cancel autoship-clean autoship-dashboard autoship-retry; do
     jq -e --arg command "$command" '.command[$command].template == ("{file:commands/" + $command + ".md}\n\n$ARGUMENTS")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer registers /$command command"
   done
-  jq -e '.enabled_providers == ["kimi-for-coding", "nvidia", "openai", "opencode", "opencode-go", "openrouter"]' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer writes provider allowlist"
+  jq -e '.enabled_providers == ["kimi-for-coding", "nvidia", "openai", "opencode", "opencode-go"]' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer writes provider allowlist"
   jq -e '.disabled_providers == ["github-copilot"]' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer disables github-copilot provider"
   test -d "$CONFIG_DIR/.autoship/hooks" || fail "package installer copies hooks"
   test -d "$CONFIG_DIR/.autoship/commands" || fail "package installer copies commands"
