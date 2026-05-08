@@ -159,18 +159,58 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
   printf 'RUNNING\n' >"$workspace_dir/status"
   autoship_state_set set-running "$ISSUE_KEY" agent="hermes" model="delegate_task"
 
-  # delegate_task is a Hermes tool; this setup-only runner cannot call it from
-  # bash. Leave a ready marker so the parent Hermes process or operator can
-  # invoke delegate_task with the prepared worktree and prompt.
-  printf 'DELEGATE_TASK_READY\n' >"$workspace_dir/status"
-  echo "Workspace ready for delegate_task: $ISSUE_KEY"
-  echo "Worktree: $worktree_path"
-  echo "Prompt: $prompt_file"
-  echo "Status: DELEGATE_TASK_READY"
-  echo ""
-  echo "Dispatch command:"
-  echo "  delegate_task --workdir \"$worktree_path\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
-  exit 0
+  # --- EXECUTE WORKER ---
+  # If inside a Hermes session, use delegate_task directly.
+  # Otherwise, fall back to hermes chat with the prompt file.
+  WORKER_RESULT="BLOCKED"
+  WORKER_REASON="no execution method available"
+
+  if [[ -n "${HERMES_SESSION_ID:-}" ]]; then
+    echo "Hermes session detected — executing via delegate_task..."
+    # delegate_task is a Hermes tool; we cannot call it from bash.
+    # Instead, write a ready marker and exit so the parent Hermes process
+    # can poll for DELEGATE_TASK_READY workspaces and invoke delegate_task.
+    printf 'DELEGATE_TASK_READY\n' >"$workspace_dir/status"
+    echo "Workspace ready for delegate_task: $ISSUE_KEY"
+    echo "Worktree: $worktree_path"
+    echo "Prompt: $prompt_file"
+    echo "Status: DELEGATE_TASK_READY"
+    echo ""
+    echo "Dispatch command:"
+    echo "  delegate_task --workdir \"$worktree_path\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
+    exit 0
+  fi
+
+  # No Hermes session — try hermes chat CLI in headless mode
+  if command -v hermes &>/dev/null; then
+    echo "Executing worker via hermes chat (headless)..."
+    printf 'RUNNING\n' >"$workspace_dir/status"
+
+    # Use -q for single-query mode (reads prompt from file, non-interactive)
+    # Use -Q for quiet mode (no TTY/spinner, banner suppressed)
+    # Use --max-turns to prevent runaway sessions
+    HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
+    HERMES_MAX_TURNS="${HERMES_WORKER_MAX_TURNS:-90}"
+    hermes chat \
+      --workdir "$worktree_path" \
+      -q "$(cat "$prompt_file")" \
+      -Q \
+      --max-turns "$HERMES_MAX_TURNS" \
+      -t terminal,file,web \
+      > "$workspace_dir/hermes-worker.log" 2>&1
+    worker_exit=$?
+
+    if [[ $worker_exit -eq 0 ]]; then
+      WORKER_RESULT="COMPLETE"
+      WORKER_REASON="hermes chat completed successfully"
+    elif [[ $worker_exit -eq 124 ]]; then
+      WORKER_RESULT="STUCK"
+      WORKER_REASON="hermes chat timed out (exit 124)"
+    else
+      WORKER_RESULT="BLOCKED"
+      WORKER_REASON="hermes chat failed (exit $worker_exit)"
+    fi
+  fi
 
   # --- POST-EXECUTION: detect result files if worker wrote them ---
   if [[ -f "$workspace_dir/HERMES_RESULT.md" ]]; then

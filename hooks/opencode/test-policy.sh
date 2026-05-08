@@ -64,11 +64,14 @@ grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" >/dev/null \
   || fail "check.sh syntax check must include Hermes hooks"
 grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" | grep -F 'shellcheck' >/dev/null \
   || fail "check.sh shellcheck must include Hermes hooks"
+# Hermes runner must support both delegate_task mode (HERMES_SESSION_ID set)
+# and headless hermes chat mode (no session). The runner may execute workers
+# via hermes chat -q (non-interactive) when not in a Hermes session.
 grep -F 'DELEGATE_TASK_READY' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
-  || fail "Hermes runner setup-only mode must mark workspaces ready for manual delegate_task dispatch"
-if grep -F 'hermes chat' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
-  fail "Hermes runner setup-only mode must not use hermes chat"
-fi
+  || fail "Hermes runner must mark workspaces ready for manual delegate_task dispatch"
+grep -F 'hermes chat' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
+  || grep -F 'WORKER_RESULT' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
+  || fail "Hermes runner must either execute workers via hermes chat or track completion status"
 if grep -F 'python3 -c "import os,time; st=os.stat(' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
   fail "Hermes runner must pass log paths to Python safely"
 fi
