@@ -72,6 +72,11 @@ grep -F 'DELEGATE_TASK_READY' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
 grep -F 'hermes chat' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
   || grep -F 'WORKER_RESULT' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
   || fail "Hermes runner must either execute workers via hermes chat or track completion status"
+if grep -F 'hermes chat --worktree' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
+  fail "Hermes runner must not pass --worktree when dispatch already prepared the target worktree"
+fi
+grep -F 'WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
+  || fail "Hermes runner must keep orchestration status under AutoShip workspaces"
 if grep -F 'python3 -c "import os,time; st=os.stat(' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
   fail "Hermes runner must pass log paths to Python safely"
 fi
@@ -1545,7 +1550,8 @@ printf '%s\n' "$formerly_blocked_line" | grep -F 'agent:ready' >/dev/null || fai
 
 SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"
-cp -R "$SCRIPT_DIR/../.." "$SETUP_REPO/autoship"
+mkdir -p "$SETUP_REPO/autoship"
+tar -C "$SCRIPT_DIR/../.." --exclude .git --exclude .autoship -cf - . | tar -C "$SETUP_REPO/autoship" -xf -
 cat >"$SETUP_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1" == "models" ]]; then

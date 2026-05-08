@@ -43,16 +43,10 @@ PY
 }
 
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
-# Allow overriding workspaces directory via HERMES_TARGET_REPO_PATH
-# Default to TextQuest repo if AutoShip is the orchestrator (detect by repo name)
-if [[ -n "${HERMES_TARGET_REPO_PATH:-}" && -d "$HERMES_TARGET_REPO_PATH/.autoship/workspaces" ]]; then
-  WORKSPACES_DIR="$HERMES_TARGET_REPO_PATH/.autoship/workspaces"
-elif [[ "$REPO_ROOT" == *"/AutoShip" ]] && [[ -d "/mnt/c/Users/xmale/Projects/TextQuest/.autoship/workspaces" ]]; then
-  # AutoShip orchestrating TextQuest — use TextQuest workspaces
-  WORKSPACES_DIR="/mnt/c/Users/xmale/Projects/TextQuest/.autoship/workspaces"
-else
-  WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
-fi
+# Workspaces are always under the AutoShip orchestrator repo, not the target repo.
+# The target repo worktree is checked out inside the workspace directory, but
+# status files, prompts, and logs live in AutoShip's .autoship/workspaces/.
+WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 
 # Read Hermes max concurrent from config.yaml; allow AutoShip runs to cap lower.
 MAX="${HERMES_MAX_WORKERS:-20}"
@@ -191,7 +185,9 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     # Use --max-turns to prevent runaway sessions
     HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
     HERMES_MAX_TURNS="${HERMES_WORKER_MAX_TURNS:-90}"
-    hermes_cmd=(hermes chat --workdir "$worktree_path" -q "$(cat "$prompt_file")" -Q --max-turns "$HERMES_MAX_TURNS" -t terminal,file,web)
+    # Run hermes chat in the existing worktree directory.
+    # Do NOT use --worktree — the workspace is already a git worktree.
+    hermes_cmd=(hermes chat -q "$(cat "$prompt_file")" -Q --max-turns "$HERMES_MAX_TURNS" -t terminal,file,web)
     if command -v timeout >/dev/null 2>&1; then
       hermes_cmd=(timeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
     elif command -v gtimeout >/dev/null 2>&1; then
