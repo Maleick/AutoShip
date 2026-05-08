@@ -165,6 +165,21 @@ cp "$REPO_ROOT/policies/default.json" "$POLICY_REPO/policies/default.json"
   assert_eq "8" "$(bash hooks/opencode/policy.sh value cargoConcurrencyCap)" "policy value falls back when config is non-object"
 )
 
+TEXTQUEST_REPO="$TMP_DIR/textquest-repo"
+TEXTQUEST_INSTALL="$TMP_DIR/textquest-install"
+git init -q "$TEXTQUEST_REPO"
+mkdir -p "$TEXTQUEST_REPO/.autoship" "$TEXTQUEST_REPO/textquest-web" "$TEXTQUEST_INSTALL/hooks/opencode" "$TEXTQUEST_INSTALL/policies"
+printf '[package]\nname = "textquest"\n' >"$TEXTQUEST_REPO/Cargo.toml"
+printf '{"policyProfile":"default"}\n' >"$TEXTQUEST_REPO/.autoship/config.json"
+cp "$SCRIPT_DIR/policy.sh" "$TEXTQUEST_INSTALL/hooks/opencode/policy.sh"
+cp "$REPO_ROOT/policies/default.json" "$TEXTQUEST_INSTALL/policies/default.json"
+cp "$REPO_ROOT/policies/textquest.json" "$TEXTQUEST_INSTALL/policies/textquest.json"
+(
+  cd "$TEXTQUEST_REPO"
+  assert_eq "textquest" "$(bash "$TEXTQUEST_INSTALL/hooks/opencode/policy.sh" profile)" "default policy profile must not disable TextQuest auto-detection"
+  assert_eq "textquest" "$(bash "$TEXTQUEST_INSTALL/hooks/opencode/policy.sh" json | jq -r '.profile')" "TextQuest policy loads from installed AutoShip assets"
+)
+
 test -f "$REPO_ROOT/commands/autoship-setup.md" || fail "canonical /autoship-setup command file is installed"
 grep -F '| `/autoship-setup` |' "$REPO_ROOT/README.md" >/dev/null || fail "README public command table includes /autoship-setup"
 grep -F '| `/autoship-setup` |' "$REPO_ROOT/commands/autoship.md" >/dev/null || fail "/autoship command table includes /autoship-setup"
@@ -475,8 +490,8 @@ chmod +x "$AUTOCOMMIT_REPO/bin/opencode"
   PATH="$AUTOCOMMIT_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
-  [[ "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" == "COMPLETE" ]] && \
-    [[ "$(git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" rev-list --count HEAD)" == "2" ]] && break
+  [[ "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" == "COMPLETE" ]] \
+    && [[ "$(git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" rev-list --count HEAD)" == "2" ]] && break
   sleep 1
 done
 assert_eq "COMPLETE" "$(tr -d '[:space:]' <"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" "runner keeps complete status after auto-committing production changes"
@@ -746,7 +761,7 @@ _live_wait=0
 while [ "$_live_wait" -lt 50 ]; do
   kill -0 "$live_child_pid" 2>/dev/null \
     && ps -axo command= 2>/dev/null \
-         | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \
+    | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \
     && break
   sleep 0.1
   _live_wait=$((_live_wait + 1))

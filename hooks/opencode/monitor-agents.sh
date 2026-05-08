@@ -163,16 +163,20 @@ is_worker_live() {
 }
 
 has_live_opencode_child() {
-  local dir="$1" real_dir
+  local dir="$1" real_dir logical_dir
+  logical_dir=$(cd "$dir" && pwd 2>/dev/null || printf '%s' "$dir")
   real_dir=$(cd "$dir" && pwd -P 2>/dev/null || printf '%s' "$dir")
-  [[ -n "$real_dir" ]] || return 1
-  ps -axo command= 2>/dev/null | while IFS= read -r command; do
+  [[ -n "$logical_dir$real_dir" ]] || return 1
+  local process_list command
+  process_list=$(ps -axo command= 2>/dev/null || true)
+  while IFS= read -r command; do
     case "$command" in
-      *opencode*" run "*)
-        printf '%s\n' "$command"
-        ;;
+      *opencode*) ;;
+      *) continue ;;
     esac
-  done | grep -F -q -- "$real_dir"
+    [[ "$command" == *"$logical_dir"* || "$command" == *"$real_dir"* ]] && return 0
+  done <<<"$process_list"
+  return 1
 }
 
 has_fresh_result() {

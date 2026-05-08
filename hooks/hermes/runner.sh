@@ -163,7 +163,7 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
   fi
 
   # Mark workspace as ready for manual dispatch
-  printf 'DELEGATE_TASK_READY\n' > "$workspace_dir/status"
+  printf 'DELEGATE_TASK_READY\n' >"$workspace_dir/status"
   autoship_state_set set-running "$ISSUE_KEY" agent="hermes" model="delegate_task"
 
   echo "Workspace ready for delegate_task: $ISSUE_KEY"
