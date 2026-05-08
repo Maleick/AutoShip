@@ -132,11 +132,61 @@ if [[ "$DRY_RUN" == true ]]; then
   exit 0
 fi
 
-# Create worktree using shared hook
-FULL_WORKSPACE_PATH=$(bash "$SCRIPT_DIR/../opencode/create-worktree.sh" "$ISSUE_KEY" "autoship/issue-${ISSUE_NUM}") || {
-  echo "Error: create-worktree.sh failed for $ISSUE_KEY" >&2
+# Determine target repo path for worktree creation
+TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-}"
+if [[ -z "$TARGET_REPO_PATH" ]]; then
+  # Fallback: derive from HERMES_TARGET_REPO (owner/repo format)
+  if [[ "$REPO" == */* ]]; then
+    REPO_NAME="${REPO#*/}"
+    for candidate in "$HOME/Projects/$REPO_NAME" "$HOME/projects/$REPO_NAME" "$HOME/$REPO_NAME"; do
+      if [[ -d "$candidate/.git" ]]; then
+        TARGET_REPO_PATH="$candidate"
+        break
+      fi
+    done
+  fi
+fi
+if [[ -z "$TARGET_REPO_PATH" || ! -d "$TARGET_REPO_PATH/.git" ]]; then
+  echo "Error: target repo not found. Set HERMES_TARGET_REPO_PATH to the local clone path." >&2
+  echo "Tried: $TARGET_REPO_PATH" >&2
   exit 1
-}
+fi
+
+# Create worktree from TARGET repo, not AutoShip repo
+TARGET_REPO_ROOT="$(cd "$TARGET_REPO_PATH" && git rev-parse --show-toplevel)"
+cd "$TARGET_REPO_ROOT"
+AUTOSHIP_WORKSPACE_ROOT="$REPO_ROOT/$AUTOSHIP_DIR"
+mkdir -p "$AUTOSHIP_WORKSPACE_ROOT/workspaces"
+
+# Fetch base branch in target repo
+git fetch origin "$BASE_BRANCH" --quiet 2>/dev/null || true
+BASE_REF="origin/$BASE_BRANCH"
+if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+  BASE_REF="origin/master"
+fi
+if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+  BASE_REF="origin/main"
+fi
+if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+  BASE_REF="HEAD"
+fi
+
+WORKSPACE_DIR="$AUTOSHIP_WORKSPACE_ROOT/workspaces/$ISSUE_KEY"
+TARGET_BRANCH="autoship/issue-${ISSUE_NUM}"
+
+# Remove stale worktree if exists
+if git worktree list | grep -q "$WORKSPACE_DIR"; then
+  git worktree remove --force "$WORKSPACE_DIR" >/dev/null 2>&1 || true
+fi
+rm -rf "$WORKSPACE_DIR"
+
+# Create worktree from target repo
+git worktree add -B "$TARGET_BRANCH" "$WORKSPACE_DIR" "$BASE_REF" >/dev/null
+
+# Return to AutoShip repo for state management
+cd "$REPO_ROOT"
+
+FULL_WORKSPACE_PATH="$WORKSPACE_DIR"
 if [[ -z "$FULL_WORKSPACE_PATH" || ! -d "$FULL_WORKSPACE_PATH" ]]; then
   echo "Error: worktree path empty or missing after creation: '$FULL_WORKSPACE_PATH'" >&2
   exit 1
