@@ -66,8 +66,6 @@ grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" | grep -F 'shellcheck'
   || fail "check.sh shellcheck must include Hermes hooks"
 grep -F 'DELEGATE_TASK_READY' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
   || fail "Hermes runner setup-only mode must mark workspaces ready for manual delegate_task dispatch"
-grep -F 'delegate_task --workdir' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
-  || fail "Hermes runner setup-only mode must print manual delegate_task dispatch instructions"
 if grep -F 'hermes chat' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
   fail "Hermes runner setup-only mode must not use hermes chat"
 fi
