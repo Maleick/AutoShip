@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  NODE_OPTIONS: --no-deprecation
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -14,12 +18,12 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
@@ -37,12 +41,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
-        run: >-
-          npx
-          --package semantic-release@25.0.3
-          --package @semantic-release/changelog@6.0.3
-          --package @semantic-release/git@10.0.1
-          --package @semantic-release/github@12.0.6
-          --package @semantic-release/npm@13.1.5
-          --package @semantic-release/exec@7.1.0
-          semantic-release
+        run: npx semantic-release
