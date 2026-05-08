@@ -78,7 +78,7 @@ printf 'url = "%s"\n' "$webhook_url" >"$curl_config"
 
 if ! curl -fsS --connect-timeout 5 --max-time 10 -H 'Content-Type: application/json' --data "$payload" --config "$curl_config" >/dev/null; then
   echo "Discord notification failed" >&2
-  exit 0
+  exit 1
 fi
 tmp=$(mktemp "$AUTOSHIP_DIR/discord-notify-state.tmp.XXXXXX")
 jq -n --argjson now "$now" '{last_sent_epoch: $now}' >"$tmp"
