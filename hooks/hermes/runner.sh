@@ -191,13 +191,13 @@ Do NOT run cargo directly in WSL — it will fail due to missing MSVC linker (li
     # Use --max-turns to prevent runaway sessions
     HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
     HERMES_MAX_TURNS="${HERMES_WORKER_MAX_TURNS:-90}"
-    hermes chat \
-      --workdir "$worktree_path" \
-      -q "$(cat "$prompt_file")" \
-      -Q \
-      --max-turns "$HERMES_MAX_TURNS" \
-      -t terminal,file,web \
-      > "$workspace_dir/hermes-worker.log" 2>&1
+    hermes_cmd=(hermes chat --workdir "$worktree_path" -q "$(cat "$prompt_file")" -Q --max-turns "$HERMES_MAX_TURNS" -t terminal,file,web)
+    if command -v timeout >/dev/null 2>&1; then
+      hermes_cmd=(timeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
+    elif command -v gtimeout >/dev/null 2>&1; then
+      hermes_cmd=(gtimeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
+    fi
+    "${hermes_cmd[@]}" >"$workspace_dir/hermes-worker.log" 2>&1
     worker_exit=$?
 
     if [[ $worker_exit -eq 0 ]]; then
