@@ -1,3 +1,10 @@
+# [2.9.0](https://github.com/Maleick/AutoShip/compare/v2.8.0...v2.9.0) (2026-05-08)
+
+
+### Features
+
+* **hermes:** setup-only runner for manual delegate_task dispatch ([#383](https://github.com/Maleick/AutoShip/issues/383)) ([40a1a90](https://github.com/Maleick/AutoShip/commit/40a1a90cafeada9ec1c17e155c89b797b4af1219))
+
 # [2.8.0](https://github.com/Maleick/AutoShip/compare/v2.7.1...v2.8.0) (2026-05-08)
 
 
