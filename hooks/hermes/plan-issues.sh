@@ -7,7 +7,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 
 # Hermes labels — can be customized
-LABELS="${HERMES_LABELS:-autoship:ready-simple}"
+# Default to atomic:ready (the actual label used in TextQuest)
+LABELS="${HERMES_LABELS:-atomic:ready}"
 REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
 
 echo "=== Hermes Issue Plan ==="
