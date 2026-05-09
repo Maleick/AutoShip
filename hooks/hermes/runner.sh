@@ -5,7 +5,12 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Load shared utilities if available
+is_hermes_process_for_workspace() {
+  local workspace_dir="$1"
+  pgrep -af "[h]ermes" 2>/dev/null | grep -F "$workspace_dir" >/dev/null
+}
 if [[ -f "$SCRIPT_DIR/../lib/common.sh" ]]; then
+  # shellcheck disable=SC1091
   source "$SCRIPT_DIR/../lib/common.sh"
 else
   autoship_repo_root() {
@@ -29,7 +34,7 @@ if [[ -d "/opt/homebrew/opt/util-linux/bin" ]]; then
 fi
 
 REPO_ROOT=$(autoship_repo_root) || exit 1
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 log_age_minutes() {
   python3 - "$1" <<'PY'
@@ -85,7 +90,7 @@ if [[ -n "${1:-}" ]]; then
   autoship_state_set set-running "$ISSUE_KEY" agent="hermes/default"
 
   # Extract issue number from key
-  ISSUE_NUM=$(echo "$ISSUE_KEY" | sed 's/issue-//')
+  ISSUE_NUM="${ISSUE_KEY#issue-}"
 
   # Find the worktree path
   worktree_path=""
@@ -127,7 +132,7 @@ if [[ -n "${1:-}" ]]; then
 
   echo "Dispatching $ISSUE_KEY in $worktree_path"
 
-  cd "$worktree_path"
+  cd "$worktree_path" || exit 1
   export GH_TOKEN="${GH_TOKEN:-}"
   export HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
 
@@ -184,10 +189,9 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
     printf '%s\n' "$$" >"$workspace_dir/runner.pid"
 
     HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
-    HERMES_MAX_TURNS="${HERMES_WORKER_MAX_TURNS:-90}"
     # Run delegate_task in the existing worktree directory.
     # Do NOT use --worktree - the workspace is already a git worktree.
-    hermes_cmd=(delegate_task --goal "$(cat "$prompt_file")" --toolsets terminal,file,web)
+    hermes_cmd=(delegate_task --goal "$(cat "$prompt_file")" --toolsets terminal file web)
     if command -v timeout >/dev/null 2>&1; then
       hermes_cmd=(timeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
     elif command -v gtimeout >/dev/null 2>&1; then
@@ -228,7 +232,7 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
 
   # Also check for git commits as evidence of work done
   if [[ "$WORKER_RESULT" != "COMPLETE" && "$WORKER_RESULT" != "BLOCKED" ]]; then
-    commit_count=$(git -C "$worktree_path" rev-list --count autoship/issue-${ISSUE_NUM}...HEAD 2>/dev/null || echo 0)
+    commit_count=$(git -C "$worktree_path" rev-list --count autoship/issue-"${ISSUE_NUM}"...HEAD 2>/dev/null || echo 0)
     if [[ "$commit_count" -gt 0 ]]; then
       # Worker made commits but didn't finish workflow - mark STUCK for retry
       WORKER_RESULT="STUCK"
@@ -297,8 +301,7 @@ while IFS= read -r status_file; do
     if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 30 ]]; then
       # Log is recent, but if there's NO active Hermes process, the log age
       # is just from a previous run that finished. Allow retry in that case.
-      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes" | grep -F "$workspace_dir" || true)
-      if [[ -n "$active_hermes" ]]; then
+      if is_hermes_process_for_workspace "$workspace_dir"; then
         retry_allowed=false
       fi
     fi
@@ -319,8 +322,7 @@ while IFS= read -r status_file; do
   # Check for an active Hermes process in the workspace (process-based validation)
   if [[ "$retry_allowed" == true ]]; then
     # Look for any Hermes process that has this workspace as its CWD
-    active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes" | grep -F "$workspace_dir" || true)
-    if [[ -n "$active_hermes" ]]; then
+    if is_hermes_process_for_workspace "$workspace_dir"; then
       # Process is alive but status is STUCK - this is a false-positive STUCK.
       # Reset to RUNNING so the runner doesn't keep retrying it.
       printf 'RUNNING\n' >"$status_file"
@@ -335,8 +337,7 @@ while IFS= read -r status_file; do
     if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 5 ]]; then
       # Even if log is <5min old, if there's no active hermes process, the log
       # is from a previous run that finished. Allow retry in that case.
-      active_hermes=$(ps aux 2>/dev/null | grep -E "[h]ermes" | grep -F "$workspace_dir" || true)
-      if [[ -n "$active_hermes" ]]; then
+      if is_hermes_process_for_workspace "$workspace_dir"; then
         retry_allowed=false
       fi
     fi
@@ -386,14 +387,6 @@ while IFS= read -r status_file; do
   workspace_dir=$(dirname "$status_file")
   issue_key=$(basename "$workspace_dir")
 
-  # Check if this is a Windows-target repo (has .cargo/config.toml with x86_64-pc-windows-msvc)
-  is_windows_repo=false
-  if [[ -f "$workspace_dir/.cargo/config.toml" ]]; then
-    if grep -q "x86_64-pc-windows-msvc" "$workspace_dir/.cargo/config.toml" 2>/dev/null; then
-      is_windows_repo=true
-    fi
-  fi
-
   # --- Prompt file discovery: look in workspace_dir and in the actual git worktree ---
   prompt_file=""
   if [[ -f "$workspace_dir/HERMES_PROMPT.md" ]]; then
@@ -405,7 +398,7 @@ while IFS= read -r status_file; do
   # and look there.  The workspace_dir may be a bare status container (issue-3059)
   # or a full worktree checkout (issue-3057).
   if [[ -z "$prompt_file" ]]; then
-    ISSUE_NUM=$(echo "$issue_key" | sed 's/issue-//')
+    ISSUE_NUM="${issue_key#issue-}"
     worktree_path=""
     HERMES_TARGET_REPO_PATH="${HERMES_TARGET_REPO_PATH:-$REPO_ROOT}"
     if [[ -n "$HERMES_TARGET_REPO_PATH" ]]; then

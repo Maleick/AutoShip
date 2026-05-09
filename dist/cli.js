@@ -262,7 +262,9 @@ async function doctor() {
     }
     try {
         const assetVersion = (await readFile(join(autoshipDir, "VERSION"), "utf8")).trim();
-        if (assetVersion === VERSION) {
+        const normalizedAssetVersion = assetVersion.replace(/^v/, "");
+        const normalizedPackageVersion = VERSION.replace(/^v/, "");
+        if (normalizedAssetVersion === normalizedPackageVersion) {
             checks.push({ name: "asset-version", status: "PASS", message: `Installed assets match package ${VERSION}` });
         }
         else {

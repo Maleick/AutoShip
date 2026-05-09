@@ -1,3 +1,9 @@
+## [2.12.1](https://github.com/Maleick/AutoShip/compare/v2.12.0...v2.12.1) (2026-05-09)
+
+### Bug Fixes
+
+* sync released package, local version markers, and GitHub release surfaces
+
 ## [2.9.3](https://github.com/Maleick/AutoShip/compare/v2.9.2...v2.9.3) (2026-05-08)
 
 

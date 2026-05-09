@@ -2,8 +2,6 @@
 # AutoShip auto-prune — monitor disk usage and prune when thresholds exceeded
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
 # Default thresholds (override via env vars)
 MAX_WORKTREE_SIZE_GB="${AUTOSHIP_MAX_WORKTREE_SIZE_GB:-2}"      # Max size per worktree
 MAX_TOTAL_WORKTREES_GB="${AUTOSHIP_MAX_TOTAL_WORKTREES_GB:-10}" # Max total for all worktrees
@@ -39,8 +37,8 @@ get_size_gb() {
     raw=$(du -sh "$dir" 2>/dev/null | awk '{print $1}')
     case "$raw" in
       *G) echo "${raw%G}" ;;
-      *M) echo "$(echo "${raw%M} * 0.001" | bc -l 2>/dev/null || echo "0")" ;;
-      *K) echo "$(echo "${raw%K} * 0.000001" | bc -l 2>/dev/null || echo "0")" ;;
+      *M) printf '%s\n' "$(printf '%s * 0.001\n' "${raw%M}" | bc -l 2>/dev/null || echo "0")" ;;
+      *K) printf '%s\n' "$(printf '%s * 0.000001\n' "${raw%K}" | bc -l 2>/dev/null || echo "0")" ;;
       *) echo "$raw" ;;
     esac
   else
@@ -56,7 +54,8 @@ prune_oversized_worktrees() {
   for wt in "$WORKTREE_BASE"/issue-*; do
     [[ -d "$wt" ]] || continue
     local issue_num
-    issue_num=$(basename "$wt" | sed 's/issue-//')
+    issue_num="${wt##*/}"
+    issue_num="${issue_num#issue-}"
     # Only process numeric issue directories
     if [[ ! "$issue_num" =~ ^[0-9]+$ ]]; then
       log "  Skipping non-numeric worktree: $wt"
@@ -64,13 +63,15 @@ prune_oversized_worktrees() {
     fi
 
     local size_gb
+    local is_oversize
     size_gb=$(get_size_gb "$wt")
-    if (($(echo "$size_gb > $MAX_WORKTREE_SIZE_GB" | bc -l 2>/dev/null || echo "0"))); then
+    is_oversize=$(printf '%s > %s\n' "$size_gb" "$MAX_WORKTREE_SIZE_GB" | bc -l 2>/dev/null || echo "0")
+    if [[ "$is_oversize" == "1" ]]; then
       log "Pruning oversized worktree: $wt (${size_gb}GB > ${MAX_WORKTREE_SIZE_GB}GB)"
 
       # Check if active (has RUNNING or QUEUED status)
-      local issue_num=$(basename "$wt" | sed 's/issue-//')
-      local ws_status=""
+      local ws_status
+      ws_status=""
       if [[ -f "$AUTOSHIP_DIR/workspaces/issue-$issue_num/status" ]]; then
         ws_status=$(cat "$AUTOSHIP_DIR/workspaces/issue-$issue_num/status" 2>/dev/null || echo "UNKNOWN")
       fi
@@ -87,7 +88,7 @@ prune_oversized_worktrees() {
   done
 
   log "Pruned $pruned oversized worktrees"
-  return $pruned
+  return "$pruned"
 }
 
 # Prune old workspaces
@@ -95,15 +96,20 @@ prune_old_workspaces() {
   log "Checking workspace age (limit: ${MAX_WORKSPACE_AGE_DAYS} days)..."
 
   local pruned=0
-  local cutoff_epoch=$(($(date +%s) - MAX_WORKSPACE_AGE_DAYS * 86400))
+  local cutoff_epoch
+  cutoff_epoch=$(($(date +%s) - MAX_WORKSPACE_AGE_DAYS * 86400))
 
   for ws in "$AUTOSHIP_DIR"/workspaces/issue-*; do
     [[ -d "$ws" ]] || continue
 
-    local mtime_epoch=$(stat -f%m "$ws" 2>/dev/null || stat -c%Y "$ws" 2>/dev/null || echo "0")
+    local mtime_epoch
+    local issue_num
+    local status
+    mtime_epoch=$(stat -c%Y "$ws" 2>/dev/null || stat -f%m "$ws" 2>/dev/null || echo "0")
     if [[ "$mtime_epoch" -lt "$cutoff_epoch" ]]; then
-      local issue_num=$(basename "$ws" | sed 's/issue-//')
-      local status=$(cat "$ws/status" 2>/dev/null || echo "UNKNOWN")
+      issue_num="${ws##*/}"
+      issue_num="${issue_num#issue-}"
+      status=$(cat "$ws/status" 2>/dev/null || echo "UNKNOWN")
 
       if [[ "$status" == "RUNNING" ]]; then
         log "  Skipping RUNNING workspace: issue-$issue_num"
@@ -117,12 +123,13 @@ prune_old_workspaces() {
   done
 
   log "Pruned $pruned old workspaces"
-  return $pruned
+  return "$pruned"
 }
 
 # Prune by total size
 prune_by_total_size() {
-  local total_gb=$(get_size_gb "$WORKTREE_BASE")
+  local total_gb
+  total_gb=$(get_size_gb "$WORKTREE_BASE")
 
   if ! threshold_exceeded "$total_gb" "$MAX_TOTAL_WORKTREES_GB" "Total worktrees"; then
     return 0
@@ -132,29 +139,36 @@ prune_by_total_size() {
 
   # Sort by modification time, oldest first
   local pruned=0
-  for wt in $(ls -1td "$WORKTREE_BASE"/issue-* 2>/dev/null | tail -r); do
-    [[ -d "$wt" ]] || continue
+  local sorted_worktrees
+  if sorted_worktrees=$(find "$WORKTREE_BASE" -maxdepth 1 -mindepth 1 -type d -name 'issue-*' -print0 \
+    | xargs -0 stat -f "%m %N" 2>/dev/null | sort -n | awk '{print $2}'); then
+    local wt
+    for wt in $sorted_worktrees; do
+      [[ -d "$wt" ]] || continue
 
-    local issue_num=$(basename "$wt" | sed 's/issue-//')
-    local status=""
-    if [[ -f "$AUTOSHIP_DIR/workspaces/issue-$issue_num/status" ]]; then
-      status=$(cat "$AUTOSHIP_DIR/workspaces/issue-$issue_num/status" 2>/dev/null)
-    fi
+      local issue_num status
+      issue_num="${wt##*/}"
+      issue_num="${issue_num#issue-}"
+      status=""
+      if [[ -f "$AUTOSHIP_DIR/workspaces/issue-$issue_num/status" ]]; then
+        status=$(cat "$AUTOSHIP_DIR/workspaces/issue-$issue_num/status" 2>/dev/null)
+      fi
 
-    if [[ "$status" == "RUNNING" ]]; then
-      continue
-    fi
+      if [[ "$status" == "RUNNING" ]]; then
+        continue
+      fi
 
-    log "Removing worktree to free space: $wt"
-    cd "$TARGET_REPO" && git worktree remove "$wt" --force 2>/dev/null || rm -rf "$wt" 2>/dev/null || true
-    ((pruned++)) || true
+      log "Removing worktree to free space: $wt"
+      cd "$TARGET_REPO" && git worktree remove "$wt" --force 2>/dev/null || rm -rf "$wt" 2>/dev/null || true
+      ((pruned++)) || true
 
-    # Check if we're under threshold now
-    total_gb=$(get_size_gb "$WORKTREE_BASE")
-    if ! threshold_exceeded "$total_gb" "$MAX_TOTAL_WORKTREES_GB" "Total worktrees"; then
-      break
-    fi
-  done
+      # Check if we're under threshold now
+      total_gb=$(get_size_gb "$WORKTREE_BASE")
+      if ! threshold_exceeded "$total_gb" "$MAX_TOTAL_WORKTREES_GB" "Total worktrees"; then
+        break
+      fi
+    done
+  fi
 
   log "Pruned $pruned worktrees to get under ${MAX_TOTAL_WORKTREES_GB}GB"
 }
@@ -162,7 +176,8 @@ prune_by_total_size() {
 # Prune by workspace count
 prune_by_workspace_count() {
   # Count actual directories, not files inside them
-  local count=$(find "$AUTOSHIP_DIR"/workspaces -maxdepth 1 -type d -name "issue-*" 2>/dev/null | wc -l | tr -d ' ')
+  local count
+  count=$(find "$AUTOSHIP_DIR"/workspaces -maxdepth 1 -type d -name "issue-*" 2>/dev/null | wc -l | tr -d ' ')
 
   if [[ "$count" -le "$MAX_WORKSPACE_COUNT" ]]; then
     return 0
@@ -170,25 +185,34 @@ prune_by_workspace_count() {
 
   log "Workspace count $count exceeds $MAX_WORKSPACE_COUNT, pruning oldest..."
 
-  local to_remove=$((count - MAX_WORKSPACE_COUNT))
+  local to_remove
   local removed=0
+  to_remove=$((count - MAX_WORKSPACE_COUNT))
 
   # Sort by mtime oldest first, only directories
-  for ws in $(find "$AUTOSHIP_DIR"/workspaces -maxdepth 1 -type d -name "issue-*" -print0 2>/dev/null | xargs -0 stat -f "%m %N" 2>/dev/null | sort -n | head -$to_remove | awk '{print $2}'); do
-    [[ -d "$ws" ]] || continue
+  local workspace_paths
+  if workspace_paths=$(find "$AUTOSHIP_DIR"/workspaces -maxdepth 1 -type d -name "issue-*" -print0 2>/dev/null \
+    | xargs -0 stat -f "%m %N" 2>/dev/null | sort -n | head -n "$to_remove" | cut -d' ' -f2-); then
+    local ws
+    for ws in $workspace_paths; do
+      [[ -d "$ws" ]] || continue
 
-    local issue_num=$(basename "$ws" | sed 's/issue-//')
-    local status=$(cat "$ws/status" 2>/dev/null || echo "UNKNOWN")
+      local issue_num
+      local status
+      issue_num="${ws##*/}"
+      issue_num="${issue_num#issue-}"
+      status=$(cat "$ws/status" 2>/dev/null || echo "UNKNOWN")
 
-    if [[ "$status" == "RUNNING" || "$status" == "QUEUED" ]]; then
-      log "Skipping active workspace: issue-$issue_num (${status})"
-      continue
-    fi
+      if [[ "$status" == "RUNNING" || "$status" == "QUEUED" ]]; then
+        log "Skipping active workspace: issue-$issue_num (${status})"
+        continue
+      fi
 
-    log "Removing workspace: issue-$issue_num (${status})"
-    rm -rf "$ws"
-    ((removed++)) || true
-  done
+      log "Removing workspace: issue-$issue_num (${status})"
+      rm -rf "$ws"
+      ((removed++)) || true
+    done
+  fi
 
   log "Removed $removed workspaces to get under $MAX_WORKSPACE_COUNT"
 }
@@ -215,8 +239,10 @@ main() {
   cd "$TARGET_REPO" && git worktree prune 2>/dev/null || true
 
   # Report current state
-  local current_total=$(get_size_gb "$WORKTREE_BASE")
-  local current_count=$(ls -1 "$AUTOSHIP_DIR"/workspaces/issue-* 2>/dev/null | wc -l | tr -d ' ')
+  local current_total
+  local current_count
+  current_total=$(get_size_gb "$WORKTREE_BASE")
+  current_count=$(find "$AUTOSHIP_DIR"/workspaces -maxdepth 1 -type d -name "issue-*" 2>/dev/null | wc -l | tr -d ' ')
 
   log "=== Auto-Prune Complete ==="
   log "Current state: ${current_total}GB total, $current_count workspaces"
