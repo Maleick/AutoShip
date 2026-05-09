@@ -203,11 +203,17 @@ flowchart TD
 | `/autoship-apply` | Apply a proposed workspace by creating its PR | OpenCode |
 | `/autoship-retry` | Requeue a blocked or stuck issue | OpenCode |
 | `/autoship-cancel` | Cancel an issue workspace | OpenCode |
-| `/autoship-clean` | Remove terminal workspaces | OpenCode |
+| `/autoship-clean` | Remove terminal workspaces; supports build-artifact pruning | OpenCode |
 | `bash hooks/hermes/setup.sh` | Discover Hermes, write model routing | Hermes |
 | `bash hooks/hermes/plan-issues.sh` | Plan issues for Hermes dispatch | Hermes |
 | `bash hooks/hermes/dispatch.sh <n>` | Queue issue for Hermes worker | Hermes |
 | `bash hooks/hermes/status.sh` | Show Hermes runtime status | Hermes |
+
+For Rust-heavy repos, prune rebuildable workspace build outputs without deleting source workspaces. Active `RUNNING`, `VERIFYING`, and `ACTIVE` workspaces are skipped.
+
+```bash
+bash hooks/opencode/clean.sh --build-artifacts
+```
 
 ## Key Hooks
 

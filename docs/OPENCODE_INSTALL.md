@@ -63,6 +63,7 @@ bash hooks/opencode/install.sh
 | `/autoship-plan` | Dry-run (show plan) |
 | `/autoship-setup` | First-run wizard |
 | `/autoship-stop` | Stop orchestration |
+| `/autoship-clean` | Remove terminal workspaces or prune rebuildable workspace build artifacts |
 
 ## Quick Start
 
@@ -119,6 +120,16 @@ AutoShip maintains state in `.autoship/`:
 - `config.json` — Project configuration
 - `routing.json` — Task type routing metadata
 - `model-routing.json` — Live OpenCode model selections
+
+## Workspace Cleanup
+
+AutoShip workspaces may accumulate large Rust `target/` directories. To remove only rebuildable build artifacts while preserving source files and workspace state, run:
+
+```bash
+bash hooks/opencode/clean.sh --build-artifacts
+```
+
+Active `RUNNING`, `VERIFYING`, and `ACTIVE` workspaces are skipped. The default `/autoship-clean` path still removes terminal workspaces only.
 
 ## Discord Status Notifications
 

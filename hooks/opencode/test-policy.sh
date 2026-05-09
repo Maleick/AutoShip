@@ -964,7 +964,7 @@ test -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Disc
 rm -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json"
 DISCORD_CONFIG_HOME="$TMP_DIR/discord-config-home"
 mkdir -p "$DISCORD_CONFIG_HOME/autoship"
-printf 'export AUTOSHIP_DISCORD_WEBHOOK_URL=%s\n' "https://discord.com/api/webhooks/test/token" >"$DISCORD_CONFIG_HOME/autoship/env"
+printf 'export AUTOSHIP_DISCORD_WEBHOOK_URL=%q\n' "https://discord.com/api/webhooks/test/token" >"$DISCORD_CONFIG_HOME/autoship/env"
 chmod 600 "$DISCORD_CONFIG_HOME/autoship/env"
 (
   cd "$DISCORD_NOTIFY_REPO"
@@ -1702,7 +1702,11 @@ chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
   grep -F 'AUTOSHIP_DISCORD_WEBHOOK_URL=' "$discord_env_file" >/dev/null || fail "setup persists Discord webhook env var"
   grep -F 'AUTOSHIP_KEEP_ME=1' "$discord_env_file" >/dev/null || fail "setup preserves other user env settings"
   printf '%s\n' "$setup_discord_output" | grep -F "$setup_discord_url" >/dev/null && fail "setup output must not leak Discord webhook URL"
-  env_mode=$(stat -c %a "$discord_env_file" 2>/dev/null || stat -f %Lp "$discord_env_file")
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    env_mode=$(stat -f %Lp "$discord_env_file")
+  else
+    env_mode=$(stat -c %a "$discord_env_file")
+  fi
   test "$env_mode" = "600" || fail "Discord env file is private"
   ! grep -R "$setup_discord_url" .autoship >/dev/null 2>&1 || fail "setup must not write Discord webhook to project state"
   if AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null 2>&1; then
@@ -1795,6 +1799,34 @@ JSON
 
 ROUTING_LOG_ESCALATE=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log simple_code 100)
 assert_eq "true" "$(echo "$ROUTING_LOG_ESCALATE" | grep -q "free model selected by default" && echo "true" || echo "false")" "routing log shows free selection reason"
+
+CLEAN_REPO="$TMP_DIR/clean-repo"
+mkdir -p "$CLEAN_REPO/hooks/opencode" "$CLEAN_REPO/.autoship/workspaces/issue-1/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-2/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-3/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-4/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-5/target/debug"
+git init -q "$CLEAN_REPO"
+cp "$SCRIPT_DIR/clean.sh" "$CLEAN_REPO/hooks/opencode/clean.sh"
+chmod +x "$CLEAN_REPO/hooks/opencode/clean.sh"
+printf 'QUEUED\n' >"$CLEAN_REPO/.autoship/workspaces/issue-1/status"
+printf 'COMPLETE\n' >"$CLEAN_REPO/.autoship/workspaces/issue-2/status"
+printf 'RUNNING\n' >"$CLEAN_REPO/.autoship/workspaces/issue-3/status"
+printf 'VERIFYING\n' >"$CLEAN_REPO/.autoship/workspaces/issue-4/status"
+printf 'ACTIVE\n' >"$CLEAN_REPO/.autoship/workspaces/issue-5/status"
+printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-1/target/debug/file"
+printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-2/target/debug/file"
+printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-3/target/debug/file"
+printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-4/target/debug/file"
+printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-5/target/debug/file"
+printf 'source\n' >"$CLEAN_REPO/.autoship/workspaces/issue-1/source.txt"
+(cd "$CLEAN_REPO" && bash hooks/opencode/clean.sh --build-artifacts >/dev/null)
+test ! -e "$CLEAN_REPO/.autoship/workspaces/issue-1/target" || fail "build artifact cleanup removes queued workspace target dir"
+test ! -e "$CLEAN_REPO/.autoship/workspaces/issue-2/target" || fail "build artifact cleanup removes complete workspace target dir"
+test -d "$CLEAN_REPO/.autoship/workspaces/issue-3/target" || fail "build artifact cleanup skips running workspace target dir"
+test -d "$CLEAN_REPO/.autoship/workspaces/issue-4/target" || fail "build artifact cleanup skips verifying workspace target dir"
+test -d "$CLEAN_REPO/.autoship/workspaces/issue-5/target" || fail "build artifact cleanup skips active workspace target dir"
+test -f "$CLEAN_REPO/.autoship/workspaces/issue-1/source.txt" || fail "build artifact cleanup preserves workspace source files"
+test -f "$CLEAN_REPO/.autoship/workspaces/issue-2/status" || fail "build artifact cleanup preserves terminal workspaces"
+(cd "$CLEAN_REPO" && bash hooks/opencode/clean.sh >/dev/null)
+test -d "$CLEAN_REPO/.autoship/workspaces/issue-1" || fail "default cleanup preserves non-terminal workspaces"
+test ! -e "$CLEAN_REPO/.autoship/workspaces/issue-2" || fail "default cleanup removes terminal workspaces"
 
 cat >"$SELECT_REPO/config/model-routing.json" <<'JSON'
 {
