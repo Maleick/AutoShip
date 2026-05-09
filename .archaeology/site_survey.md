@@ -1,31 +1,44 @@
 # Code Archaeology Site Survey
 
 Date: 2026-05-08
-Mode: survey with targeted restore for confirmed CI/TextQuest failures
+Mode: survey
+Repository: `/Users/maleick/Projects/AutoShip`
 
 ## Baseline
 
-- Branch: main
-- Head: 8e875011e0f2808c5ef2f5d83b9522bfca75dcba
-- Inventory: 202 tracked/source files excluding `.git`, `node_modules`, `dist`, `.autoship`, `.archaeology`, and `graphify-out`
-- Approximate lines: 22,745
-- Dominant strata: 102 shell scripts, 56 markdown docs, 12 JSON files, 4 TypeScript files
+- Branch: `main`
+- Head: `b16ae0ee7548e40124f2e6819a36977bd95b09a6`
+- Working tree at survey start was already dirty: `.archaeology/site_survey.md`, five shell hook files, and untracked `.tmp/` were present.
+- Inventory, excluding `.git`, `node_modules`, `.autoship`, `.worktrees`, `graphify-out`, and prior `.archaeology` reports: 190 text-like files and approximately 28,640 lines.
+- Dominant strata: 103 shell scripts, 57 markdown docs, 13 JSON files, 7 TypeScript files, 6 workflow files, 3 JavaScript files, and 1 module script.
 
-## Survey Findings
+## Baseline Verification
 
-- CI release failure was reproducible from GitHub Actions logs: `@semantic-release/git` attempted `git push --tags ... HEAD:main`, rejected by protected branch rule `GH006`.
-- TextQuest policy test initially returned `default` because `.autoship/config.json` contains `policyProfile: "default"`, which suppressed AutoShip's TextQuest auto-detection.
-- Policy asset lookup resolved against the target repo, so installed/source AutoShip policy JSON was unavailable when hooks ran inside TextQuest.
-- Monitor liveness regression existed on macOS `/var` vs `/private/var` paths and strict `ps` pipeline matching.
+- `npm run typecheck -- --pretty false`: passed.
+- `bash -n hooks/opencode/*.sh hooks/*.sh hooks/hermes/*.sh scripts/**/*.sh`: passed.
+- `bash hooks/opencode/check.sh --syntax`: passed.
+- `npm run verify:pack`: passed, package dry-run verified 139 files.
+- `npm audit --audit-level=moderate`: passed, found 0 vulnerabilities.
 
-## Tool Survey
+## Tooling
 
-- `knip --reporter compact`: reported generated `dist/*` files and `plugins/autoship.ts` as unused, plus `semantic-release` as an unlisted workflow binary. These are package/runtime artifacts, not safe removal candidates without packaging redesign.
-- `madge src hooks --extensions ts,js,sh --circular`: no circular dependencies found.
-- `jscpd --min-lines 12 --min-tokens 80 src hooks scripts`: 0 exact clones, 0 duplicated lines across 98 scanned files.
-- `npm audit --audit-level=moderate`: 0 vulnerabilities.
+- Available: `npx`, `npm`, `git`, `bash`, `jq`, `gh`, `shellcheck`, `rg`.
+- Not installed as local/global commands: `madge`, `knip`, `jscpd`.
+- Survey used `npx --yes` for `madge`, `knip`, and `jscpd` checks without adding dependencies.
+
+## Stratum Summary
+
+- Dead code: `knip` produced publish/runtime false positives in `dist/`, `.autoship/workspaces/`, `plugins/autoship.ts`, and `.github/workflows/release.yml`; only two non-runtime, non-generated findings remain for human review.
+- Legacy/shim code: no deprecated package references were detected; shell compatibility and retry patterns remain intentionally broad.
+- Dependencies: `madge` processed 106 files and found no circular dependency.
+- Type catalog: TypeScript strict mode is enabled; weak type tokens remain in generated declarations and a few source positions.
+- Type hardening: no TypeScript suppression comments were found.
+- DRY: `jscpd` found 0 exact clones and 0 duplicated lines across 99 scanned files.
+- Error handling: no empty JS/TS `catch {}` blocks were found; shell scripts contain many intentional `|| true` / `|| :` guards that need semantic review before any cleanup.
+- Security/dependency health: npm audit found 0 vulnerabilities.
 
 ## Preservation Notes
 
-- No dead-code removals were performed. Reported `dist/*` outputs are publish artifacts and intentionally included in `package.json` files.
-- Confirmed fixes were limited to CI release configuration, policy profile/asset resolution, and monitor liveness detection.
+- No source code changes were made in this survey pass.
+- `.autoship/` runtime state and `.worktrees/` workspace copies were excluded from archaeology conclusions.
+- Existing unrelated shell hook modifications were preserved and not reverted.
