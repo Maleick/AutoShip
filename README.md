@@ -139,6 +139,16 @@ Hermes-specific configuration:
 
 AutoShip also loads committed policy profiles from `policies/`. Policies enrich worker prompts, configure Rust cargo safeguards, guide overlap-aware dispatch, and enforce repo-specific hazards such as self-hosted GitHub Actions runners.
 
+### Discord Status Notifications
+
+AutoShip still includes Discord status notifications for the OpenCode supervisor loop. Set `AUTOSHIP_DISCORD_WEBHOOK_URL` in the shell or service environment that starts AutoShip:
+
+```bash
+export AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+```
+
+The notifier is optional and non-blocking. If the webhook is missing or invalid, AutoShip continues dispatching and running workers.
+
 ## Defaults
 
 - **OpenCode** max active workers: `20`

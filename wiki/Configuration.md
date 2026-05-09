@@ -153,3 +153,13 @@ bash hooks/opencode/setup.sh --no-tui --refresh-models
 ```
 
 Manual edits to `.autoship/model-routing.json` are preserved by default.
+
+## Discord Status Notifications
+
+Discord status notifications are optional and are still included for the OpenCode supervisor loop. Configure an incoming Discord webhook URL in the environment that starts AutoShip:
+
+```bash
+export AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+```
+
+The webhook URL is intentionally environment-only so it is not copied into worker worktrees or committed runtime state. Notification failures are non-blocking; the supervisor logs them and continues dispatching work.

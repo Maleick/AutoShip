@@ -1,3 +1,10 @@
+## [2.12.2](https://github.com/Maleick/AutoShip/compare/v2.12.1...v2.12.2) (2026-05-09)
+
+### Bug Fixes
+
+* **release:** respect protected main ([#397](https://github.com/Maleick/AutoShip/issues/397)) ([7cf9350](https://github.com/Maleick/AutoShip/commit/7cf9350660329098b9772a89e0a85b1786e61a2c))
+* **release:** restore GitHub release sync ([#396](https://github.com/Maleick/AutoShip/issues/396)) ([6ce807f](https://github.com/Maleick/AutoShip/commit/6ce807f9a6a4416ee06269ef42f585febb785274))
+
 ## [2.12.1](https://github.com/Maleick/AutoShip/compare/v2.12.0...v2.12.1) (2026-05-09)
 
 ### Bug Fixes
