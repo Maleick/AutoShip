@@ -51,6 +51,10 @@ trim_file() {
   tr -d '[:space:]' <"$1"
 }
 
+normalize_version() {
+  printf '%s\n' "${1#v}"
+}
+
 record_mismatch() {
   failures+=("$1")
 }
@@ -71,8 +75,8 @@ else
   if [[ ! -f "$PACKAGE_FILE" ]]; then
     record_mismatch "package.json is missing"
   else
-    package_version="v$(jq -r '.version // empty' "$PACKAGE_FILE")"
-    if [[ "$package_version" != "$expected_version" ]]; then
+    package_version="$(jq -r '.version // empty' "$PACKAGE_FILE")"
+    if [[ "$(normalize_version "$package_version")" != "$(normalize_version "$expected_version")" ]]; then
       record_mismatch "package.json version $package_version does not match VERSION $expected_version"
     fi
   fi
@@ -93,7 +97,7 @@ else
       record_mismatch "installed asset marker $INSTALLED_VERSION_FILE is missing"
     else
       installed_version="$(trim_file "$INSTALLED_VERSION_FILE")"
-      if [[ "$installed_version" != "$expected_version" ]]; then
+      if [[ "$(normalize_version "$installed_version")" != "$(normalize_version "$expected_version")" ]]; then
         record_mismatch "installed asset marker $installed_version does not match VERSION $expected_version"
       fi
     fi
@@ -104,7 +108,7 @@ else
       record_mismatch "GitHub release tag marker $RELEASE_TAG_FILE is missing"
     else
       release_tag="$(trim_file "$RELEASE_TAG_FILE")"
-      if [[ "$release_tag" != "$expected_version" ]]; then
+      if [[ "$(normalize_version "$release_tag")" != "$(normalize_version "$expected_version")" ]]; then
         record_mismatch "GitHub release tag marker $release_tag does not match VERSION $expected_version"
       fi
     fi

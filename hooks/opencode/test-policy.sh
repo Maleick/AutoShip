@@ -30,6 +30,29 @@ assert_file_contains() {
   grep -F "$text" "$file" >/dev/null || fail "$message"
 }
 
+copy_tracked_repo_fixture() {
+  local src="$1" dest="$2" file
+  mkdir -p "$dest"
+  while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
+    mkdir -p "$dest/$(dirname "$file")"
+    cp "$src/$file" "$dest/$file"
+  done < <(git -C "$src" ls-files)
+}
+
+copy_package_fixture_without_local_artifacts() {
+  local src="$1" dest="$2" entry name
+  mkdir -p "$dest"
+  for entry in "$src"/* "$src"/.[!.]* "$src"/..?*; do
+    [[ -e "$entry" ]] || continue
+    name="$(basename "$entry")"
+    case "$name" in
+      . | .. | .git | .autoship | node_modules | .worktrees | .tmp | .archaeology) continue ;;
+    esac
+    cp -R "$entry" "$dest/"
+  done
+}
+
 assert_canonical_inventory() {
   local repo_root
   repo_root="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -60,9 +83,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 if ! grep -E -A4 'actions/setup-node@v(4|6)' "$REPO_ROOT/.github/workflows/release.yml" | grep -Eq "node-version: ['\"]?(22|24)['\"]?"; then
   fail "release workflow must use Node 22 or 24 for semantic-release"
 fi
-grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" >/dev/null \
+grep -F "\"\$HOOKS_DIR/hermes\"/*.sh" "$SCRIPT_DIR/check.sh" >/dev/null \
   || fail "check.sh syntax check must include Hermes hooks"
-grep -F '"$HOOKS_DIR/hermes"/*.sh' "$SCRIPT_DIR/check.sh" | grep -F 'shellcheck' >/dev/null \
+grep -F "\"\$HOOKS_DIR/hermes\"/*.sh" "$SCRIPT_DIR/check.sh" | grep -F 'shellcheck' >/dev/null \
   || fail "check.sh shellcheck must include Hermes hooks"
 # Hermes runner must support both delegate_task mode (HERMES_SESSION_ID set)
 # and headless hermes chat mode (no session). The runner may execute workers
@@ -75,7 +98,7 @@ grep -F 'hermes chat' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
 if grep -F 'hermes chat --worktree' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
   fail "Hermes runner must not pass --worktree when dispatch already prepared the target worktree"
 fi
-grep -F 'WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
+grep -F "WORKSPACES_DIR=\"\$AUTOSHIP_DIR/workspaces\"" "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
   || fail "Hermes runner must keep orchestration status under AutoShip workspaces"
 if grep -F 'python3 -c "import os,time; st=os.stat(' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null; then
   fail "Hermes runner must pass log paths to Python safely"
@@ -83,10 +106,10 @@ fi
 if grep -F 'COMPLETE | BLOCKED | STUCK | unknown)' "$REPO_ROOT/hooks/hermes/cleanup-worktrees.sh" >/dev/null; then
   fail "Hermes cleanup must not delete retryable STUCK workspaces"
 fi
-if grep -F 'PLUGIN_URL="file://$PLUGIN_DEST"' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null; then
+if grep -F "PLUGIN_URL=\"file://\$PLUGIN_DEST\"" "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null; then
   fail "source install must not register copied plugin with broken relative imports"
 fi
-if grep -F 'PLUGIN_URL="file://$REPO_ROOT/plugins/autoship.ts"' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null; then
+if grep -F "PLUGIN_URL=\"file://\$REPO_ROOT/plugins/autoship.ts\"" "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null; then
   fail "source install must not register mutable checkout plugin paths"
 fi
 grep -F 'pathToFileURL' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null \
@@ -95,7 +118,7 @@ grep -F 'contains("autoship")) | not' "$REPO_ROOT/hooks/opencode/install.sh" >/d
   || fail "source install must remove legacy AutoShip file plugin registrations"
 grep -F '. != "opencode-autoship@latest"' "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null \
   || fail "source install must remove legacy opencode-autoship@latest registrations"
-grep -F 'cp -R "$src/src" "$AUTOSHIP_HOME/src"' "$REPO_ROOT/hooks/opencode/sync-release.sh" >/dev/null \
+grep -F "cp -R \"\$src/src\" \"\$AUTOSHIP_HOME/src\"" "$REPO_ROOT/hooks/opencode/sync-release.sh" >/dev/null \
   || fail "source install must sync plugin source dependencies into config-owned assets"
 grep -F 'autoship:in-progress' "$REPO_ROOT/hooks/opencode/plan-issues.sh" >/dev/null \
   || fail "planner must skip AutoShip in-progress lifecycle labels"
@@ -111,9 +134,9 @@ grep -F 'resource-monitor.sh' "$REPO_ROOT/hooks/opencode/runner.sh" >/dev/null \
   || fail "runner must enforce resource monitor concurrency recommendations"
 grep -F 'runner.lock' "$REPO_ROOT/hooks/opencode/runner.sh" >/dev/null \
   || fail "runner must serialize queue scheduling with a lock"
-grep -F 'lockf -k "$LOCK_FILE"' "$REPO_ROOT/hooks/opencode/monitor-agents.sh" >/dev/null \
+grep -F "lockf -k \"\$LOCK_FILE\"" "$REPO_ROOT/hooks/opencode/monitor-agents.sh" >/dev/null \
   || fail "monitor must lock event queue writes on macOS"
-grep -F 'mktemp "$AUTOSHIP_DIR/event-queue.tmp.XXXXXX"' "$REPO_ROOT/hooks/opencode/monitor-agents.sh" >/dev/null \
+grep -F "mktemp \"\$AUTOSHIP_DIR/event-queue.tmp.XXXXXX\"" "$REPO_ROOT/hooks/opencode/monitor-agents.sh" >/dev/null \
   || fail "monitor must use unique event queue temp files"
 grep -F 'sanitize_issue_body' "$REPO_ROOT/hooks/opencode/dispatch.sh" >/dev/null \
   || fail "dispatcher must sanitize untrusted issue bodies"
@@ -129,7 +152,7 @@ grep -F 'exec 9>&-' "$REPO_ROOT/hooks/opencode/runner.sh" >/dev/null \
   || fail "runner workers must not inherit scheduler lock fd"
 grep -F 'tr -d' "$REPO_ROOT/hooks/opencode/monitor-agents.sh" | grep -F '\r\n' >/dev/null \
   || fail "monitor must normalize CRLF status reads"
-grep -F '&& mv "$tmp" "$EVENT_QUEUE"' "$REPO_ROOT/hooks/opencode/monitor-agents.sh" >/dev/null \
+grep -F "&& mv \"\$tmp\" \"\$EVENT_QUEUE\"" "$REPO_ROOT/hooks/opencode/monitor-agents.sh" >/dev/null \
   || fail "monitor must only replace event queue after successful jq write"
 grep -F 'env -i' "$REPO_ROOT/hooks/opencode/runner.sh" >/dev/null \
   || fail "runner must use an allowlisted worker environment"
@@ -226,8 +249,8 @@ cp "$REPO_ROOT/policies/textquest.json" "$TEXTQUEST_INSTALL/policies/textquest.j
 )
 
 test -f "$REPO_ROOT/commands/autoship-setup.md" || fail "canonical /autoship-setup command file is installed"
-grep -F '| `/autoship-setup` |' "$REPO_ROOT/README.md" >/dev/null || fail "README public command table includes /autoship-setup"
-grep -F '| `/autoship-setup` |' "$REPO_ROOT/commands/autoship.md" >/dev/null || fail "/autoship command table includes /autoship-setup"
+grep -F "| \`/autoship-setup\` |" "$REPO_ROOT/README.md" >/dev/null || fail "README public command table includes /autoship-setup"
+grep -F "| \`/autoship-setup\` |" "$REPO_ROOT/commands/autoship.md" >/dev/null || fail "/autoship command table includes /autoship-setup"
 
 ISSUES_FILE="$TMP_DIR/issues.json"
 cat >"$ISSUES_FILE" <<'JSON'
@@ -805,8 +828,7 @@ live_child_pid=$!
 _live_wait=0
 while [ "$_live_wait" -lt 50 ]; do
   kill -0 "$live_child_pid" 2>/dev/null \
-    && ps -axo command= 2>/dev/null \
-    | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \
+    && pgrep -f "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" >/dev/null \
     && break
   sleep 0.1
   _live_wait=$((_live_wait + 1))
@@ -942,12 +964,12 @@ test -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Disc
 rm -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json"
 (
   cd "$DISCORD_NOTIFY_REPO"
-  AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/test/token" DISCORD_CAPTURE="$TMP_DIR/discord-failed-payload.json" DISCORD_CURL_EXIT=28 PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
+  AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/test/token" DISCORD_CAPTURE="$TMP_DIR/discord-failed-payload.json" DISCORD_CURL_EXIT=28 PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null || true
 )
 test ! -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier does not checkpoint failed sends"
 (
   cd "$DISCORD_NOTIFY_REPO"
-  AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" DISCORD_CAPTURE="$TMP_DIR/discord-invalid-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
+  AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" DISCORD_CAPTURE="$TMP_DIR/discord-invalid-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null || true
 )
 test ! -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier does not checkpoint invalid webhook URLs"
 
@@ -1613,7 +1635,7 @@ printf '%s\n' "$formerly_blocked_line" | grep -F 'agent:ready' >/dev/null || fai
 SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"
 mkdir -p "$SETUP_REPO/autoship"
-tar -C "$SCRIPT_DIR/../.." --exclude .git --exclude .autoship -cf - . | tar -C "$SETUP_REPO/autoship" -xf -
+copy_tracked_repo_fixture "$REPO_ROOT" "$SETUP_REPO/autoship"
 cat >"$SETUP_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1" == "models" ]]; then
@@ -2013,7 +2035,7 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
   printf 'live result\n' >"$live_workspace/AUTOSHIP_RESULT.md"
   printf 'runner log\n' >"$live_workspace/AUTOSHIP_RUNNER.log"
   printf 'COMPLETE\n' >"$live_workspace/status"
-  AUTOSHIP_ENABLE_PR_CREATE=true AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/live-gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-191 "$live_workspace" >/dev/null
+  AUTOSHIP_ENABLE_PR_CREATE=true AUTOSHIP_SKIP_BRANCH_PUSH=true AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/live-gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-191 "$live_workspace" >/dev/null
   git -C "$live_workspace" show --name-only --format= HEAD | grep -F 'implementation.txt' >/dev/null || fail "live PR path commits implementation changes"
   if git -C "$live_workspace" show --name-only --format= HEAD | grep -E 'AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|status' >/dev/null; then
     fail "live PR path must not commit AutoShip runtime artifacts"
@@ -2021,7 +2043,7 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
 )
 
 SYNC_REPO="$TMP_DIR/sync-release-repo"
-cp -R "$SCRIPT_DIR/../.." "$SYNC_REPO"
+copy_tracked_repo_fixture "$REPO_ROOT" "$SYNC_REPO"
 (
   cd "$SYNC_REPO"
   CONFIG_DIR="$TMP_DIR/sync-config"
@@ -2051,7 +2073,7 @@ cp -R "$SCRIPT_DIR/../.." "$SYNC_REPO"
 SELF_SYNC_CONFIG="$TMP_DIR/self-sync-config"
 SELF_AUTOSHIP_HOME="$SELF_SYNC_CONFIG/.autoship"
 mkdir -p "$SELF_SYNC_CONFIG"
-cp -R "$SCRIPT_DIR/../.." "$SELF_AUTOSHIP_HOME"
+copy_tracked_repo_fixture "$REPO_ROOT" "$SELF_AUTOSHIP_HOME"
 rm -rf "$SELF_AUTOSHIP_HOME/plugins"
 mkdir -p "$TMP_DIR/self-sync-plugin-target"
 printf 'external plugin\n' >"$TMP_DIR/self-sync-plugin-target/autoship.ts"
@@ -2062,7 +2084,7 @@ fi
 grep -F 'refusing to operate on symlinked path' "$TMP_DIR/self-sync-symlink.out" >/dev/null || fail "sync-release self-install reports symlinked plugin parent"
 
 PACKAGE_REPO="$TMP_DIR/package-repo"
-cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
+copy_tracked_repo_fixture "$REPO_ROOT" "$PACKAGE_REPO"
 (
   cd "$PACKAGE_REPO"
   rm -rf .autoship node_modules dist
@@ -2114,7 +2136,7 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   fi
   grep -F 'Refusing to write symlinked OpenCode asset root' "$TMP_DIR/package-symlink-root.out" >/dev/null || fail "package installer reports symlinked .autoship root"
   ASSET_SYMLINK_REPO="$TMP_DIR/package-asset-symlink-repo"
-  cp -R . "$ASSET_SYMLINK_REPO"
+  copy_package_fixture_without_local_artifacts . "$ASSET_SYMLINK_REPO"
   rm -rf "$ASSET_SYMLINK_REPO/hooks"
   ln -s "$TMP_DIR" "$ASSET_SYMLINK_REPO/hooks"
   if OPENCODE_CONFIG_DIR="$TMP_DIR/package-asset-symlink-config" node "$ASSET_SYMLINK_REPO/dist/cli.js" install >"$TMP_DIR/package-symlink-src.out" 2>&1; then
@@ -2122,7 +2144,7 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   fi
   grep -F 'Refusing to copy symlinked package asset' "$TMP_DIR/package-symlink-src.out" >/dev/null || fail "package installer reports symlinked package asset"
   PACK_SYMLINK_REPO="$TMP_DIR/package-pack-symlink-repo"
-  cp -R . "$PACK_SYMLINK_REPO"
+  copy_package_fixture_without_local_artifacts . "$PACK_SYMLINK_REPO"
   rm "$PACK_SYMLINK_REPO/INSTALL.md"
   ln -s README.md "$PACK_SYMLINK_REPO/INSTALL.md"
   if (cd "$PACK_SYMLINK_REPO" && bash hooks/opencode/verify-package.sh >/dev/null 2>&1); then

@@ -157,18 +157,20 @@ fi
   fi
   # Push branch if it exists locally but not on origin
   current_branch=$(git branch --show-current 2>/dev/null || true)
-  if [[ -n "$current_branch" ]]; then
+  if [[ -n "$current_branch" && "${AUTOSHIP_SKIP_BRANCH_PUSH:-false}" != "true" ]]; then
     if ! git ls-remote --exit-code --heads origin "$current_branch" >/dev/null 2>&1; then
       git push -u origin "$current_branch" >/dev/null 2>&1 || true
     fi
   fi
 )
 
-PR_URL=$(gh pr create \\
-  --title "$TITLE" \\
-  --body-file "$BODY_FILE" \\
-  --label autoship \\
-  --head "autoship/issue-$ISSUE_NUMBER")
+PR_URL=$(
+  gh pr create \
+    --title "$TITLE" \
+    --body-file "$BODY_FILE" \
+    --label autoship \
+    --head "autoship/issue-$ISSUE_NUMBER"
+)
 
 issue_meta=$(gh issue view "$ISSUE_NUMBER" --json labels,milestone 2>/dev/null || echo '{}')
 labels=$(jq -r '[.labels[].name? | select(. != "agent:ready")] | join(",")' <<<"$issue_meta" 2>/dev/null || true)

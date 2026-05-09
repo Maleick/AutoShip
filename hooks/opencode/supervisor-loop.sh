@@ -230,16 +230,16 @@ auto_retry_stuck_workspaces() {
     [[ "$issue" =~ ^issue-[0-9]+$ ]] || continue
     status=$(status_of "$dir")
     [[ "$status" == "STUCK" ]] || continue
-    
+
     retry_count=0
     [[ -f "$dir/retry_count" ]] && retry_count=$(tr -d '[:space:]' <"$dir/retry_count")
     [[ "$retry_count" =~ ^[0-9]+$ ]] || retry_count=0
-    
+
     # Max retries per workspace
     if ((retry_count >= 3)); then
       continue
     fi
-    
+
     # Check cooldown since last stuck event or status change
     stuck_at_epoch=0
     if [[ -f "$dir/.autoship-event-STUCK.sent" ]]; then
@@ -247,14 +247,14 @@ auto_retry_stuck_workspaces() {
     elif [[ -f "$dir/status" ]]; then
       stuck_at_epoch=$(file_mtime_epoch "$dir/status")
     fi
-    
+
     if [[ "$stuck_at_epoch" =~ ^[0-9]+$ && "$stuck_at_epoch" -gt 0 ]]; then
       local elapsed=$((now - stuck_at_epoch))
       if ((elapsed < cooldown)); then
         continue
       fi
     fi
-    
+
     # Reset to QUEUED
     printf 'QUEUED\n' >"$dir/status"
     printf '%d\n' $((retry_count + 1)) >"$dir/retry_count"
@@ -271,6 +271,11 @@ run_hook_if_present() {
   elif [[ -f "$SCRIPT_DIR/$hook" ]]; then
     bash "$SCRIPT_DIR/$hook"
   fi
+}
+
+run_optional_hook_if_present() {
+  local hook="$1"
+  run_hook_if_present "$hook" || log_supervisor "optional hook failed hook=$hook"
 }
 
 dispatch_missing_queued_workspaces() {
@@ -331,6 +336,7 @@ supervisor_pass() {
   auto_retry_stuck_workspaces
   run_hook_if_present process-event-queue.sh
   run_hook_if_present reconcile-state.sh
+  run_optional_hook_if_present notify-discord.sh
   dispatch_missing_queued_workspaces
   run_hook_if_present runner.sh
   log_supervisor "pass finished"

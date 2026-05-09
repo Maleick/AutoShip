@@ -23,6 +23,8 @@ Thumbs.db
 .code-review-graph/
 graphify-out/
 .autoresearch/
+.archaeology/
+.tmp/
 AUTORESEARCH_FINDINGS.md
 autoresearch-memory.md
 __pycache__/
