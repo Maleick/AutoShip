@@ -17,25 +17,25 @@
 
 - [x] **Step 1: Add assertions to the existing setup fixture**
 
-Add setup runs that pass `AUTOSHIP_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/test/token` and assert:
+Add setup runs that pass `AUTOSHIP_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/test_token` and assert:
 
 ```bash
-test -f "$HOME/.config/autoship/env" || fail "setup writes user env file for Discord webhook"
-grep -F 'AUTOSHIP_DISCORD_WEBHOOK_URL=' "$HOME/.config/autoship/env" >/dev/null || fail "setup persists Discord webhook env var"
-test "$(stat -f %Lp "$HOME/.config/autoship/env" 2>/dev/null || stat -c %a "$HOME/.config/autoship/env")" = "600" || fail "Discord env file is private"
-! grep -R 'discord.com/api/webhooks/test/token' .autoship >/dev/null 2>&1 || fail "setup must not write Discord webhook to project state"
+test -f "$XDG_CONFIG_HOME/autoship/env" || fail "setup writes user env file for Discord webhook"
+grep -F 'AUTOSHIP_DISCORD_WEBHOOK_URL=' "$XDG_CONFIG_HOME/autoship/env" >/dev/null || fail "setup persists Discord webhook env var"
+test "$(stat -f %Lp "$XDG_CONFIG_HOME/autoship/env" 2>/dev/null || stat -c %a "$XDG_CONFIG_HOME/autoship/env")" = "600" || fail "Discord env file is private"
+! grep -R "$setup_discord_url" .autoship >/dev/null 2>&1 || fail "setup must not write Discord webhook to project state"
 ```
 
 - [x] **Step 2: Run policy to verify failure before implementation**
 
 Run: `bash hooks/opencode/check.sh --policy`
-
 Expected: FAIL because setup does not yet write the user env file.
 
 ### Task 2: Setup Implementation
 
 **Files:**
 - Modify: `hooks/opencode/setup.sh`
+- Modify: `hooks/opencode/notify-discord.sh`
 
 - [x] **Step 1: Add options and helpers**
 
@@ -43,11 +43,11 @@ Add `AUTOSHIP_DISCORD_WEBHOOK_URL`, URL validation, env-file path resolution, an
 
 - [x] **Step 2: Add interactive prompt**
 
-When interactive, prompt `Discord webhook URL [leave blank to skip]:` without echoing the configured value later.
+When interactive, prompt `Discord webhook URL [leave blank to skip]:` with `read -rs` so the pasted webhook is not echoed.
 
 - [x] **Step 3: Wire persistence**
 
-Persist valid webhook URLs to `${XDG_CONFIG_HOME:-$HOME/.config}/autoship/env`; never write them to `.autoship/config.json`.
+Persist valid webhook URLs to `${XDG_CONFIG_HOME:-$HOME/.config}/autoship/env`; never write them to `.autoship/config.json` or curl temp files.
 
 - [x] **Step 4: Run policy to verify pass**
 
@@ -63,7 +63,7 @@ Expected: PASS.
 
 - [x] **Step 1: Document wizard setup**
 
-Explain that `/autoship-setup` can persist the webhook to `~/.config/autoship/env` and that the notifier reads that persisted file automatically.
+Explain that `/autoship-setup` can persist the webhook to `~/.config/autoship/env`, the prompt is silent, and the notifier reads the persisted file automatically.
 
 - [x] **Step 2: Run verification**
 

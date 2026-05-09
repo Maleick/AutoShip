@@ -1,0 +1,48 @@
+{
+  "models": [
+    {
+      "id": "opencode-go/deepseek-v4-flash",
+      "cost": "free",
+      "strength": 6,
+      "enabled": true,
+      "max_task_types": ["research", "docs", "simple_code", "mechanical", "ci_fix"]
+    },
+    {
+      "id": "kimi-for-coding/k2p6",
+      "cost": "subscription",
+      "strength": 9,
+      "enabled": true,
+      "max_task_types": ["simple_code", "medium_code", "complex", "rust_unsafe", "mechanical"]
+    },
+    {
+      "id": "opencode/kimi-k2.6",
+      "cost": "subscription",
+      "strength": 9,
+      "enabled": true,
+      "max_task_types": ["simple_code", "medium_code", "complex", "rust_unsafe", "mechanical"]
+    },
+    {
+      "id": "opencode/gpt-5.4",
+      "cost": "subscription",
+      "strength": 8,
+      "enabled": true,
+      "max_task_types": ["research", "docs", "simple_code", "medium_code", "complex", "rust_unsafe", "mechanical", "ci_fix"]
+    }
+  ],
+  "routing": {
+    "research": "opencode-go/deepseek-v4-flash",
+    "docs": "opencode-go/deepseek-v4-flash",
+    "simple_code": "opencode-go/deepseek-v4-flash",
+    "medium_code": "kimi-for-coding/k2p6",
+    "complex": "kimi-for-coding/k2p6",
+    "mechanical": "opencode-go/deepseek-v4-flash",
+    "ci_fix": "opencode-go/deepseek-v4-flash",
+    "rust_unsafe": "kimi-for-coding/k2p6",
+    "default": "kimi-for-coding/k2p6"
+  },
+  "fallback": {
+    "opencode-go/deepseek-v4-flash": "kimi-for-coding/k2p6",
+    "kimi-for-coding/k2p6": "opencode/kimi-k2.6",
+    "opencode/kimi-k2.6": "opencode/gpt-5.4"
+  }
+}
