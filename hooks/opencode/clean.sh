@@ -6,7 +6,6 @@ if [[ "${1:-}" == "--build-artifacts" ]]; then
   # Clean Rust target dirs (both target/ and target-isolated/)
   find "$REPO_ROOT/.autoship/workspaces" -mindepth 2 -maxdepth 2 -type d \( -name target -o -name target-isolated \) 2>/dev/null | while IFS= read -r dir; do
     workspace_dir="${dir%/*}"
-    workspace_dir="${workspace_dir%/*}"
     status=$(tr -d '[:space:]' <"$workspace_dir/status" 2>/dev/null || echo UNKNOWN)
     case "$status" in
       RUNNING | VERIFYING | ACTIVE)
@@ -21,7 +20,6 @@ if [[ "${1:-}" == "--build-artifacts" ]]; then
   # Clean graphify outputs (large knowledge graph artifacts)
   find "$REPO_ROOT/.autoship/workspaces" -mindepth 2 -maxdepth 2 -type d -name graphify-out 2>/dev/null | while IFS= read -r dir; do
     workspace_dir="${dir%/*}"
-    workspace_dir="${workspace_dir%/*}"
     status=$(tr -d '[:space:]' <"$workspace_dir/status" 2>/dev/null || echo UNKNOWN)
     case "$status" in
       RUNNING | VERIFYING | ACTIVE)

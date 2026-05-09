@@ -1702,7 +1702,11 @@ chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
   grep -F 'AUTOSHIP_DISCORD_WEBHOOK_URL=' "$discord_env_file" >/dev/null || fail "setup persists Discord webhook env var"
   grep -F 'AUTOSHIP_KEEP_ME=1' "$discord_env_file" >/dev/null || fail "setup preserves other user env settings"
   printf '%s\n' "$setup_discord_output" | grep -F "$setup_discord_url" >/dev/null && fail "setup output must not leak Discord webhook URL"
-  env_mode=$(stat -f %Lp "$discord_env_file" 2>/dev/null || stat -c %a "$discord_env_file")
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    env_mode=$(stat -f %Lp "$discord_env_file")
+  else
+    env_mode=$(stat -c %a "$discord_env_file")
+  fi
   test "$env_mode" = "600" || fail "Discord env file is private"
   ! grep -R "$setup_discord_url" .autoship >/dev/null 2>&1 || fail "setup must not write Discord webhook to project state"
   if AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null 2>&1; then
