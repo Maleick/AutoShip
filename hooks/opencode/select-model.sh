@@ -60,7 +60,7 @@ def circuit_open($id):
     false
   end;
 def compatible:
-  (.enabled // true) == true
+  (.enabled | if . == null then true else . end)
   and (((.max_task_types // []) | length == 0) or ((.max_task_types // []) | index($task) != null))
   and (circuit_open(.id) | not);
 def cost_score:
@@ -132,7 +132,7 @@ jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "
       false
     end;
   def compatible:
-    (.enabled // true) == true
+    (.enabled | if . == null then true else . end)
     and (((.max_task_types // []) | length == 0) or ((.max_task_types // []) | index($task) != null))
     and (circuit_open(.id) | not);
   def cost_score:
