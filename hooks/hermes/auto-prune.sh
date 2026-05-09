@@ -105,7 +105,7 @@ prune_old_workspaces() {
     local mtime_epoch
     local issue_num
     local status
-    mtime_epoch=$(stat -f%m "$ws" 2>/dev/null || stat -c%Y "$ws" 2>/dev/null || echo "0")
+    mtime_epoch=$(stat -c%Y "$ws" 2>/dev/null || stat -f%m "$ws" 2>/dev/null || echo "0")
     if [[ "$mtime_epoch" -lt "$cutoff_epoch" ]]; then
       issue_num="${ws##*/}"
       issue_num="${issue_num#issue-}"

@@ -55,8 +55,8 @@ _autoship_md_mtime() {
     echo "0"
     return
   fi
-  stat -f %m "$path" 2>/dev/null \
-    || stat -c %Y "$path" 2>/dev/null \
+  stat -c %Y "$path" 2>/dev/null \
+    || stat -f %m "$path" 2>/dev/null \
     || echo "0"
 }
 

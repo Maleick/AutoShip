@@ -135,7 +135,7 @@ max_agents() {
 
 file_mtime_epoch() {
   local file="$1"
-  stat -f %m "$file" 2>/dev/null || stat -c %Y "$file" 2>/dev/null || printf '0\n'
+  stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || printf '0\n'
 }
 
 emit_report() {
