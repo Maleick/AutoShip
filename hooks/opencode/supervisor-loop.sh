@@ -360,7 +360,7 @@ with_lock() {
   if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
     if [[ -z "${AUTOSHIP_SUPERVISOR_LOCKED:-}" ]]; then
       export AUTOSHIP_SUPERVISOR_LOCKED=1
-      exec lockf -k "$LOCK_FILE" "$0" "${ORIGINAL_ARGS[@]}"
+      exec lockf -k "$LOCK_FILE" "$0" "${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"}"
     fi
   elif command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK_FILE"
@@ -368,7 +368,7 @@ with_lock() {
   elif command -v lockf >/dev/null 2>&1; then
     if [[ -z "${AUTOSHIP_SUPERVISOR_LOCKED:-}" ]]; then
       export AUTOSHIP_SUPERVISOR_LOCKED=1
-      exec lockf -k "$LOCK_FILE" "$0" "${ORIGINAL_ARGS[@]}"
+      exec lockf -k "$LOCK_FILE" "$0" "${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"}"
     fi
   else
     local lock_dir="$LOCK_FILE.d"
