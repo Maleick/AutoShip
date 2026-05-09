@@ -11,13 +11,6 @@
       {
         "prepareCmd": "node scripts/sync-version.mjs"
       }
-    ],
-    [
-      "@semantic-release/git",
-      {
-        "assets": ["CHANGELOG.md", "VERSION", "package.json", "package-lock.json"],
-        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
-      }
     ]
   ]
 }
