@@ -156,10 +156,22 @@ Manual edits to `.autoship/model-routing.json` are preserved by default.
 
 ## Discord Status Notifications
 
-Discord status notifications are optional and are still included for the OpenCode supervisor loop. Configure an incoming Discord webhook URL in the environment that starts AutoShip:
+Discord status notifications are optional and are still included for the OpenCode supervisor loop. Configure an incoming Discord webhook URL through setup so it is persisted outside repo state:
 
 ```bash
-export AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+bash hooks/opencode/setup.sh
 ```
 
+Paste the webhook at the silent `Discord webhook URL` prompt. Leave it blank to skip Discord notifications. The notifier reads the persisted file automatically; use `source ~/.config/autoship/env` only when running manual shell tests.
+
 The webhook URL is intentionally environment-only so it is not copied into worker worktrees or committed runtime state. Notification failures are non-blocking; the supervisor logs them and continues dispatching work.
+
+## Workspace Build Artifacts
+
+Rust-heavy AutoShip runs can leave large `target/` directories inside retained workspaces. Remove only rebuildable build outputs without deleting source workspaces:
+
+```bash
+bash hooks/opencode/clean.sh --build-artifacts
+```
+
+Active `RUNNING`, `VERIFYING`, and `ACTIVE` workspaces are skipped. Use the default `/autoship-clean` behavior when terminal workspaces should be removed entirely.

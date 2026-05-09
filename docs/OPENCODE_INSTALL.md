@@ -63,6 +63,7 @@ bash hooks/opencode/install.sh
 | `/autoship-plan` | Dry-run (show plan) |
 | `/autoship-setup` | First-run wizard |
 | `/autoship-stop` | Stop orchestration |
+| `/autoship-clean` | Remove terminal workspaces or prune rebuildable workspace build artifacts |
 
 ## Quick Start
 
@@ -120,15 +121,27 @@ AutoShip maintains state in `.autoship/`:
 - `routing.json` — Task type routing metadata
 - `model-routing.json` — Live OpenCode model selections
 
+## Workspace Cleanup
+
+AutoShip workspaces may accumulate large Rust `target/` directories. To remove only rebuildable build artifacts while preserving source files and workspace state, run:
+
+```bash
+bash hooks/opencode/clean.sh --build-artifacts
+```
+
+Active `RUNNING`, `VERIFYING`, and `ACTIVE` workspaces are skipped. The default `/autoship-clean` path still removes terminal workspaces only.
+
 ## Discord Status Notifications
 
 AutoShip can post status summaries to a Discord incoming webhook from the supervisor loop.
 
-Configure the webhook URL with an environment variable so the secret is not copied into worker worktrees:
+Configure the webhook URL through setup so the secret is written to the user env file instead of project state:
 
 ```bash
-export AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+bash hooks/opencode/setup.sh
 ```
+
+Paste the webhook at the silent prompt. Leave it blank to skip Discord notifications. The notifier reads the persisted file automatically; use `source ~/.config/autoship/env` only when running manual shell tests.
 
 Optionally configure the summary interval in project config:
 

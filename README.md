@@ -141,11 +141,13 @@ AutoShip also loads committed policy profiles from `policies/`. Policies enrich 
 
 ### Discord Status Notifications
 
-AutoShip still includes Discord status notifications for the OpenCode supervisor loop. Set `AUTOSHIP_DISCORD_WEBHOOK_URL` in the shell or service environment that starts AutoShip:
+AutoShip still includes Discord status notifications for the OpenCode supervisor loop. `/autoship-setup` can persist the webhook to `~/.config/autoship/env` so it stays outside repo state:
 
 ```bash
-export AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+bash hooks/opencode/setup.sh
 ```
+
+Paste the webhook at the silent `Discord webhook URL` prompt. Leave it blank to skip Discord notifications. The notifier reads the persisted file automatically; use `source ~/.config/autoship/env` only when running manual shell tests.
 
 The notifier is optional and non-blocking. If the webhook is missing or invalid, AutoShip continues dispatching and running workers.
 
@@ -201,11 +203,17 @@ flowchart TD
 | `/autoship-apply` | Apply a proposed workspace by creating its PR | OpenCode |
 | `/autoship-retry` | Requeue a blocked or stuck issue | OpenCode |
 | `/autoship-cancel` | Cancel an issue workspace | OpenCode |
-| `/autoship-clean` | Remove terminal workspaces | OpenCode |
+| `/autoship-clean` | Remove terminal workspaces; supports build-artifact pruning | OpenCode |
 | `bash hooks/hermes/setup.sh` | Discover Hermes, write model routing | Hermes |
 | `bash hooks/hermes/plan-issues.sh` | Plan issues for Hermes dispatch | Hermes |
 | `bash hooks/hermes/dispatch.sh <n>` | Queue issue for Hermes worker | Hermes |
 | `bash hooks/hermes/status.sh` | Show Hermes runtime status | Hermes |
+
+For Rust-heavy repos, prune rebuildable workspace build outputs without deleting source workspaces. Active `RUNNING`, `VERIFYING`, and `ACTIVE` workspaces are skipped.
+
+```bash
+bash hooks/opencode/clean.sh --build-artifacts
+```
 
 ## Key Hooks
 

@@ -25,6 +25,13 @@ CHECKPOINT_FILE="$AUTOSHIP_DIR/discord-notify-state.json"
 
 [[ -f "$STATE_FILE" ]] || exit 0
 
+env_file="${XDG_CONFIG_HOME:-$HOME/.config}/autoship/env"
+if [[ -z "${AUTOSHIP_DISCORD_WEBHOOK_URL:-}" && -f "$env_file" ]]; then
+  persisted_webhook=$(grep -E '^(export[[:space:]]+)?AUTOSHIP_DISCORD_WEBHOOK_URL=' "$env_file" 2>/dev/null | tail -n 1 || true)
+  persisted_webhook="${persisted_webhook#export }"
+  AUTOSHIP_DISCORD_WEBHOOK_URL="${persisted_webhook#AUTOSHIP_DISCORD_WEBHOOK_URL=}"
+fi
+
 webhook_url="${AUTOSHIP_DISCORD_WEBHOOK_URL:-}"
 [[ -n "$webhook_url" ]] || exit 0
 case "$webhook_url" in
@@ -71,12 +78,9 @@ content=$(printf 'AutoShip status for %s\nRunning: %s / Queued: %s / Verifying: 
   "$repo" "$running" "$queued" "$verifying" "$completed" "$blocked" "$stuck")
 payload=$(jq -n --arg content "$content" '{content: $content, allowed_mentions: {parse: []}}')
 
-curl_config=$(mktemp "$AUTOSHIP_DIR/discord-curl.tmp.XXXXXX")
-chmod 600 "$curl_config"
-trap 'rm -f "$curl_config"' EXIT
-printf 'url = "%s"\n' "$webhook_url" >"$curl_config"
-
-if ! curl -fsS --connect-timeout 5 --max-time 10 -H 'Content-Type: application/json' --data "$payload" --config "$curl_config" >/dev/null; then
+if ! curl -fsS --connect-timeout 5 --max-time 10 -H 'Content-Type: application/json' --data "$payload" --config - >/dev/null <<EOF; then
+url = "$webhook_url"
+EOF
   echo "Discord notification failed" >&2
   exit 1
 fi
