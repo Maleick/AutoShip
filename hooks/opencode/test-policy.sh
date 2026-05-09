@@ -962,6 +962,16 @@ jq -e '.content | contains("Running: 1") and contains("Queued: 1") and contains(
 jq -e '.allowed_mentions.parse == []' "$TMP_DIR/discord-payload.json" >/dev/null || fail "Discord notifier disables mentions"
 test -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier records checkpoint state"
 rm -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json"
+DISCORD_CONFIG_HOME="$TMP_DIR/discord-config-home"
+mkdir -p "$DISCORD_CONFIG_HOME/autoship"
+printf 'export AUTOSHIP_DISCORD_WEBHOOK_URL=%s\n' "https://discord.com/api/webhooks/test/token" >"$DISCORD_CONFIG_HOME/autoship/env"
+chmod 600 "$DISCORD_CONFIG_HOME/autoship/env"
+(
+  cd "$DISCORD_NOTIFY_REPO"
+  env -u AUTOSHIP_DISCORD_WEBHOOK_URL XDG_CONFIG_HOME="$DISCORD_CONFIG_HOME" DISCORD_CAPTURE="$TMP_DIR/discord-persisted-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
+)
+jq -e '.content | contains("AutoShip status for owner/repo")' "$TMP_DIR/discord-persisted-payload.json" >/dev/null || fail "Discord notifier loads persisted webhook env file"
+rm -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json"
 (
   cd "$DISCORD_NOTIFY_REPO"
   AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/test/token" DISCORD_CAPTURE="$TMP_DIR/discord-failed-payload.json" DISCORD_CURL_EXIT=28 PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null || true
@@ -1664,6 +1674,9 @@ SH
 chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
 (
   cd "$SETUP_REPO/autoship"
+  export HOME="$SETUP_REPO/home"
+  export XDG_CONFIG_HOME="$HOME/.config"
+  mkdir -p "$HOME"
   rm -f config/model-routing.json .autoship/model-routing.json .autoship/config.json
   setup_output=$(PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh)
   test -f .autoship/.onboarded || fail "setup writes onboarding marker"
@@ -1679,6 +1692,25 @@ chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
   jq -e '.models[0].id == "opencode/nemotron-3-super-free" and .defaultFallback == "opencode/nemotron-3-super-free"' .autoship/model-routing.json >/dev/null || fail "setup ranks strongest free worker first"
   jq -e 'all(.models[]; (.id | startswith("openrouter/") | not))' .autoship/model-routing.json >/dev/null || fail "setup excludes OpenRouter models from live OpenCode list"
   jq -e 'any(.models[]; .id == "zen/some-free-model:free")' .autoship/model-routing.json >/dev/null || fail "setup includes free models from any live OpenCode provider"
+  discord_env_file="$XDG_CONFIG_HOME/autoship/env"
+  rm -f "$discord_env_file"
+  mkdir -p "$(dirname "$discord_env_file")"
+  printf 'export AUTOSHIP_KEEP_ME=1\n' >"$discord_env_file"
+  setup_discord_url="https://discord.com/api/webhooks/123456789/test_token"
+  setup_discord_output=$(AUTOSHIP_DISCORD_WEBHOOK_URL="$setup_discord_url" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models)
+  test -f "$discord_env_file" || fail "setup writes user env file for Discord webhook"
+  grep -F 'AUTOSHIP_DISCORD_WEBHOOK_URL=' "$discord_env_file" >/dev/null || fail "setup persists Discord webhook env var"
+  grep -F 'AUTOSHIP_KEEP_ME=1' "$discord_env_file" >/dev/null || fail "setup preserves other user env settings"
+  printf '%s\n' "$setup_discord_output" | grep -F "$setup_discord_url" >/dev/null && fail "setup output must not leak Discord webhook URL"
+  env_mode=$(stat -f %Lp "$discord_env_file" 2>/dev/null || stat -c %a "$discord_env_file")
+  test "$env_mode" = "600" || fail "Discord env file is private"
+  ! grep -R "$setup_discord_url" .autoship >/dev/null 2>&1 || fail "setup must not write Discord webhook to project state"
+  if AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null 2>&1; then
+    fail "setup rejects invalid Discord webhook URL"
+  fi
+  if AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/not-enough" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null 2>&1; then
+    fail "setup rejects malformed Discord webhook URL"
+  fi
   jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json >.autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
   jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "setup preserves manual model-routing edits by default"

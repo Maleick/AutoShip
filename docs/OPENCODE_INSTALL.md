@@ -124,11 +124,13 @@ AutoShip maintains state in `.autoship/`:
 
 AutoShip can post status summaries to a Discord incoming webhook from the supervisor loop.
 
-Configure the webhook URL with an environment variable so the secret is not copied into worker worktrees:
+Configure the webhook URL through setup so the secret is written to the user env file instead of project state:
 
 ```bash
-export AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+bash hooks/opencode/setup.sh
 ```
+
+Paste the webhook at the silent prompt. Leave it blank to skip Discord notifications. The notifier reads the persisted file automatically; use `source ~/.config/autoship/env` only when running manual shell tests.
 
 Optionally configure the summary interval in project config:
 

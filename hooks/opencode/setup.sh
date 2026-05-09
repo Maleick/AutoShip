@@ -15,6 +15,7 @@ ORCHESTRATOR_MODEL="${AUTOSHIP_ORCHESTRATOR_MODEL:-}"
 REVIEWER_MODEL="${AUTOSHIP_REVIEWER_MODEL:-}"
 LEAD_MODEL="${AUTOSHIP_LEAD_MODEL:-}"
 LABELS="${AUTOSHIP_LABELS:-agent:ready}"
+DISCORD_WEBHOOK_URL="${AUTOSHIP_DISCORD_WEBHOOK_URL:-}"
 
 NO_TUI=0
 POSITIONAL=()
@@ -58,9 +59,60 @@ ENVIRONMENT VARIABLES:
   AUTOSHIP_REVIEWER_MODEL  Reviewer model (default: same as planner)
   AUTOSHIP_LEAD_MODEL    Lead model (default: same as planner)
   AUTOSHIP_LABELS          Comma-separated labels (default: agent:ready)
+  AUTOSHIP_DISCORD_WEBHOOK_URL Discord webhook URL to persist to user env file
   GH_TOKEN                 GitHub token (for gh auth)
 EOF
   exit "${1:-0}"
+}
+
+autoship_user_config_dir() {
+  if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    printf '%s/autoship\n' "$XDG_CONFIG_HOME"
+    return 0
+  fi
+  printf '%s/.config/autoship\n' "$HOME"
+}
+
+valid_discord_webhook_url() {
+  local url="$1"
+  [[ "$url" != *$'\n'* && "$url" != *$'\r'* ]] || return 1
+  [[ "$url" =~ ^https://discord(app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9._~-]+$ ]]
+}
+
+persist_discord_webhook() {
+  local webhook_url="$1" config_dir env_file old_umask tmp_file
+  [[ -n "$webhook_url" ]] || return 0
+  if ! valid_discord_webhook_url "$webhook_url"; then
+    echo "Error: invalid Discord webhook URL" >&2
+    exit 1
+  fi
+  config_dir=$(autoship_user_config_dir)
+  env_file="$config_dir/env"
+  mkdir -p "$config_dir"
+  chmod 700 "$config_dir"
+  tmp_file=$(mktemp "$config_dir/env.tmp.XXXXXX")
+  old_umask=$(umask)
+  umask 077
+  if [[ -f "$env_file" ]]; then
+    grep -vE '^(export[[:space:]]+)?AUTOSHIP_DISCORD_WEBHOOK_URL=' "$env_file" >"$tmp_file" || true
+  fi
+  printf 'export AUTOSHIP_DISCORD_WEBHOOK_URL=%s\n' "$webhook_url" >>"$tmp_file"
+  mv "$tmp_file" "$env_file"
+  umask "$old_umask"
+  chmod 600 "$env_file"
+  echo "Discord webhook: configured ($env_file)"
+  echo "Load it before starting AutoShip: source $env_file"
+}
+
+configure_discord_webhook() {
+  if [[ -z "$DISCORD_WEBHOOK_URL" && "$NO_TUI" -eq 0 && -t 0 ]]; then
+    printf 'Discord webhook URL [leave blank to skip]: ' >&2
+    if IFS= read -rs prompted_discord_webhook; then
+      printf '\n' >&2
+      [[ -n "$prompted_discord_webhook" ]] && DISCORD_WEBHOOK_URL="$prompted_discord_webhook"
+    fi
+  fi
+  persist_discord_webhook "$DISCORD_WEBHOOK_URL"
 }
 
 parse_args() {
@@ -214,6 +266,7 @@ if [[ -f "$ROUTING_FILE" && -z "$SELECTED_MODELS" && "$REFRESH_MODELS" != "1" &&
     echo "AutoShip OpenCode setup already configured"
     echo "Model routing preserved: $ROUTING_FILE"
     echo "Set --refresh-models to regenerate from current opencode models."
+    configure_discord_webhook
     exit 0
   fi
 fi
@@ -273,6 +326,13 @@ if [[ "$NO_TUI" -eq 0 && -t 0 ]]; then
   if IFS= read -r prompted_reviewer; then
     [[ -n "$prompted_reviewer" ]] && REVIEWER_MODEL="$prompted_reviewer"
   fi
+  if [[ -z "$DISCORD_WEBHOOK_URL" ]]; then
+    printf 'Discord webhook URL [leave blank to skip]: ' >&2
+    if IFS= read -rs prompted_discord_webhook; then
+      printf '\n' >&2
+      [[ -n "$prompted_discord_webhook" ]] && DISCORD_WEBHOOK_URL="$prompted_discord_webhook"
+    fi
+  fi
 fi
 
 reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL,$LEAD_MODEL"
@@ -295,6 +355,8 @@ if [[ -n "$missing_role_models" ]]; then
   printf '%s\n' "$missing_role_models" >&2
   exit 1
 fi
+
+persist_discord_webhook "$DISCORD_WEBHOOK_URL"
 
 python3 - "$ROUTING_FILE" "$CONFIG_FILE" "$SELECTED_MODELS" "$MAX_AGENTS" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" "$LEAD_MODEL" "$LABELS" <<'PY'
 import json
