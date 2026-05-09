@@ -5,10 +5,6 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Load shared utilities if available
-is_hermes_process_for_workspace() {
-  local workspace_dir="$1"
-  pgrep -af "[h]ermes" 2>/dev/null | grep -F "$workspace_dir" >/dev/null
-}
 if [[ -f "$SCRIPT_DIR/../lib/common.sh" ]]; then
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/../lib/common.sh"
@@ -35,6 +31,11 @@ fi
 
 REPO_ROOT=$(autoship_repo_root) || exit 1
 cd "$REPO_ROOT" || exit 1
+
+is_hermes_process_for_workspace() {
+  local workspace_path="$1"
+  pgrep -af "hermes" 2>/dev/null | grep -F "$workspace_path"
+}
 
 log_age_minutes() {
   python3 - "$1" <<'PY'
@@ -191,11 +192,11 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
     HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
     # Run delegate_task in the existing worktree directory.
     # Do NOT use --worktree - the workspace is already a git worktree.
-    hermes_cmd=(delegate_task --goal "$(cat "$prompt_file")" --toolsets terminal file web)
+    hermes_cmd=(delegate_task --goal "$(cat "$prompt_file")" --toolsets 'terminal,file,web')
     if command -v timeout >/dev/null 2>&1; then
-      hermes_cmd=(timeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
+      hermes_cmd=("timeout" "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
     elif command -v gtimeout >/dev/null 2>&1; then
-      hermes_cmd=(gtimeout "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
+      hermes_cmd=("gtimeout" "$HERMES_TIMEOUT" "${hermes_cmd[@]}")
     fi
     "${hermes_cmd[@]}" >"$workspace_dir/hermes-worker.log" 2>&1
     worker_exit=$?
@@ -232,7 +233,7 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
 
   # Also check for git commits as evidence of work done
   if [[ "$WORKER_RESULT" != "COMPLETE" && "$WORKER_RESULT" != "BLOCKED" ]]; then
-    commit_count=$(git -C "$worktree_path" rev-list --count autoship/issue-"${ISSUE_NUM}"...HEAD 2>/dev/null || echo 0)
+    commit_count=$(git -C "$worktree_path" rev-list --count "autoship/issue-${ISSUE_NUM}...HEAD" 2>/dev/null || echo 0)
     if [[ "$commit_count" -gt 0 ]]; then
       # Worker made commits but didn't finish workflow - mark STUCK for retry
       WORKER_RESULT="STUCK"
@@ -301,7 +302,7 @@ while IFS= read -r status_file; do
     if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 30 ]]; then
       # Log is recent, but if there's NO active Hermes process, the log age
       # is just from a previous run that finished. Allow retry in that case.
-      if is_hermes_process_for_workspace "$workspace_dir"; then
+      if is_hermes_process_for_workspace "$workspace_dir" >/dev/null; then
         retry_allowed=false
       fi
     fi
@@ -322,7 +323,7 @@ while IFS= read -r status_file; do
   # Check for an active Hermes process in the workspace (process-based validation)
   if [[ "$retry_allowed" == true ]]; then
     # Look for any Hermes process that has this workspace as its CWD
-    if is_hermes_process_for_workspace "$workspace_dir"; then
+    if is_hermes_process_for_workspace "$workspace_dir" >/dev/null; then
       # Process is alive but status is STUCK - this is a false-positive STUCK.
       # Reset to RUNNING so the runner doesn't keep retrying it.
       printf 'RUNNING\n' >"$status_file"
@@ -337,7 +338,7 @@ while IFS= read -r status_file; do
     if [[ "$log_age_min" =~ ^[0-9]+$ && "$log_age_min" -lt 5 ]]; then
       # Even if log is <5min old, if there's no active hermes process, the log
       # is from a previous run that finished. Allow retry in that case.
-      if is_hermes_process_for_workspace "$workspace_dir"; then
+      if is_hermes_process_for_workspace "$workspace_dir" >/dev/null; then
         retry_allowed=false
       fi
     fi

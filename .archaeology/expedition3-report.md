@@ -2,14 +2,16 @@
 
 Mode: survey
 
-## Command
+## Commands
 
-`npx --yes madge src hooks --extensions ts,js,sh --circular`
+- `npx --yes madge src hooks scripts plugins --extensions ts,js,sh --circular`
+- Supplemental source-only import graph scan over `src/**/*.ts`.
 
 ## Result
 
-- Processed 94 files.
+- `madge` processed 106 files.
 - No circular dependency found.
+- Supplemental TypeScript import scan found no `src` import cycles.
 
 ## Action
 

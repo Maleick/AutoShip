@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Load shared utilities if available
 if [[ -f "$SCRIPT_DIR/../lib/common.sh" ]]; then
+  # shellcheck disable=SC1091
   source "$SCRIPT_DIR/../lib/common.sh"
 else
   autoship_repo_root() {
@@ -157,7 +158,7 @@ if ! is_git_worktree_path "$TARGET_REPO_PATH"; then
   exit 1
 fi
 
-# Create worktree from TARGET repo, not AutoShip repo
+# Create worktree from target repo
 TARGET_REPO_ROOT="$(cd "$TARGET_REPO_PATH" && git rev-parse --show-toplevel)"
 cd "$TARGET_REPO_ROOT"
 AUTOSHIP_WORKSPACE_ROOT="$REPO_ROOT/$AUTOSHIP_DIR"
@@ -186,7 +187,19 @@ fi
 rm -rf "$WORKSPACE_DIR"
 
 # Create worktree from target repo
-git worktree add -B "$TARGET_BRANCH" "$WORKSPACE_DIR" "$BASE_REF" >/dev/null
+# Use branch-first creation first, then fallback to --force checkout.
+if ! git worktree add -B "$TARGET_BRANCH" "$WORKSPACE_DIR" "$BASE_REF" 2>/dev/null; then
+  echo "Warning: git worktree add failed for $WORKSPACE_DIR, retrying with force checkout..." >&2
+  # Ensure the branch exists locally
+  if ! git rev-parse --verify "$TARGET_BRANCH" >/dev/null 2>&1; then
+    git branch "$TARGET_BRANCH" "$BASE_REF" >/dev/null 2>&1 || true
+  fi
+  # Try creating worktree with existing branch
+  git worktree add --force "$WORKSPACE_DIR" "$TARGET_BRANCH" >/dev/null 2>&1 || {
+    echo "Error: failed to create worktree for $ISSUE_KEY" >&2
+    exit 1
+  }
+fi
 
 # Return to AutoShip repo for state management
 cd "$REPO_ROOT"
@@ -196,10 +209,8 @@ if [[ -z "$FULL_WORKSPACE_PATH" || ! -d "$FULL_WORKSPACE_PATH" ]]; then
   echo "Error: worktree path empty or missing after creation: '$FULL_WORKSPACE_PATH'" >&2
   exit 1
 fi
-mkdir -p "$WORKSPACE_PATH"
 date -u +%Y-%m-%dT%H:%M:%SZ >"$WORKSPACE_PATH/started_at"
 printf 'QUEUED\n' >"$WORKSPACE_PATH/status"
-printf '%s\n' "$MODEL" >"$WORKSPACE_PATH/model"
 printf '%s\n' "$ROLE" >"$WORKSPACE_PATH/role"
 
 # Write Hermes-specific prompt with AutoShip constraints. Python avoids shell

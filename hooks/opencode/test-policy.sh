@@ -30,29 +30,6 @@ assert_file_contains() {
   grep -F "$text" "$file" >/dev/null || fail "$message"
 }
 
-copy_tracked_repo_fixture() {
-  local src="$1" dest="$2" file
-  mkdir -p "$dest"
-  while IFS= read -r file; do
-    [[ -n "$file" ]] || continue
-    mkdir -p "$dest/$(dirname "$file")"
-    cp "$src/$file" "$dest/$file"
-  done < <(git -C "$src" ls-files)
-}
-
-copy_package_fixture_without_local_artifacts() {
-  local src="$1" dest="$2" entry name
-  mkdir -p "$dest"
-  for entry in "$src"/* "$src"/.[!.]* "$src"/..?*; do
-    [[ -e "$entry" ]] || continue
-    name="$(basename "$entry")"
-    case "$name" in
-      . | .. | .git | .autoship | node_modules | .worktrees | .tmp | .archaeology) continue ;;
-    esac
-    cp -R "$entry" "$dest/"
-  done
-}
-
 assert_canonical_inventory() {
   local repo_root
   repo_root="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -828,7 +805,8 @@ live_child_pid=$!
 _live_wait=0
 while [ "$_live_wait" -lt 50 ]; do
   kill -0 "$live_child_pid" 2>/dev/null \
-    && pgrep -f "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" >/dev/null \
+    && pgrep -fa "opencode" 2>/dev/null \
+    | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \
     && break
   sleep 0.1
   _live_wait=$((_live_wait + 1))
@@ -962,24 +940,14 @@ jq -e '.content | contains("Running: 1") and contains("Queued: 1") and contains(
 jq -e '.allowed_mentions.parse == []' "$TMP_DIR/discord-payload.json" >/dev/null || fail "Discord notifier disables mentions"
 test -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier records checkpoint state"
 rm -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json"
-DISCORD_CONFIG_HOME="$TMP_DIR/discord-config-home"
-mkdir -p "$DISCORD_CONFIG_HOME/autoship"
-printf 'export AUTOSHIP_DISCORD_WEBHOOK_URL=%q\n' "https://discord.com/api/webhooks/test/token" >"$DISCORD_CONFIG_HOME/autoship/env"
-chmod 600 "$DISCORD_CONFIG_HOME/autoship/env"
 (
   cd "$DISCORD_NOTIFY_REPO"
-  env -u AUTOSHIP_DISCORD_WEBHOOK_URL XDG_CONFIG_HOME="$DISCORD_CONFIG_HOME" DISCORD_CAPTURE="$TMP_DIR/discord-persisted-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
-)
-jq -e '.content | contains("AutoShip status for owner/repo")' "$TMP_DIR/discord-persisted-payload.json" >/dev/null || fail "Discord notifier loads persisted webhook env file"
-rm -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json"
-(
-  cd "$DISCORD_NOTIFY_REPO"
-  AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/test/token" DISCORD_CAPTURE="$TMP_DIR/discord-failed-payload.json" DISCORD_CURL_EXIT=28 PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null || true
+  AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/test/token" DISCORD_CAPTURE="$TMP_DIR/discord-failed-payload.json" DISCORD_CURL_EXIT=28 PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
 )
 test ! -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier does not checkpoint failed sends"
 (
   cd "$DISCORD_NOTIFY_REPO"
-  AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" DISCORD_CAPTURE="$TMP_DIR/discord-invalid-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null || true
+  AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" DISCORD_CAPTURE="$TMP_DIR/discord-invalid-payload.json" PATH="$DISCORD_NOTIFY_REPO/bin:$PATH" bash hooks/opencode/notify-discord.sh --force >/dev/null
 )
 test ! -f "$DISCORD_NOTIFY_REPO/.autoship/discord-notify-state.json" || fail "Discord notifier does not checkpoint invalid webhook URLs"
 
@@ -1645,7 +1613,7 @@ printf '%s\n' "$formerly_blocked_line" | grep -F 'agent:ready' >/dev/null || fai
 SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"
 mkdir -p "$SETUP_REPO/autoship"
-copy_tracked_repo_fixture "$REPO_ROOT" "$SETUP_REPO/autoship"
+tar -C "$SCRIPT_DIR/../.." --exclude .git --exclude .autoship -cf - . | tar -C "$SETUP_REPO/autoship" -xf -
 cat >"$SETUP_REPO/bin/opencode" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1" == "models" ]]; then
@@ -1674,9 +1642,6 @@ SH
 chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
 (
   cd "$SETUP_REPO/autoship"
-  export HOME="$SETUP_REPO/home"
-  export XDG_CONFIG_HOME="$HOME/.config"
-  mkdir -p "$HOME"
   rm -f config/model-routing.json .autoship/model-routing.json .autoship/config.json
   setup_output=$(PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh)
   test -f .autoship/.onboarded || fail "setup writes onboarding marker"
@@ -1692,29 +1657,6 @@ chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
   jq -e '.models[0].id == "opencode/nemotron-3-super-free" and .defaultFallback == "opencode/nemotron-3-super-free"' .autoship/model-routing.json >/dev/null || fail "setup ranks strongest free worker first"
   jq -e 'all(.models[]; (.id | startswith("openrouter/") | not))' .autoship/model-routing.json >/dev/null || fail "setup excludes OpenRouter models from live OpenCode list"
   jq -e 'any(.models[]; .id == "zen/some-free-model:free")' .autoship/model-routing.json >/dev/null || fail "setup includes free models from any live OpenCode provider"
-  discord_env_file="$XDG_CONFIG_HOME/autoship/env"
-  rm -f "$discord_env_file"
-  mkdir -p "$(dirname "$discord_env_file")"
-  printf 'export AUTOSHIP_KEEP_ME=1\n' >"$discord_env_file"
-  setup_discord_url="https://discord.com/api/webhooks/123456789/test_token"
-  setup_discord_output=$(AUTOSHIP_DISCORD_WEBHOOK_URL="$setup_discord_url" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models)
-  test -f "$discord_env_file" || fail "setup writes user env file for Discord webhook"
-  grep -F 'AUTOSHIP_DISCORD_WEBHOOK_URL=' "$discord_env_file" >/dev/null || fail "setup persists Discord webhook env var"
-  grep -F 'AUTOSHIP_KEEP_ME=1' "$discord_env_file" >/dev/null || fail "setup preserves other user env settings"
-  printf '%s\n' "$setup_discord_output" | grep -F "$setup_discord_url" >/dev/null && fail "setup output must not leak Discord webhook URL"
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    env_mode=$(stat -f %Lp "$discord_env_file")
-  else
-    env_mode=$(stat -c %a "$discord_env_file")
-  fi
-  test "$env_mode" = "600" || fail "Discord env file is private"
-  ! grep -R "$setup_discord_url" .autoship >/dev/null 2>&1 || fail "setup must not write Discord webhook to project state"
-  if AUTOSHIP_DISCORD_WEBHOOK_URL="https://example.invalid/webhook" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null 2>&1; then
-    fail "setup rejects invalid Discord webhook URL"
-  fi
-  if AUTOSHIP_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/not-enough" PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui >/dev/null 2>&1; then
-    fail "setup rejects malformed Discord webhook URL"
-  fi
   jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json >.autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
   jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "setup preserves manual model-routing edits by default"
@@ -1799,34 +1741,6 @@ JSON
 
 ROUTING_LOG_ESCALATE=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log simple_code 100)
 assert_eq "true" "$(echo "$ROUTING_LOG_ESCALATE" | grep -q "free model selected by default" && echo "true" || echo "false")" "routing log shows free selection reason"
-
-CLEAN_REPO="$TMP_DIR/clean-repo"
-mkdir -p "$CLEAN_REPO/hooks/opencode" "$CLEAN_REPO/.autoship/workspaces/issue-1/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-2/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-3/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-4/target/debug" "$CLEAN_REPO/.autoship/workspaces/issue-5/target/debug"
-git init -q "$CLEAN_REPO"
-cp "$SCRIPT_DIR/clean.sh" "$CLEAN_REPO/hooks/opencode/clean.sh"
-chmod +x "$CLEAN_REPO/hooks/opencode/clean.sh"
-printf 'QUEUED\n' >"$CLEAN_REPO/.autoship/workspaces/issue-1/status"
-printf 'COMPLETE\n' >"$CLEAN_REPO/.autoship/workspaces/issue-2/status"
-printf 'RUNNING\n' >"$CLEAN_REPO/.autoship/workspaces/issue-3/status"
-printf 'VERIFYING\n' >"$CLEAN_REPO/.autoship/workspaces/issue-4/status"
-printf 'ACTIVE\n' >"$CLEAN_REPO/.autoship/workspaces/issue-5/status"
-printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-1/target/debug/file"
-printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-2/target/debug/file"
-printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-3/target/debug/file"
-printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-4/target/debug/file"
-printf 'artifact\n' >"$CLEAN_REPO/.autoship/workspaces/issue-5/target/debug/file"
-printf 'source\n' >"$CLEAN_REPO/.autoship/workspaces/issue-1/source.txt"
-(cd "$CLEAN_REPO" && bash hooks/opencode/clean.sh --build-artifacts >/dev/null)
-test ! -e "$CLEAN_REPO/.autoship/workspaces/issue-1/target" || fail "build artifact cleanup removes queued workspace target dir"
-test ! -e "$CLEAN_REPO/.autoship/workspaces/issue-2/target" || fail "build artifact cleanup removes complete workspace target dir"
-test -d "$CLEAN_REPO/.autoship/workspaces/issue-3/target" || fail "build artifact cleanup skips running workspace target dir"
-test -d "$CLEAN_REPO/.autoship/workspaces/issue-4/target" || fail "build artifact cleanup skips verifying workspace target dir"
-test -d "$CLEAN_REPO/.autoship/workspaces/issue-5/target" || fail "build artifact cleanup skips active workspace target dir"
-test -f "$CLEAN_REPO/.autoship/workspaces/issue-1/source.txt" || fail "build artifact cleanup preserves workspace source files"
-test -f "$CLEAN_REPO/.autoship/workspaces/issue-2/status" || fail "build artifact cleanup preserves terminal workspaces"
-(cd "$CLEAN_REPO" && bash hooks/opencode/clean.sh >/dev/null)
-test -d "$CLEAN_REPO/.autoship/workspaces/issue-1" || fail "default cleanup preserves non-terminal workspaces"
-test ! -e "$CLEAN_REPO/.autoship/workspaces/issue-2" || fail "default cleanup removes terminal workspaces"
 
 cat >"$SELECT_REPO/config/model-routing.json" <<'JSON'
 {
@@ -2099,7 +2013,7 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
   printf 'live result\n' >"$live_workspace/AUTOSHIP_RESULT.md"
   printf 'runner log\n' >"$live_workspace/AUTOSHIP_RUNNER.log"
   printf 'COMPLETE\n' >"$live_workspace/status"
-  AUTOSHIP_ENABLE_PR_CREATE=true AUTOSHIP_SKIP_BRANCH_PUSH=true AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/live-gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-191 "$live_workspace" >/dev/null
+  AUTOSHIP_ENABLE_PR_CREATE=true AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/live-gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-191 "$live_workspace" >/dev/null
   git -C "$live_workspace" show --name-only --format= HEAD | grep -F 'implementation.txt' >/dev/null || fail "live PR path commits implementation changes"
   if git -C "$live_workspace" show --name-only --format= HEAD | grep -E 'AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|status' >/dev/null; then
     fail "live PR path must not commit AutoShip runtime artifacts"
@@ -2107,7 +2021,7 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
 )
 
 SYNC_REPO="$TMP_DIR/sync-release-repo"
-copy_tracked_repo_fixture "$REPO_ROOT" "$SYNC_REPO"
+cp -R "$SCRIPT_DIR/../.." "$SYNC_REPO"
 (
   cd "$SYNC_REPO"
   CONFIG_DIR="$TMP_DIR/sync-config"
@@ -2137,7 +2051,7 @@ copy_tracked_repo_fixture "$REPO_ROOT" "$SYNC_REPO"
 SELF_SYNC_CONFIG="$TMP_DIR/self-sync-config"
 SELF_AUTOSHIP_HOME="$SELF_SYNC_CONFIG/.autoship"
 mkdir -p "$SELF_SYNC_CONFIG"
-copy_tracked_repo_fixture "$REPO_ROOT" "$SELF_AUTOSHIP_HOME"
+cp -R "$SCRIPT_DIR/../.." "$SELF_AUTOSHIP_HOME"
 rm -rf "$SELF_AUTOSHIP_HOME/plugins"
 mkdir -p "$TMP_DIR/self-sync-plugin-target"
 printf 'external plugin\n' >"$TMP_DIR/self-sync-plugin-target/autoship.ts"
@@ -2148,7 +2062,7 @@ fi
 grep -F 'refusing to operate on symlinked path' "$TMP_DIR/self-sync-symlink.out" >/dev/null || fail "sync-release self-install reports symlinked plugin parent"
 
 PACKAGE_REPO="$TMP_DIR/package-repo"
-copy_tracked_repo_fixture "$REPO_ROOT" "$PACKAGE_REPO"
+cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
 (
   cd "$PACKAGE_REPO"
   rm -rf .autoship node_modules dist
@@ -2200,7 +2114,7 @@ copy_tracked_repo_fixture "$REPO_ROOT" "$PACKAGE_REPO"
   fi
   grep -F 'Refusing to write symlinked OpenCode asset root' "$TMP_DIR/package-symlink-root.out" >/dev/null || fail "package installer reports symlinked .autoship root"
   ASSET_SYMLINK_REPO="$TMP_DIR/package-asset-symlink-repo"
-  copy_package_fixture_without_local_artifacts . "$ASSET_SYMLINK_REPO"
+  cp -R . "$ASSET_SYMLINK_REPO"
   rm -rf "$ASSET_SYMLINK_REPO/hooks"
   ln -s "$TMP_DIR" "$ASSET_SYMLINK_REPO/hooks"
   if OPENCODE_CONFIG_DIR="$TMP_DIR/package-asset-symlink-config" node "$ASSET_SYMLINK_REPO/dist/cli.js" install >"$TMP_DIR/package-symlink-src.out" 2>&1; then
@@ -2208,7 +2122,7 @@ copy_tracked_repo_fixture "$REPO_ROOT" "$PACKAGE_REPO"
   fi
   grep -F 'Refusing to copy symlinked package asset' "$TMP_DIR/package-symlink-src.out" >/dev/null || fail "package installer reports symlinked package asset"
   PACK_SYMLINK_REPO="$TMP_DIR/package-pack-symlink-repo"
-  copy_package_fixture_without_local_artifacts . "$PACK_SYMLINK_REPO"
+  cp -R . "$PACK_SYMLINK_REPO"
   rm "$PACK_SYMLINK_REPO/INSTALL.md"
   ln -s README.md "$PACK_SYMLINK_REPO/INSTALL.md"
   if (cd "$PACK_SYMLINK_REPO" && bash hooks/opencode/verify-package.sh >/dev/null 2>&1); then

@@ -58,7 +58,14 @@ if ! git worktree add -B "$TARGET_BRANCH" "$WORKSPACE" "$BASE_REF" >/dev/null 2>
   fi
   git worktree remove --force "$WORKSPACE" >/dev/null 2>&1 || true
   rm -rf "$WORKSPACE"
-  git worktree add -B "$TARGET_BRANCH" "$WORKSPACE" "$BASE_REF" >/dev/null
+  # Ensure branch exists before forcing worktree creation.
+  if ! git rev-parse --verify "$TARGET_BRANCH" >/dev/null 2>&1; then
+    git branch "$TARGET_BRANCH" "$BASE_REF" >/dev/null 2>&1 || true
+  fi
+  git worktree add --force "$WORKSPACE" "$TARGET_BRANCH" >/dev/null 2>&1 || {
+    echo "Error: failed to create worktree for $WORKSPACE" >&2
+    exit 1
+  }
 fi
 
 rm -f \
