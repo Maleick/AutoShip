@@ -79,15 +79,10 @@ def analyze_task(title: str, labels: list) -> dict:
     else:
         task_type = "general"
 
-    if complexity_score >= 2 or domain in ["combat", "navigation"] or task_type == "parity":
-        recommended_tier = "go_paid"
-        recommended_model = "opencode-go/deepseek-v4-flash"
-    elif complexity_score <= -1 or task_type == "audit":
-        recommended_tier = "go_paid"
-        recommended_model = "opencode-go/deepseek-v4-flash"
-    else:
-        recommended_tier = "go_paid"
-        recommended_model = "opencode-go/deepseek-v4-flash"
+    # K2.6-only mode: all tasks route to kimi-k2.6 regardless of complexity
+    # Workers inherit the main model's provider (kimi-coding)
+    recommended_tier = "default"
+    recommended_model = "kimi-k2.6"
 
     return {
         "complexity_score": complexity_score,
@@ -153,11 +148,8 @@ def dispatch_with_routing(title: str = "", labels=None, task_type: str = "code",
     recommended_tier = analysis["recommended_tier"]
     recommended_model = analysis["recommended_model"]
 
-    model = get_model_from_tier(recommended_tier, config, usage, analysis["task_type"])
-
-    tier_models = next((tier.get("models", []) for tier in config.get("tiers", []) if tier["name"] == recommended_tier), [])
-    if any(candidate["id"] == recommended_model for candidate in tier_models):
-        model = recommended_model
+    # K2.6-only mode: bypass tier lookup, always use kimi-k2.6
+    model = "kimi-k2.6"
 
     usage["last_model"] = model
     usage.setdefault("tier_usage", {}).setdefault(recommended_tier, []).append(model)
