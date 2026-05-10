@@ -152,7 +152,29 @@ run_worker() {
   if should_isolate_cargo_target; then
     cargo_target_dir="$PWD/target-isolated"
   fi
-  if [[ -n "$cargo_target_dir" ]]; then
+  # Unset auth env vars that cause 'Session not found' in opencode run.
+  # When OPENCODE_SERVER_USERNAME/PASSWORD are set, opencode run tries to
+  # connect to an authenticated server instead of creating a fresh session.
+  # See: https://github.com/anomalyco/opencode/issues/8502
+  # NOTE: macOS env(1) does not support -u, so we filter via unset instead.
+  local filtered_env
+  filtered_env=$(env | grep -vE '^(OPENCODE_SERVER_USERNAME|OPENCODE_SERVER_PASSWORD|OPENCODE_PID|OPENCODE=)' || true)
+    # Pre-flight billing/quota check — fail fast before spawning long-lived worker
+  local preflight_log=".autoship-preflight.log"
+  if ! env -i \
+       HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
+       opencode run --dir "$PWD" --model "$model" "echo 'AutoShip preflight check'" >"$preflight_log" 2>&1; then
+    cat "$preflight_log" >> AUTOSHIP_RUNNER.log
+    if grep -Eiq 'insufficient balance|billing|quota|rate limit|credit|unauthorized' "$preflight_log"; then
+      echo "AutoShip: Model $model rejected preflight — insufficient balance or quota. Disabling via circuit breaker." >> AUTOSHIP_RUNNER.log
+      # Disable exhausted model so fallback picker won't select it again this cycle
+      bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
+      return 1
+    fi
+  fi
+  rm -f "$preflight_log"
+
+if [[ -n "$cargo_target_dir" ]]; then
     env -i \
       HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
       CARGO_TARGET_DIR="$cargo_target_dir" \
@@ -446,6 +468,25 @@ for dir in "$WORKSPACES_DIR"/*/; do
               printf '%s\n' "$fallback_model" >model
               autoship_state_set set-running "$issue_id" agent="$fallback_model" model="$fallback_model" role="$role"
               bash "$SCRIPT_DIR/metrics-collector.sh" record-start "$issue_id" "$fallback_model" "$task_type" >/dev/null 2>&1 || true
+              # Pre-flight check fallback model before committing to it
+              local fb_preflight_log=".autoship-fallback-preflight.log"
+              if ! env -i \
+                   HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
+                   opencode run --dir "$PWD" --model "$fallback_model" "echo 'AutoShip fallback preflight check'" >"$fb_preflight_log" 2>&1; then
+                cat "$fb_preflight_log" >> AUTOSHIP_RUNNER.log
+                if grep -Eiq 'insufficient balance|billing|quota|rate limit|credit|unauthorized' "$fb_preflight_log"; then
+                  echo "AutoShip: Fallback model $fallback_model also rejected preflight — insufficient balance or quota. Disabling via circuit breaker." >> AUTOSHIP_RUNNER.log
+                  bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true
+                  rm -f "$fb_preflight_log"
+                  echo "STUCK" >status
+                  error_msg="All free models exhausted — insufficient balance or quota"
+                  write_failure_reason model_failure AUTOSHIP_RUNNER.log
+                  autoship_capture_failure model_failure "$issue_id" "error_summary=$error_msg"
+                  bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
+                  continue
+                fi
+              fi
+              rm -f "$fb_preflight_log"
               if run_worker "$fallback_model" >>AUTOSHIP_RUNNER.log 2>&1; then
                 auto_commit_workspace_changes "$issue_id"
                 reject_tests_only_complete "$issue_id" "$REPO_ROOT"
