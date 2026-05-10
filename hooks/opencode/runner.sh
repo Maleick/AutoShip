@@ -156,10 +156,10 @@ run_worker() {
   # When OPENCODE_SERVER_USERNAME/PASSWORD are set, opencode run tries to
   # connect to an authenticated server instead of creating a fresh session.
   # See: https://github.com/anomalyco/opencode/issues/8502
-  # NOTE: macOS env(1) does not support -u, so we filter via unset instead.
-  local filtered_env
+  # NOTE: macOS env(1) does not support -u, so we filter via grep instead.
+  local filtered_env=""
   filtered_env=$(env | grep -vE '^(OPENCODE_SERVER_USERNAME|OPENCODE_SERVER_PASSWORD|OPENCODE_PID|OPENCODE=)' || true)
-    # Pre-flight billing/quota check — fail fast before spawning long-lived worker
+  # Pre-flight billing/quota check — fail fast before spawning long-lived worker
   local preflight_log=".autoship-preflight.log"
   if ! env -i \
        HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
@@ -174,7 +174,7 @@ run_worker() {
   fi
   rm -f "$preflight_log"
 
-if [[ -n "$cargo_target_dir" ]]; then
+  if [[ -n "$cargo_target_dir" ]]; then
     env -i \
       HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
       CARGO_TARGET_DIR="$cargo_target_dir" \
