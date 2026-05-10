@@ -81,13 +81,13 @@ def analyze_task(title: str, labels: list) -> dict:
 
     if complexity_score >= 2 or domain in ["combat", "navigation"] or task_type == "parity":
         recommended_tier = "go_paid"
-        recommended_model = "opencode-go/deepseek-v4-pro"
+        recommended_model = "opencode-go/deepseek-v4-flash"
     elif complexity_score <= -1 or task_type == "audit":
-        recommended_tier = "zen_free"
-        recommended_model = "opencode-zen/gpt-5-nano"
+        recommended_tier = "go_paid"
+        recommended_model = "opencode-go/deepseek-v4-flash"
     else:
-        recommended_tier = "zen_free"
-        recommended_model = "opencode-zen/nemotron-3-super-free"
+        recommended_tier = "go_paid"
+        recommended_model = "opencode-go/deepseek-v4-flash"
 
     return {
         "complexity_score": complexity_score,
