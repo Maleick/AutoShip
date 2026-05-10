@@ -170,14 +170,26 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
     # delegate_task is a Hermes tool; we cannot call it from bash.
     # Instead, write a ready marker and exit so the parent Hermes process
     # can poll for DELEGATE_TASK_READY workspaces and invoke delegate_task.
+    # Convert Windows path to WSL path for delegate_task workdir
+    delegate_workdir="$worktree_path"
+    if [[ "$worktree_path" =~ ^/mnt/([a-zA-Z])/(.*)$ ]]; then
+      # Already a WSL path - use as-is for WSL delegate_task
+      delegate_workdir="$worktree_path"
+    elif [[ "$worktree_path" =~ ^([a-zA-Z]):[/\\](.*)$ ]]; then
+      # Windows path (C:\Users\...) - convert to WSL /mnt/c/... format
+      drive_letter="${BASH_REMATCH[1],,}"
+      win_path="${BASH_REMATCH[2]}"
+      delegate_workdir="/mnt/$drive_letter/$win_path"
+    fi
     printf 'DELEGATE_TASK_READY\n' >"$workspace_dir/status"
     echo "Workspace ready for delegate_task: $ISSUE_KEY"
     echo "Worktree: $worktree_path"
+    echo "Delegate workdir: $delegate_workdir"
     echo "Prompt: $prompt_file"
     echo "Status: DELEGATE_TASK_READY"
     echo ""
     echo "Dispatch command:"
-    echo "  delegate_task --workdir \"$worktree_path\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
+    echo "  delegate_task --workdir \"$delegate_workdir\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
     exit 0
   fi
 
