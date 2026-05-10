@@ -473,7 +473,7 @@ printf 'QUEUED\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/status"
 printf 'test prompt\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/AUTOSHIP_PROMPT.md"
 printf 'opencode/paid-model\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/model"
 cat >"$FALLBACK_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 model=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -523,7 +523,7 @@ printf 'QUEUED\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status"
 printf 'test prompt\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/model"
 cat >"$AUTOCOMMIT_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'impl\n' >> src/lib.rs
 printf 'COMPLETE\n' > status
 printf 'implemented\n' > AUTOSHIP_RESULT.md
@@ -559,7 +559,7 @@ printf 'QUEUED\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status"
 printf 'test prompt\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/model"
 cat >"$CARGO_RUNNER_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 case "${CARGO_TARGET_DIR:-}" in
   */target-isolated) printf 'COMPLETE\n' > status; printf 'cargo isolated\n' > AUTOSHIP_RESULT.md; exit 0 ;;
   *) printf 'missing cargo isolation\n' >&2; exit 1 ;;
@@ -597,7 +597,7 @@ printf 'QUEUED\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/status"
 printf 'test prompt\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/model"
 cat >"$SALVAGE_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'salvaged\n' >> src/lib.rs
 exit 0
 SH
@@ -635,7 +635,7 @@ printf 'QUEUED\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/status"
 printf 'test prompt\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/model"
 cat >"$MARKER_ONLY_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'paused\n' > PAUSED_REASON.txt
 printf 'retry\n' > RETRY_CONTEXT.md
 touch .autoship-event-COMPLETE.sent
@@ -674,7 +674,7 @@ printf 'QUEUED\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status"
 printf 'test prompt\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/model"
 cat >"$TESTS_ONLY_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 mkdir -p tests
 printf 'test only\n' > tests/new.test.ts
 printf 'COMPLETE\n' > status
@@ -707,7 +707,7 @@ printf 'QUEUED\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/status"
 printf 'test prompt\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/AUTOSHIP_PROMPT.md"
 printf 'opencode/nemotron-3-super-free\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/model"
 cat >"$SESSION_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'Session not found\n' >&2
 exit 1
 SH
@@ -746,7 +746,7 @@ printf 'QUEUED\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/status"
 printf 'test prompt\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/model"
 cat >"$NO_STATUS_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 # Worker exits successfully without writing any terminal status marker.
 exit 0
 SH
@@ -795,7 +795,7 @@ printf '[]\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/event-queue.json"
 printf 'RUNNING\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/status"
 printf '999999\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/worker.pid"
 cat >"$MONITOR_LIVE_CHILD_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 sleep 30
 SH
 chmod +x "$MONITOR_LIVE_CHILD_REPO/bin/opencode"
@@ -918,7 +918,7 @@ cat >"$DISCORD_NOTIFY_REPO/.autoship/config.json" <<'JSON'
 {"discordNotifyIntervalSeconds":900}
 JSON
 cat >"$DISCORD_NOTIFY_REPO/bin/curl" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --data)
@@ -956,35 +956,35 @@ mkdir -p "$SUPERVISOR_REPO/.autoship/workspaces/issue-1101" "$SUPERVISOR_REPO/.a
 git init -q "$SUPERVISOR_REPO"
 cp "$SCRIPT_DIR/supervisor-loop.sh" "$SUPERVISOR_REPO/hooks/opencode/supervisor-loop.sh"
 cat >"$SUPERVISOR_REPO/hooks/opencode/monitor-agents.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'monitor\n' >>.autoship/order.log
 SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/process-event-queue.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'events\n' >>.autoship/order.log
 SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/reconcile-state.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'reconcile\n' >>.autoship/order.log
 SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/notify-discord.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'notify\n' >>.autoship/order.log
 exit 7
 SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/classify-issue.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'classify:%s\n' "$1" >>.autoship/order.log
 printf 'docs\n'
 SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/dispatch.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'dispatch:%s:%s\n' "$1" "$2" >>.autoship/order.log
 mkdir -p ".autoship/workspaces/issue-$1"
 printf 'QUEUED\n' >".autoship/workspaces/issue-$1/status"
 SH
 cat >"$SUPERVISOR_REPO/hooks/opencode/runner.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'runner\n' >>.autoship/order.log
 SH
 chmod +x "$SUPERVISOR_REPO/hooks/opencode/"*.sh
@@ -1101,13 +1101,13 @@ cp "$REPO_ROOT/policies/default.json" "$VERIFY_FAIL_REPO/policies/default.json"
 cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
 chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_FAIL_REPO/hooks/opencode/pr-title.sh" "$VERIFY_FAIL_REPO/hooks/opencode/verify-result.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
 cat >"$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'VERDICT: FAIL\n'
 exit 1
 SH
 chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh"
 cat >"$VERIFY_FAIL_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1 $2" == "pr create" ]]; then
   printf 'pr create called\n' >> "$GH_PR_LOG"
   exit 0
@@ -1162,13 +1162,13 @@ cp "$REPO_ROOT/policies/default.json" "$VERIFY_PASS_REPO/policies/default.json"
 cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
 chmod +x "$VERIFY_PASS_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_PASS_REPO/hooks/opencode/pr-title.sh" "$VERIFY_PASS_REPO/hooks/opencode/verify-result.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
 cat >"$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'VERDICT: PASS\n'
 exit 0
 SH
 chmod +x "$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh"
 cat >"$VERIFY_PASS_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1 $2" == "pr create" ]]; then
   printf '%s\n' "$*" >> "$GH_PR_LOG"
   printf 'https://github.com/owner/repo/pull/184\n'
@@ -1224,7 +1224,7 @@ cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_PASS_REPO/hooks/opencode/policy-
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_PASS_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_PASS_REPO/policies/default.json"
 cat >"$VERIFY_HOOK_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_PASS_REPO/hooks/opencode/reviewer.sh"
@@ -1256,12 +1256,12 @@ cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_ENV_REPO/hooks/opencode/policy-v
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_ENV_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_ENV_REPO/policies/default.json"
 cat >"$VERIFY_HOOK_ENV_REPO/hooks/opencode/reviewer.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_ENV_REPO/hooks/opencode/reviewer.sh"
 cat >"$VERIFY_HOOK_ENV_REPO/bin/require-ci" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 test "${CI:-}" = "1"
 SH
 chmod +x "$VERIFY_HOOK_ENV_REPO/bin/require-ci"
@@ -1293,7 +1293,7 @@ cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/policy-
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_FAIL_REPO/policies/default.json"
 cat >"$VERIFY_HOOK_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_FAIL_REPO/hooks/opencode/reviewer.sh"
@@ -1327,7 +1327,7 @@ cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/po
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_TEST_FAIL_REPO/policies/default.json"
 cat >"$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_TEST_FAIL_REPO/hooks/opencode/reviewer.sh"
@@ -1361,7 +1361,7 @@ cp "$SCRIPT_DIR/policy-verify.sh" "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/po
 cp "$SCRIPT_DIR/policy.sh" "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/policy.sh"
 cp "$REPO_ROOT/policies/default.json" "$VERIFY_HOOK_INJECTION_REPO/policies/default.json"
 cat >"$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/reviewer.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'VERDICT: PASS\n'
 SH
 chmod +x "$VERIFY_HOOK_INJECTION_REPO/hooks/opencode/reviewer.sh"
@@ -1390,7 +1390,7 @@ cat >"$REVIEWER_REPO/.autoship/state.json" <<'JSON'
 JSON
 printf 'result\n' >"$REVIEWER_REPO/.autoship/workspaces/issue-183/AUTOSHIP_RESULT.md"
 cat >"$REVIEWER_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 case "${AUTOSHIP_FAKE_REVIEW:-pass}" in
   pass) printf 'analysis\nVERDICT: PASS\n' ;;
   fail) printf 'analysis\nVERDICT: FAIL\n' ;;
@@ -1487,7 +1487,7 @@ git init -q "$AUTO_MERGE_REPO"
 cp "$SCRIPT_DIR/auto-merge.sh" "$AUTO_MERGE_REPO/hooks/opencode/auto-merge.sh"
 chmod +x "$AUTO_MERGE_REPO/hooks/opencode/auto-merge.sh"
 cat >"$AUTO_MERGE_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf 'gh should not be called\n' >&2
 exit 1
 SH
@@ -1519,7 +1519,7 @@ git -C "$MERGE_REPO" branch autoship/issue-210
 git -C "$MERGE_REPO" worktree add -q "$MERGE_REPO/.autoship/workspaces/issue-210" autoship/issue-210
 printf 'result\n' >"$MERGE_REPO/.autoship/workspaces/issue-210/AUTOSHIP_RESULT.md"
 cat >"$MERGE_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf '%s\n' "$*" >> "$GH_ARGS_LOG"
 exit 0
 SH
@@ -1596,7 +1596,7 @@ cat >"$ISSUE_FILE_REPO/.autoship/reports/self-improvement.md" <<'MD'
 - Add stealth hook signature evasion bypass.
 MD
 cat >"$ISSUE_FILE_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf '%s\n' "$*" >> "$GH_ARGS_LOG"
 exit 0
 SH
@@ -1615,7 +1615,7 @@ mkdir -p "$SETUP_REPO/bin"
 mkdir -p "$SETUP_REPO/autoship"
 tar -C "$SCRIPT_DIR/../.." --exclude .git --exclude .autoship -cf - . | tar -C "$SETUP_REPO/autoship" -xf -
 cat >"$SETUP_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1" == "models" ]]; then
   printf '%s\n' \
     'opencode/nemotron-3-super-free' \
@@ -1633,7 +1633,7 @@ fi
 echo '1.0.0'
 SH
 cat >"$SETUP_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1 $2" == "auth status" ]]; then
   exit 0
 fi
@@ -1778,7 +1778,7 @@ cat >"$UPDATE_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
 cat >"$UPDATE_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1 $2" == "label list" ]]; then
   printf '%s\n' autoship:in-progress autoship:blocked autoship:paused autoship:done
   exit 0
@@ -1809,7 +1809,7 @@ git -C "$DISPATCH_REPO" commit -q -m initial
 cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/"
 cp "$SCRIPT_DIR/../update-state.sh" "$DISPATCH_REPO/hooks/update-state.sh"
 cat >"$DISPATCH_REPO/hooks/opencode/resource-monitor.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 printf '{"load_status":"throttled","recommended_max_concurrent":8}\n'
 SH
 cat >"$DISPATCH_REPO/.autoship/state.json" <<'JSON'
@@ -1820,7 +1820,7 @@ cat >"$DISPATCH_REPO/config/model-routing.json" <<'JSON'
 JSON
 cp "$DISPATCH_REPO/config/model-routing.json" "$DISPATCH_REPO/.autoship/model-routing.json"
 cat >"$DISPATCH_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1 $2" == "issue view" ]]; then
   case "$4" in
     title) printf 'Issue title\n' ;;
@@ -1932,7 +1932,7 @@ cat >"$FIXTURE_REPO/issues.json" <<'JSON'
 ]
 JSON
 cat >"$FIXTURE_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1 $2" == "issue view" ]]; then
   number="$3"
   case "$7" in
@@ -1961,7 +1961,7 @@ fi
 exit 0
 SH
 cat >"$FIXTURE_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if printf '%s\n' "$*" | grep -F 'AutoShip reviewer' >/dev/null; then
   printf 'VERDICT: PASS\n'
   exit 0
@@ -2131,7 +2131,7 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   DOCTOR_BIN="$TMP_DIR/doctor-bin"
   mkdir -p "$DOCTOR_BIN"
   cat >"$DOCTOR_BIN/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1" == "models" ]]; then
   printf '%s\n' opencode/minimax-m2.5-free openai/gpt-5.5
   exit 0
@@ -2139,7 +2139,7 @@ fi
 exit 0
 SH
   cat >"$DOCTOR_BIN/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 if [[ "$1 $2" == "auth status" ]]; then
   printf '%s\n' "Token scopes: 'repo', 'workflow'"
   exit 0
@@ -2174,11 +2174,11 @@ SH
   grep -F 'model-inventory' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates OpenCode model inventory"
   grep -F 'gh-auth' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates GitHub auth"
   cat >"$DOCTOR_BIN/opencode" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 exit 1
 SH
   cat >"$DOCTOR_BIN/gh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/bash
 exit 1
 SH
   chmod +x "$DOCTOR_BIN/opencode" "$DOCTOR_BIN/gh"
