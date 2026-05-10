@@ -26,8 +26,13 @@ autoship_install_package_fixture() {
 
   (
     cd "$package_source"
-    npm install --package-lock=false --no-audit --no-fund >/dev/null
-    npm pack --pack-destination "$pack_dir" --silent >/dev/null
+    # Copy dist/ from source repo so prepack's tsc isn't needed
+    if [[ -d "$repo_root/dist" && ! -d "$package_source/dist" ]]; then
+      cp -R "$repo_root/dist" "$package_source/dist"
+    fi
+    npm install --no-audit --no-fund >/dev/null
+    # prepack runs tsc but dev deps aren't installed in fixture; skip it
+    npm pack --pack-destination "$pack_dir" --silent --ignore-scripts >/dev/null
   )
 
   local package_tarball
