@@ -47,6 +47,7 @@ if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
 fi
 TASK_TYPE="${POSITIONAL[1]:-medium_code}"
 MODEL_OVERRIDE="${POSITIONAL[2]:-}"
+MODEL_OVERRIDE="${MODEL_OVERRIDE%/}"
 
 case "$TASK_TYPE" in
   research | docs | simple_code | medium_code | complex | mechanical | ci_fix | rust_unsafe) ;;

@@ -147,6 +147,14 @@ load_routing_config() {
       return 0
     fi
     rm -f "$model_routing_file"
+    # Interactive first-run: launch model wizard for intelligent model selection
+    if [[ -t 0 ]] && [[ -x "$SCRIPT_DIR/model-wizard.sh" ]]; then
+      echo ""
+      echo "Model routing not configured. Launching model selection wizard..."
+      bash "$SCRIPT_DIR/model-wizard.sh"
+      return 0
+    fi
+    # Non-inter fallback: use legacy setup.sh
     if command -v opencode >/dev/null 2>&1 && [[ -x "$SCRIPT_DIR/setup.sh" ]]; then
       AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-20}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
     fi
