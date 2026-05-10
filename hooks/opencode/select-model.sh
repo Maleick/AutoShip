@@ -59,10 +59,11 @@ def circuit_open($id):
   else
     false
   end;
-def compatible:
-  (.enabled | if . == null then true else . end)
-  and (((.max_task_types // []) | length == 0) or ((.max_task_types // []) | index($task) != null))
-  and (circuit_open(.id) | not);
+  def compatible:
+    (.enabled | if . == null then true else . end)
+    and (((.max_task_types // []) | length == 0) or ((.max_task_types // []) | index($task) != null))
+    and (circuit_open(.id) | not)
+    and (.cost // "") == "free";
 def cost_score:
   if .cost == "free" then 100
   elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then 85
@@ -134,7 +135,8 @@ jq -r --arg task "$TASK_TYPE" --argjson issue "$ISSUE_NUM" --slurpfile history "
   def compatible:
     (.enabled | if . == null then true else . end)
     and (((.max_task_types // []) | length == 0) or ((.max_task_types // []) | index($task) != null))
-    and (circuit_open(.id) | not);
+    and (circuit_open(.id) | not)
+    and (.cost // "") == "free";
   def cost_score:
     if .cost == "free" then 100
     elif (.id | test("(^|/)gpt-5\\.3-spark$|spark"; "i")) then 85
