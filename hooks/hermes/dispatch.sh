@@ -46,6 +46,15 @@ MODEL_OVERRIDE="${POSITIONAL[2]:-}"
 REPO_ROOT=$(autoship_repo_root) || exit 1
 cd "$REPO_ROOT"
 
+# ── Auto-sync: pull latest plugin code before dispatch ──
+if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
+  sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$sync_gap" =~ ^[0-9]+$ && "$sync_gap" -gt 0 ]]; then
+    echo "[autoship-sync] $sync_gap commit(s) behind origin/main — pulling..."
+    git pull origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull failed, continuing with local code"
+  fi
+fi
+
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
