@@ -1,39 +1,84 @@
 {
-  "version": "2026-05-03",
-  "runtime": "opencode",
-  "dispatch_method": "free_first_rotation",
-  "max_concurrent": 20,
-  "notes": "max_concurrent set to 20. Hermes delegation.max_concurrent_children synced to match.",
-  "tiers": [
+  "roles": {
+    "planner": "kimi-k2.6",
+    "coordinator": "kimi-k2.6",
+    "orchestrator": "kimi-k2.6",
+    "reviewer": "kimi-k2.6",
+    "lead": "kimi-k2.6"
+  },
+  "pools": {
+    "default": {
+      "description": "Default worker pool — all K2.6 inherited from main model",
+      "models": ["kimi-k2.6"]
+    },
+    "frontend": {
+      "description": "Frontend development tasks",
+      "models": ["kimi-k2.6"]
+    },
+    "backend": {
+      "description": "Backend development tasks",
+      "models": ["kimi-k2.6"]
+    },
+    "docs": {
+      "description": "Documentation tasks",
+      "models": ["kimi-k2.6"]
+    },
+    "mechanical": {
+      "description": "Mechanical/boilerplate tasks",
+      "models": ["kimi-k2.6"]
+    }
+  },
+  "defaultFallback": "kimi-k2.6",
+  "models": [
     {
-      "name": "go_paid",
-      "priority": 1,
-      "provider": "opencode-go",
-      "cost": "paid",
-      "models": [
-        { "id": "opencode-go/deepseek-v4-flash", "name": "DeepSeek V4 Flash", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "Primary model" }
-      ],
-      "rotation": "round_robin",
-      "fallback_on": ["rate_limit", "quota_exhausted", "model_unavailable"]
+      "id": "kimi-k2.6",
+      "cost": "selected",
+      "strength": 95,
+      "max_task_types": [
+        "docs",
+        "simple_code",
+        "medium_code",
+        "mechanical",
+        "ci_fix",
+        "complex",
+        "rust_unsafe",
+        "research"
+      ]
     },
     {
-      "name": "hermes_fallback",
-      "priority": 2,
-      "provider": "hermes",
-      "cost": "subscription",
-      "models": [
-        { "id": "kimi-k2.6", "name": "KIMI K2.6", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "Kimi subscription fallback" },
-        { "id": "gpt-5.5", "name": "GPT 5.5", "capabilities": ["code", "review", "docs", "plan", "complex"], "notes": "OpenAI fallback" }
-      ],
-      "rotation": "round_robin",
-      "fallback_on": []
+      "id": "opencode/ring-2.6-1t-free",
+      "cost": "free",
+      "strength": 70,
+      "max_task_types": [
+        "docs",
+        "simple_code",
+        "medium_code",
+        "mechanical",
+        "ci_fix",
+        "research"
+      ]
+    },
+    {
+      "id": "opencode/nemotron-3-super-free",
+      "cost": "free",
+      "strength": 65,
+      "max_task_types": [
+        "docs",
+        "simple_code",
+        "medium_code",
+        "mechanical",
+        "ci_fix"
+      ]
+    },
+    {
+      "id": "opencode/minimax-m2.5-free",
+      "cost": "free",
+      "strength": 60,
+      "max_task_types": [
+        "docs",
+        "simple_code",
+        "mechanical"
+      ]
     }
-  ],
-  "rules": [
-    { "rule": "Always use go_paid tier first (deepseek-v4-flash) for every task" },
-    { "rule": "If deepseek-v4-flash hits rate limit or quota, fall back to hermes_fallback" },
-    { "rule": "Never use openai/gpt-5.5-fast" },
-    { "rule": "Track usage per model in .autoship/usage-log.json" },
-    { "rule": "Hermes default active worker cap is 20" }
   ]
 }
