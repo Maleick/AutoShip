@@ -31,6 +31,7 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       line-height: 1.6;
       min-height: 100vh;
+      overflow-x: hidden;
     }
 
     /* ── Nav ── */
@@ -52,13 +53,48 @@
     }
     .nav-cta:hover { background: var(--amber-dim); }
 
+    /* ── Mobile menu toggle ── */
+    .menu-toggle {
+      display: none;
+      background: none; border: 1px solid var(--border); color: var(--text);
+      font-size: 1.2rem; padding: 8px 12px; border-radius: 6px; cursor: pointer;
+      min-height: 48px; min-width: 48px; align-items: center; justify-content: center;
+    }
+
+    /* ── Modal overlay for mobile nav ── */
+    .nav-modal-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.6);
+    }
+    .nav-modal-overlay.active { display: block; }
+    .nav-modal {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 280px; max-width: 80vw;
+      background: var(--surface); border-left: 1px solid var(--border);
+      padding: 24px; display: flex; flex-direction: column; gap: 8px;
+      transform: translateX(100%); transition: transform .25s ease;
+    }
+    .nav-modal-overlay.active .nav-modal { transform: translateX(0); }
+    .nav-modal-close {
+      align-self: flex-end; background: none; border: 1px solid var(--border);
+      color: var(--muted); font-size: 1.2rem; padding: 6px 10px; border-radius: 6px;
+      cursor: pointer; min-height: 44px; min-width: 44px;
+    }
+    .nav-modal a {
+      color: var(--text); text-decoration: none; font-size: 1rem; font-weight: 600;
+      padding: 14px 0; border-bottom: 1px solid var(--border);
+      min-height: 48px; display: flex; align-items: center;
+    }
+    .nav-modal a:last-child { border-bottom: none; }
+    .nav-modal .nav-cta { text-align: center; margin-top: 8px; }
+
     /* ── Hero ── */
     .hero {
       max-width: 900px; margin: 0 auto;
       padding: 80px 24px 64px;
       text-align: center;
     }
-    .hero > img { width: 100%; max-width: 760px; border-radius: 12px; border: 1px solid var(--border); }
+    .hero > img { width: 100%; max-width: 760px; border-radius: 12px; border: 1px solid var(--border); height: auto; }
     .hero-badges { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
     .hero-badges img { height: 22px; width: auto; border: none; border-radius: 0; }
     .hero-desc {
@@ -70,12 +106,14 @@
     .btn-primary {
       background: var(--amber); color: #000; font-weight: 700; font-size: 1rem;
       padding: 13px 28px; border-radius: var(--radius); text-decoration: none; transition: background .2s;
+      display: inline-flex; align-items: center; justify-content: center; min-height: 48px;
     }
     .btn-primary:hover { background: var(--amber-dim); }
     .btn-secondary {
       background: var(--surface); color: var(--text); font-weight: 600; font-size: 1rem;
       padding: 13px 28px; border-radius: var(--radius); text-decoration: none;
       border: 1px solid var(--border); transition: border-color .2s;
+      display: inline-flex; align-items: center; justify-content: center; min-height: 48px;
     }
     .btn-secondary:hover { border-color: var(--muted); }
 
@@ -103,6 +141,7 @@
       background: none; border: 1px solid var(--border); color: var(--muted);
       font-size: 0.8rem; padding: 5px 12px; border-radius: 5px; cursor: pointer;
       transition: all .2s; white-space: nowrap;
+      min-height: 36px; min-width: 48px;
     }
     .copy-btn:hover { border-color: var(--amber); color: var(--amber); }
 
@@ -157,7 +196,6 @@
 
     /* ── Before/After ── */
     .ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 600px) { .ba-grid { grid-template-columns: 1fr; } }
     .ba-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 24px;
@@ -208,12 +246,59 @@
     footer a { color: var(--muted); text-decoration: none; }
     footer a:hover { color: var(--text); }
 
-    @media (max-width: 640px) {
+    /* ── Responsive: Mobile breakpoint at 480px ── */
+    @media (max-width: 480px) {
       nav { padding: 12px 16px; }
       .nav-links { display: none; }
-      .stats { flex-direction: column; }
-      .stat { border-right: none; border-bottom: 1px solid var(--border); }
+      .menu-toggle { display: flex; }
+
+      .hero { padding: 48px 16px 40px; }
+      .hero > img { max-width: 100%; }
+      .hero-desc { font-size: 1rem; }
+      .hero-actions { flex-direction: column; gap: 10px; }
+      .btn-primary, .btn-secondary { width: 100%; font-size: 1rem; padding: 14px 20px; }
+
+      .stats { flex-direction: column; margin: 40px 16px 0; }
+      .stat { border-right: none; border-bottom: 1px solid var(--border); padding: 18px 16px; }
       .stat:last-child { border-bottom: none; }
+      .stat-num { font-size: 1.6rem; }
+
+      section { padding: 48px 16px; }
+      section h2 { font-size: 1.4rem; }
+      .section-sub { font-size: 0.95rem; }
+
+      .cards { grid-template-columns: 1fr; }
+      .quickstart { grid-template-columns: 1fr; }
+      .ba-grid { grid-template-columns: 1fr; }
+
+      .install-box { margin: 40px 16px 0; }
+      .install-cmd { flex-direction: column; align-items: stretch; gap: 10px; }
+      .install-cmd code { white-space: normal; word-break: break-all; }
+      .copy-btn { align-self: flex-start; }
+
+      table { font-size: 0.82rem; }
+      th, td { padding: 8px 10px; }
+      td:first-child { font-size: 0.78rem; }
+
+      .pipeline-step { gap: 12px; }
+      .step-num { width: 28px; height: 28px; font-size: 0.78rem; }
+      .step-content h4 { font-size: 0.9rem; }
+      .step-content p { font-size: 0.82rem; }
+    }
+
+    /* ── Tablet (481px–768px) ── */
+    @media (min-width: 481px) and (max-width: 768px) {
+      .hero { padding: 56px 20px 48px; }
+      .stats { margin: 40px 20px 0; }
+      section { padding: 56px 20px; }
+      .cards { grid-template-columns: 1fr 1fr; }
+      .quickstart { grid-template-columns: 1fr 1fr; }
+      .ba-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Small desktop (769px–1024px) ── */
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .cards { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -229,8 +314,22 @@
     <a href="#agents">Agents</a>
     <a href="https://github.com/Maleick/AutoShip">GitHub</a>
   </div>
+  <button class="menu-toggle" aria-label="Open menu" onclick="openNavModal()">☰</button>
   <a class="nav-cta" href="#quick-start">Install</a>
 </nav>
+
+<!-- Mobile nav modal -->
+<div class="nav-modal-overlay" id="navModalOverlay" onclick="closeNavModal(event)">
+  <div class="nav-modal" onclick="event.stopPropagation()">
+    <button class="nav-modal-close" aria-label="Close menu" onclick="closeNavModal()">✕</button>
+    <a href="#how-it-works" onclick="closeNavModal()">How It Works</a>
+    <a href="#features" onclick="closeNavModal()">Features</a>
+    <a href="#quick-start" onclick="closeNavModal()">Quick Start</a>
+    <a href="#agents" onclick="closeNavModal()">Agents</a>
+    <a href="https://github.com/Maleick/AutoShip" onclick="closeNavModal()">GitHub</a>
+    <a class="nav-cta" href="#quick-start" onclick="closeNavModal()">Install</a>
+  </div>
+</div>
 
 <!-- Hero -->
 <div class="hero">
@@ -528,6 +627,18 @@
   <p>AutoShip — MIT License · <a href="https://github.com/Maleick/AutoShip">github.com/Maleick/AutoShip</a></p>
   <p style="margin-top:6px;">Built for <a href="https://opencode.ai">OpenCode</a></p>
 </footer>
+
+<script>
+  function openNavModal() {
+    document.getElementById('navModalOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeNavModal(event) {
+    if (event && event.target !== document.getElementById('navModalOverlay') && event.target.closest('.nav-modal')) return;
+    document.getElementById('navModalOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+  }
+</script>
 
 </body>
 </html>
