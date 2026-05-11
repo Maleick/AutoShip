@@ -25,3 +25,18 @@ export async function server(): Promise<PluginServer> {
 
 export * from "./types.js";
 export { classifyError, getRecoverySuggestion, formatRecoverySuggestion } from "./recovery.js";
+export {
+  MQ2XPTracker,
+  MQ2KillTracker,
+  MQ2PlatTracker,
+  SessionTracker,
+  exportSummary,
+  importSummary,
+} from "./session-tracking.js";
+export type {
+  KillEvent,
+  PlatEvent,
+  XPEvent,
+  SessionSummary,
+  TrackerOptions,
+} from "./session-tracking.js";
