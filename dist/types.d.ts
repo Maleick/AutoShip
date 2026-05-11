@@ -24,6 +24,28 @@ export type FailureCategory = "stuck" | "failed_verification" | "reviewer_reject
 export type EventType = "blocked" | "stuck" | "verify" | "force_dispatch";
 /** Result of a diagnostic check run by `opencode-autoship doctor`. */
 export type CheckStatus = "PASS" | "WARN" | "FAIL";
+/** Classification of an error for recovery suggestion purposes. */
+export type ErrorKind = "network" | "permission" | "timeout" | "unknown";
+/** A recovery suggestion with an optional one-click action. */
+export interface RecoverySuggestion {
+    /** Human-readable suggestion text. */
+    suggestion: string;
+    /** Optional one-click recovery action label. */
+    action?: string;
+    /** Optional shell command to execute for recovery. */
+    command?: string;
+}
+/** Map of known error kinds to their recovery suggestions. */
+export type RecoveryMap = Record<ErrorKind, RecoverySuggestion>;
+/** Structured error info used to produce recovery suggestions. */
+export interface ErrorInfo {
+    /** The classified error kind. */
+    kind: ErrorKind;
+    /** Original error message or code. */
+    message: string;
+    /** Optional error code (e.g. `ECONNREFUSED`, `EACCES`). */
+    code?: string;
+}
 /** Failure evidence recorded when an issue enters the `blocked` / `stuck` state. */
 export interface FailureEvidence {
     /** Path to the captured failure artifact JSON file. */

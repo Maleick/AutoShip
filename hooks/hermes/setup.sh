@@ -57,9 +57,21 @@ echo "  Routing file: $AUTOSHIP_DIR/hermes-model-routing.json"
 
 # Update main model-routing.json to include Hermes if it exists
 if [[ -f "$AUTOSHIP_DIR/model-routing.json" ]]; then
-  jq --slurpfile hermes "$AUTOSHIP_DIR/hermes-model-routing.json" '
-    .runtimes.hermes = $hermes[0]
-  ' "$AUTOSHIP_DIR/model-routing.json" >"$AUTOSHIP_DIR/model-routing.json.tmp" \
-    && mv "$AUTOSHIP_DIR/model-routing.json.tmp" "$AUTOSHIP_DIR/model-routing.json"
-  echo "  Updated main model-routing.json with Hermes runtime"
+  LOCK_FILE="$AUTOSHIP_DIR/model-routing.json.lock"
+  for _ in $(seq 1 10); do
+    if mkdir "$LOCK_FILE" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -d "$LOCK_FILE" ]]; then
+    jq --slurpfile hermes "$AUTOSHIP_DIR/hermes-model-routing.json" '
+      .runtimes.hermes = $hermes[0]
+    ' "$AUTOSHIP_DIR/model-routing.json" >"$AUTOSHIP_DIR/model-routing.json.tmp" \
+      && mv "$AUTOSHIP_DIR/model-routing.json.tmp" "$AUTOSHIP_DIR/model-routing.json"
+    rm -rf "$LOCK_FILE"
+    echo "  Updated main model-routing.json with Hermes runtime"
+  else
+    echo "  WARN: Could not acquire lock on model-routing.json, update skipped" >&2
+  fi
 fi

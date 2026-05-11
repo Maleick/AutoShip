@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: autoship-${{ github.workflow }}-${{ github.event.inputs.mode || 'pr' }}-${{ github.ref }}
+  group: autoship-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || 'pr' }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

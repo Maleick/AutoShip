@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hermes setup runner - prepare workspaces for manual delegate_task dispatch
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -24,9 +24,15 @@ else
   }
 fi
 
-# Add util-linux bin to PATH for setsid on macOS
-if [[ -d "/opt/homebrew/opt/util-linux/bin" ]]; then
-  export PATH="/opt/homebrew/opt/util-linux/bin:$PATH"
+# Add util-linux bin to PATH for setsid on macOS (Homebrew)
+UTIL_LINUX_BIN=""
+if command -v brew &>/dev/null; then
+  UTIL_LINUX_BIN="$(brew --prefix util-linux 2>/dev/null)/bin"
+elif [[ -d "/opt/homebrew/opt/util-linux/bin" ]]; then
+  UTIL_LINUX_BIN="/opt/homebrew/opt/util-linux/bin"
+fi
+if [[ -n "$UTIL_LINUX_BIN" && -d "$UTIL_LINUX_BIN" ]]; then
+  export PATH="$UTIL_LINUX_BIN:$PATH"
 fi
 
 REPO_ROOT=$(autoship_repo_root) || exit 1
@@ -39,7 +45,7 @@ if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
     sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ')
     if [[ "$sync_gap" =~ ^[0-9]+$ && "$sync_gap" -gt 0 ]]; then
       echo "[autoship-sync] $sync_gap commit(s) behind origin/main — pulling..."
-      git pull origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull failed, continuing with local code"
+      git pull --ff-only origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull --ff-only failed, continuing with local code"
     fi
   fi
 fi
