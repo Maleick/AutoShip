@@ -179,9 +179,6 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
 
   if [[ -n "${HERMES_SESSION_ID:-}" ]]; then
     echo "Hermes session detected - executing via delegate_task..."
-    # delegate_task is a Hermes tool; we cannot call it from bash.
-    # Instead, write a ready marker and exit so the parent Hermes process
-    # can poll for DELEGATE_TASK_READY workspaces and invoke delegate_task.
     # Convert Windows path to WSL path for delegate_task workdir
     delegate_workdir="$worktree_path"
     if [[ "$worktree_path" =~ ^/mnt/([a-zA-Z])/(.*)$ ]]; then
@@ -193,6 +190,11 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
       win_path="${BASH_REMATCH[2]}"
       delegate_workdir="/mnt/$drive_letter/$win_path"
     fi
+
+    # Write a ready marker so the parent can poll, but ALSO attempt
+    # to execute delegate_task directly if we are inside a Hermes
+    # process (delegate_task is available as a shell function in
+    # Hermes Agent sessions).
     printf 'DELEGATE_TASK_READY\n' >"$workspace_dir/status"
     echo "Workspace ready for delegate_task: $ISSUE_KEY"
     echo "Worktree: $worktree_path"
@@ -202,7 +204,39 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
     echo ""
     echo "Dispatch command:"
     echo "  delegate_task --workdir \"$delegate_workdir\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
-    exit 0
+
+    # Attempt direct delegate_task execution if the function is available
+    if command -v delegate_task &>/dev/null || type delegate_task &>/dev/null 2>&1; then
+      echo ""
+      echo "Executing delegate_task directly from runner..."
+      printf 'RUNNING\n' >"$workspace_dir/status"
+      autoship_state_set set-running "$ISSUE_KEY" agent="hermes" model="delegate_task"
+
+      HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
+      # Build the command array carefully
+      if command -v timeout >/dev/null 2>&1; then
+        timeout "$HERMES_TIMEOUT" delegate_task --goal "$(cat "$prompt_file")" --toolsets 'terminal,file,web' >"$workspace_dir/hermes-worker.log" 2>&1
+      else
+        delegate_task --goal "$(cat "$prompt_file")" --toolsets 'terminal,file,web' >"$workspace_dir/hermes-worker.log" 2>&1
+      fi
+      worker_exit=$?
+
+      if [[ $worker_exit -eq 0 ]]; then
+        WORKER_RESULT="COMPLETE"
+        WORKER_REASON="delegate_task completed successfully"
+      elif [[ $worker_exit -eq 124 ]]; then
+        WORKER_RESULT="STUCK"
+        WORKER_REASON="delegate_task timed out (exit 124)"
+      else
+        WORKER_RESULT="BLOCKED"
+        WORKER_REASON="delegate_task failed (exit $worker_exit)"
+      fi
+
+      # Fall through to post-execution handling below
+    else
+      echo "delegate_task not available in shell context — exiting for parent dispatch"
+      exit 0
+    fi
   fi
 
   # No Hermes session - try hermes chat CLI in headless mode
