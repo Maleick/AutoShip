@@ -23,3 +23,4 @@ export async function server(): Promise<PluginServer> {
 }
 
 export * from "./types.js";
+export * from "./error.js";

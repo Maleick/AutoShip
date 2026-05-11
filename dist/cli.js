@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 const packageJson = JSON.parse(await readFile(join(PACKAGE_ROOT, "package.json"), "utf8"));
 const VERSION = `v${packageJson.version ?? "0.0.0"}`;
+import { wrapError } from "./error.js";
 const AUTOSHIP_COMMANDS = {
     autoship: { description: "Start AutoShip orchestration", agent: "build", subtask: false },
     "autoship-setup": { description: "Configure AutoShip model routing and first-run setup", agent: "build", subtask: false },
@@ -79,7 +80,9 @@ async function assertWritablePath(path, label) {
     }
     catch (error) {
         if (error.code !== "ENOENT") {
-            throw error;
+            throw wrapError(error, { hook: "cli", issue: "install" }, [
+                { summary: "Check file permissions for the target path" },
+            ]);
         }
     }
 }
@@ -145,7 +148,9 @@ async function install() {
                 console.warn(`Warning: ${item.src} not found, skipping`);
                 continue;
             }
-            throw error;
+            throw wrapError(error, { hook: "cli", issue: "install" }, [
+                { summary: "Ensure the source asset exists and is readable" },
+            ]);
         }
     }
     const configPath = join(configDir, "opencode.json");
@@ -397,6 +402,9 @@ async function main() {
     }
 }
 main().catch((err) => {
-    console.error("Error:", err.message);
+    const wrapped = wrapError(err, { hook: "cli" }, [
+        { summary: "Run 'opencode-autoship doctor' to verify your installation" },
+    ]);
+    console.error(wrapped.toString());
     process.exit(1);
 });

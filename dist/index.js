@@ -16,3 +16,4 @@ export async function server() {
     };
 }
 export * from "./types.js";
+export * from "./error.js";
