@@ -9,19 +9,23 @@ AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 # Hermes labels — can be customized
 # Default to atomic:ready (the actual label used in TextQuest)
 LABELS="${HERMES_LABELS:-atomic:ready}"
-# Auto-detect target repo: default to current repo unless explicitly overridden
-if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+# Resolve target repo: config.json → env → auto-detect → legacy fallback
+REPO=""
+if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO" && -n "${HERMES_TARGET_REPO:-}" ]]; then
   REPO="$HERMES_TARGET_REPO"
-else
+fi
+if [[ -z "$REPO" ]]; then
   CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
   if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
     REPO_NAME="${BASH_REMATCH[2]}"
     REPO_NAME="${REPO_NAME%.git}"
     REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
-  else
-    REPO="Maleick/TextQuest"
   fi
 fi
+REPO="${REPO:-Maleick/TextQuest}"
 
 echo "=== Hermes Issue Plan ==="
 echo "Target repo: $REPO"

@@ -3,19 +3,24 @@
 set -euo pipefail
 
 ISSUE_NUM="${1:?Issue number required}"
-# Auto-detect target repo: default to current repo unless explicitly overridden
-if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+# Resolve target repo: config.json → env → auto-detect → legacy fallback
+AUTOSHIP_DIR="${AUTOSHIP_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME/Projects/AutoShip")/.autoship}"
+REPO=""
+if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO" && -n "${HERMES_TARGET_REPO:-}" ]]; then
   REPO="$HERMES_TARGET_REPO"
-else
+fi
+if [[ -z "$REPO" ]]; then
   CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
   if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
     REPO_NAME="${BASH_REMATCH[2]}"
     REPO_NAME="${REPO_NAME%.git}"
     REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
-  else
-    REPO="Maleick/TextQuest"
   fi
 fi
+REPO="${REPO:-Maleick/TextQuest}"
 
 # Derive target repo path from repo name
 if [[ "$REPO" == */* ]]; then

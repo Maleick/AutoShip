@@ -62,22 +62,24 @@ AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
-# Auto-detect target repo: default to the current repo (AutoShip) unless explicitly overridden.
-# This ensures AutoShip improvements are dispatched to AutoShip, not TextQuest.
-if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+# Resolve target repo: config.json → env → auto-detect → legacy fallback
+# This allows AutoShip to dispatch to any configured repo.
+REPO=""
+if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO" && -n "${HERMES_TARGET_REPO:-}" ]]; then
   REPO="$HERMES_TARGET_REPO"
-else
-  # Derive owner/repo from current repo's origin remote
+fi
+if [[ -z "$REPO" ]]; then
   CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
   if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
     REPO_NAME="${BASH_REMATCH[2]}"
     REPO_NAME="${REPO_NAME%.git}"
     REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
-  else
-    # Fallback to legacy default for backward compatibility
-    REPO="Maleick/TextQuest"
   fi
 fi
+REPO="${REPO:-Maleick/TextQuest}"
 BASE_BRANCH="${HERMES_BASE_BRANCH:-}"
 if [[ -z "$BASE_BRANCH" ]]; then
   BASE_BRANCH=$(gh repo view "$REPO" --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)

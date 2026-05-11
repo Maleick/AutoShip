@@ -8,25 +8,33 @@ MAX_TOTAL_WORKTREES_GB="${AUTOSHIP_MAX_TOTAL_WORKTREES_GB:-10}" # Max total for 
 MAX_WORKSPACE_COUNT="${AUTOSHIP_MAX_WORKSPACE_COUNT:-20}"       # Max .autoship workspaces
 MAX_WORKSPACE_AGE_DAYS="${AUTOSHIP_MAX_WORKSPACE_AGE_DAYS:-7}"  # Auto-remove after N days
 
-# Auto-detect target repo path
-if [[ -n "${HERMES_TARGET_REPO_PATH:-}" ]]; then
+# Resolve target repo path: config.json → env → auto-detect → legacy fallback
+AUTOSHIP_DIR="${AUTOSHIP_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME/Projects/AutoShip")/.autoship}"
+TARGET_REPO=""
+if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+  if [[ -n "$REPO" && "$REPO" == */* ]]; then
+    REPO_NAME="${REPO#*/}"
+    TARGET_REPO="$HOME/Projects/${REPO_NAME%.git}"
+  fi
+fi
+if [[ -z "$TARGET_REPO" && -n "${HERMES_TARGET_REPO_PATH:-}" ]]; then
   TARGET_REPO="$HERMES_TARGET_REPO_PATH"
-elif [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+fi
+if [[ -z "$TARGET_REPO" && -n "${HERMES_TARGET_REPO:-}" ]]; then
   REPO_NAME="${HERMES_TARGET_REPO#*/}"
   TARGET_REPO="$HOME/Projects/${REPO_NAME%.git}"
-else
-  # Default: derive from current repo's origin remote
+fi
+if [[ -z "$TARGET_REPO" ]]; then
   CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
   if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
     REPO_NAME="${BASH_REMATCH[2]}"
     REPO_NAME="${REPO_NAME%.git}"
     TARGET_REPO="$HOME/Projects/$REPO_NAME"
-  else
-    TARGET_REPO="$HOME/Projects/TextQuest"
   fi
 fi
+TARGET_REPO="${TARGET_REPO:-$HOME/Projects/TextQuest}"
 WORKTREE_BASE="${TARGET_REPO}.worktrees"
-AUTOSHIP_DIR="${AUTOSHIP_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME/Projects/AutoShip")/.autoship}"
 
 # ── Auto-sync: pull latest plugin code before prune ──
 if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
