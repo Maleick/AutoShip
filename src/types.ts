@@ -75,6 +75,36 @@ export type EventType = "blocked" | "stuck" | "verify" | "force_dispatch";
 export type CheckStatus = "PASS" | "WARN" | "FAIL";
 
 // ---------------------------------------------------------------------------
+// Error Recovery
+// ---------------------------------------------------------------------------
+
+/** Classification of an error for recovery suggestion purposes. */
+export type ErrorKind = "network" | "permission" | "timeout" | "unknown";
+
+/** A recovery suggestion with an optional one-click action. */
+export interface RecoverySuggestion {
+  /** Human-readable suggestion text. */
+  suggestion: string;
+  /** Optional one-click recovery action label. */
+  action?: string;
+  /** Optional shell command to execute for recovery. */
+  command?: string;
+}
+
+/** Map of known error kinds to their recovery suggestions. */
+export type RecoveryMap = Record<ErrorKind, RecoverySuggestion>;
+
+/** Structured error info used to produce recovery suggestions. */
+export interface ErrorInfo {
+  /** The classified error kind. */
+  kind: ErrorKind;
+  /** Original error message or code. */
+  message: string;
+  /** Optional error code (e.g. `ECONNREFUSED`, `EACCES`). */
+  code?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Issue & State
 // ---------------------------------------------------------------------------
 
@@ -445,3 +475,5 @@ export interface PluginServer {
   /** Event handler (currently a no-op stub). */
   event(): undefined;
 }
+
+
