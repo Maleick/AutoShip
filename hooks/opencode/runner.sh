@@ -461,7 +461,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
               autoship_state_set set-running "$issue_id" agent="$fallback_model" model="$fallback_model" role="$role"
               bash "$SCRIPT_DIR/metrics-collector.sh" record-start "$issue_id" "$fallback_model" "$task_type" >/dev/null 2>&1 || true
               # Pre-flight check fallback model before committing to it
-              local fb_preflight_log=".autoship-fallback-preflight.log"
+              fb_preflight_log=".autoship-fallback-preflight.log"
               if ! hermes session create --agent "$PWD/AUTOSHIP_PROMPT.md" --name "autoship-${issue_id}-fb-$(date +%s)" --model "$fallback_model" --workdir "$PWD" >"$fb_preflight_log" 2>&1; then
                 cat "$fb_preflight_log" >> AUTOSHIP_RUNNER.log
                 if grep -Eiq 'insufficient balance|billing|quota|rate limit|credit|unauthorized' "$fb_preflight_log"; then

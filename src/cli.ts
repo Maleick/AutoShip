@@ -55,6 +55,7 @@ const ENABLED_PROVIDERS = ["kimi-for-coding", "nvidia", "openai", "opencode", "o
 const DISABLED_PROVIDERS = ["github-copilot"];
 const LEGACY_PLUGIN_REGISTRATIONS = new Set([
   "opencode-autoship@latest",
+  "opencode-autoship@git+https://github.com/Maleick/AutoShip.git",
 ]);
 
 type InstallItem =
@@ -228,7 +229,13 @@ function isLegacyPluginRegistration(plugin: string): boolean {
   if (LEGACY_PLUGIN_REGISTRATIONS.has(plugin)) {
     return true;
   }
-  return plugin.startsWith("file://") && plugin.includes("autoship");
+  if (plugin.startsWith("file://") && plugin.includes("autoship")) {
+    return true;
+  }
+  if (plugin.includes("@git+") && plugin.includes("autoship")) {
+    return true;
+  }
+  return false;
 }
 
 async function doctor() {

@@ -159,7 +159,7 @@ run_smoke_check() {
 run_lint_check() {
   echo "=== Shell lint/format check ==="
   if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck -S error "$HOOKS_DIR"/*.sh "$HOOKS_DIR/opencode"/*.sh "$HOOKS_DIR/hermes"/*.sh || FAILED=1
+    shellcheck -S warning "$HOOKS_DIR"/*.sh "$HOOKS_DIR/opencode"/*.sh "$HOOKS_DIR/hermes"/*.sh "$HOOKS_DIR/lib"/*.sh || FAILED=1
   else
     echo "WARN: shellcheck not installed; skipping" >&2
   fi

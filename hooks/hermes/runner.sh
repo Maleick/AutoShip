@@ -24,9 +24,15 @@ else
   }
 fi
 
-# Add util-linux bin to PATH for setsid on macOS
-if [[ -d "/opt/homebrew/opt/util-linux/bin" ]]; then
-  export PATH="/opt/homebrew/opt/util-linux/bin:$PATH"
+# Add util-linux bin to PATH for setsid on macOS (Homebrew)
+UTIL_LINUX_BIN=""
+if command -v brew &>/dev/null; then
+  UTIL_LINUX_BIN="$(brew --prefix util-linux 2>/dev/null)/bin"
+elif [[ -d "/opt/homebrew/opt/util-linux/bin" ]]; then
+  UTIL_LINUX_BIN="/opt/homebrew/opt/util-linux/bin"
+fi
+if [[ -n "$UTIL_LINUX_BIN" && -d "$UTIL_LINUX_BIN" ]]; then
+  export PATH="$UTIL_LINUX_BIN:$PATH"
 fi
 
 REPO_ROOT=$(autoship_repo_root) || exit 1

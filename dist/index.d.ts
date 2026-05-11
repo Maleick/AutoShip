@@ -5,3 +5,4 @@ export declare const version: string;
 export declare function server(): Promise<PluginServer>;
 export * from "./types.js";
 export * from "./error.js";
+export { classifyError, getRecoverySuggestion, formatRecoverySuggestion } from "./recovery.js";

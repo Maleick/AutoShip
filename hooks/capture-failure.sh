@@ -30,6 +30,10 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
 }
 cd "$REPO_ROOT"
 
+AUTOSHIP_DIR=".autoship"
+FAILURES_DIR="$AUTOSHIP_DIR/failures"
+STATE_FILE="$AUTOSHIP_DIR/state.json"
+
 # ── Auto-sync: pull latest plugin code before capture ──
 if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
   # Only sync if we have a valid git remote (skip temp/policy-test repos)

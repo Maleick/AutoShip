@@ -381,11 +381,22 @@ printf 'test prompt\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_PR
 printf 'opencode/test-free\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/model"
 cat >"$RUNNER_REPO/bin/hermes" <<'SH'
 #!/usr/bin/env bash
-# Mock hermes for test-policy: simulate worker that exits without terminal status
+# Mock hermes for test-policy: simulate worker that makes changes but exits without terminal status
 # The runner should salvage this via salvage_truncated_worker
 if [[ "$1" == "session" && "$2" == "create" ]]; then
-  # Do NOT write status — runner must salvage
-  :
+  # Find the workdir from args
+  workdir=""
+  for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == "--workdir" ]]; then
+      next=$((i+1))
+      workdir="${!next}"
+      break
+    fi
+  done
+  if [[ -n "$workdir" ]]; then
+    # Create a non-runtime change so salvage_truncated_worker can commit it
+    printf '// modified by worker\n' >"$workdir/src.js"
+  fi
 fi
 exit 0
 SH
