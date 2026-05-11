@@ -206,18 +206,20 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
     echo "  delegate_task --workdir \"$delegate_workdir\" --toolsets '[\"terminal\",\"file\",\"web\"]' --prompt \"\$(cat $prompt_file)\" --timeout 600"
 
     # Attempt direct delegate_task execution if the function is available
-    if command -v delegate_task &>/dev/null || type delegate_task &>/dev/null 2>&1; then
+    if type delegate_task &>/dev/null 2>&1; then
       echo ""
       echo "Executing delegate_task directly from runner..."
       printf 'RUNNING\n' >"$workspace_dir/status"
       autoship_state_set set-running "$ISSUE_KEY" agent="hermes" model="delegate_task"
 
       HERMES_TIMEOUT="${HERMES_WORKER_TIMEOUT:-600}"
-      # Build the command array carefully
+      # delegate_task is a shell function in Hermes Agent sessions, not a binary.
+      # We must invoke it via bash -c so timeout can wrap it properly.
+      prompt_content=$(cat "$prompt_file")
       if command -v timeout >/dev/null 2>&1; then
-        timeout "$HERMES_TIMEOUT" delegate_task --goal "$(cat "$prompt_file")" --toolsets 'terminal,file,web' >"$workspace_dir/hermes-worker.log" 2>&1
+        timeout "$HERMES_TIMEOUT" bash -c "delegate_task --goal \$'"'"""$prompt_content"""'"'"" --toolsets 'terminal,file,web'" >"$workspace_dir/hermes-worker.log" 2>&1
       else
-        delegate_task --goal "$(cat "$prompt_file")" --toolsets 'terminal,file,web' >"$workspace_dir/hermes-worker.log" 2>&1
+        bash -c "delegate_task --goal \$'"'"""$prompt_content"""'"'"" --toolsets 'terminal,file,web'" >"$workspace_dir/hermes-worker.log" 2>&1
       fi
       worker_exit=$?
 
