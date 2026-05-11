@@ -19,6 +19,7 @@ const packageJson = JSON.parse(await readFile(join(PACKAGE_ROOT, "package.json")
 const VERSION = `v${packageJson.version ?? "0.0.0"}`;
 
 import type { AutoshipConfig, DoctorCheck } from "./types.ts";
+import { wrapError } from "./error.js";
 import { classifyError, getRecoverySuggestion, formatRecoverySuggestion } from "./recovery.js";
 
 interface Config {
@@ -115,7 +116,9 @@ async function assertWritablePath(path: string, label: string): Promise<void> {
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
+      throw wrapError(error, { hook: "cli", issue: "install" }, [
+        { summary: "Check file permissions for the target path" },
+      ]);
     }
   }
 }
@@ -185,7 +188,9 @@ async function install() {
         console.warn(`Warning: ${item.src} not found, skipping`);
         continue;
       }
-      throw error;
+      throw wrapError(error, { hook: "cli", issue: "install" }, [
+        { summary: "Ensure the source asset exists and is readable" },
+      ]);
     }
   }
 
@@ -454,6 +459,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Error:", err.message);
+  const wrapped = wrapError(err, { hook: "cli" }, [
+    { summary: "Run 'opencode-autoship doctor' to verify your installation" },
+  ]);
+  console.error(wrapped.toString());
   process.exit(1);
 });
