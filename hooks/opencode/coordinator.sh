@@ -24,7 +24,7 @@ log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $1" | tee -a "$LOG_FILE"; }
 
 log "Coordinator starting (model=$COORDINATOR_MODEL)"
 cd "$REPO_ROOT"
-opencode run --model "$COORDINATOR_MODEL" "$SKILL_FILE" 2>&1 | tee -a "$LOG_FILE"
+opencode run --model "$COORDINATOR_MODEL" "$(cat "$SKILL_FILE")" 2>&1 | tee -a "$LOG_FILE"
 
 coordinator_exit=$?
 log "Coordinator exited with code $coordinator_exit"
