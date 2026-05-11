@@ -254,7 +254,7 @@ $BODY
 - Work only in this worktree: $FULL_WORKSPACE_PATH
 - Implement the issue per its acceptance criteria.
 - Run relevant project checks before finishing.
-- **CRITICAL**: Do NOT use `rtk` for cargo, rustc, or test commands. `rtk` filters output and hides errors. Use plain `cargo check`, `cargo clippy`, `cargo test` instead.
+- **CRITICAL**: Do NOT use $(rtk) for cargo, rustc, or test commands. $(rtk) filters output and hides errors. Use plain $(cargo check), $(cargo clippy), $(cargo test) instead.
 - Commit changes on branch autoship/issue-$ISSUE_NUM.
 - Write AUTOSHIP_RESULT.md in the worktree.
 - Write COMPLETE, BLOCKED, or STUCK to $FULL_WORKSPACE_PATH/status.
