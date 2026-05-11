@@ -7,9 +7,28 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 AUTOSHIP_DIR="$REPO_ROOT/.autoship"
 
 # Hermes labels — can be customized
-# Default to atomic:ready (the actual label used in TextQuest)
 LABELS="${HERMES_LABELS:-atomic:ready}"
-REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
+# Resolve target repo: env → config.json → auto-detect → error
+# Env var takes precedence for one-shot overrides; config is the persistent default.
+REPO=""
+if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO="$HERMES_TARGET_REPO"
+fi
+if [[ -z "$REPO" && -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO" ]]; then
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
+  fi
+fi
+if [[ -z "$REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO not set and could not derive repo from origin remote or config" >&2
+  exit 1
+fi
 
 echo "=== Hermes Issue Plan ==="
 echo "Target repo: $REPO"

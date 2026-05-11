@@ -350,12 +350,49 @@ run_loop() {
   done
 }
 
+# Stale lock detection: if lock file is older than N seconds, assume prior crash
+SUPERVISOR_STALE_LOCK_SECONDS="${AUTOSHIP_SUPERVISOR_STALE_LOCK_SECONDS:-300}"
+
+lock_file_mtime_epoch() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || printf '0\n'
+}
+
+is_lock_stale() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  local mtime now
+  mtime=$(lock_file_mtime_epoch "$file")
+  [[ "$mtime" =~ ^[0-9]+$ ]] || return 1
+  now=$(date +%s)
+  ((now - mtime > SUPERVISOR_STALE_LOCK_SECONDS))
+}
+
+break_stale_lock() {
+  local file="$1"
+  rm -f "$file"
+  local lock_dir="${file}.d"
+  if [[ -d "$lock_dir" ]]; then
+    rmdir "$lock_dir" 2>/dev/null || rm -rf "$lock_dir" 2>/dev/null || true
+  fi
+  log_supervisor "broke stale lock file=$file age>${SUPERVISOR_STALE_LOCK_SECONDS}s"
+}
+
 with_lock() {
   mkdir -p "$AUTOSHIP_DIR"
   if [[ -L "$LOCK_FILE" ]]; then
     echo "Error: refusing symlink supervisor lock: $LOCK_FILE" >&2
     exit 1
   fi
+
+  # Detect and break stale locks from crashed prior runs
+  if [[ -f "$LOCK_FILE" ]] && is_lock_stale "$LOCK_FILE"; then
+    break_stale_lock "$LOCK_FILE"
+  fi
+  local lock_dir="${LOCK_FILE}.d"
+  if [[ -d "$lock_dir" ]] && is_lock_stale "$LOCK_FILE"; then
+    break_stale_lock "$LOCK_FILE"
+  fi
+
   touch "$LOCK_FILE"
   if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v lockf >/dev/null 2>&1; then
     if [[ -z "${AUTOSHIP_SUPERVISOR_LOCKED:-}" ]]; then
@@ -371,12 +408,21 @@ with_lock() {
       exec lockf -k "$LOCK_FILE" "$0" "${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"}"
     fi
   else
-    local lock_dir="$LOCK_FILE.d"
-    if ! mkdir "$lock_dir" 2>/dev/null; then
-      log_supervisor "supervisor already running lock=$lock_dir"
-      exit 0
+    local fallback_dir="$LOCK_FILE.d"
+    if ! mkdir "$fallback_dir" 2>/dev/null; then
+      # Double-check if it's stale after mkdir failure
+      if is_lock_stale "$LOCK_FILE"; then
+        break_stale_lock "$LOCK_FILE"
+        mkdir "$fallback_dir" 2>/dev/null || {
+          log_supervisor "supervisor already running lock=$fallback_dir"
+          exit 0
+        }
+      else
+        log_supervisor "supervisor already running lock=$fallback_dir"
+        exit 0
+      fi
     fi
-    trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
+    trap 'rmdir "$fallback_dir" 2>/dev/null || true' EXIT INT TERM
   fi
   run_loop
 }

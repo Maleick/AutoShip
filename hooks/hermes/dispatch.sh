@@ -50,7 +50,7 @@ cd "$REPO_ROOT"
 if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
   # Only sync if we have a valid git remote (skip temp/policy-test repos)
   if git rev-parse --verify HEAD >/dev/null 2>&1 && git remote get-url origin >/dev/null 2>&1; then
-    sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ')
+    sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ' || true)
     if [[ "$sync_gap" =~ ^[0-9]+$ && "$sync_gap" -gt 0 ]]; then
       echo "[autoship-sync] $sync_gap commit(s) behind origin/main — pulling..."
       git pull origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull failed, continuing with local code"
@@ -62,7 +62,24 @@ AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
-REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
+# Resolve target repo: env → config.json → auto-detect → legacy fallback
+# Env var takes precedence for one-shot overrides; config is the persistent default.
+REPO=""
+if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO="$HERMES_TARGET_REPO"
+fi
+if [[ -z "$REPO" && -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO" ]]; then
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
+  fi
+fi
+REPO="${REPO:-Maleick/TextQuest}"
 BASE_BRANCH="${HERMES_BASE_BRANCH:-}"
 if [[ -z "$BASE_BRANCH" ]]; then
   BASE_BRANCH=$(gh repo view "$REPO" --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)

@@ -20,6 +20,7 @@ const VERSION = `v${packageJson.version ?? "0.0.0"}`;
 
 import type { AutoshipConfig, DoctorCheck } from "./types.ts";
 import { wrapError } from "./error.js";
+import { classifyError, getRecoverySuggestion, formatRecoverySuggestion } from "./recovery.js";
 
 interface Config {
   plugin?: string[];
@@ -247,68 +248,68 @@ async function doctor() {
     const opencodeConfig = await loadConfig(opencodeConfigPath);
     const plugins = Array.isArray(opencodeConfig.plugin) ? opencodeConfig.plugin : [];
     if (plugins.includes("opencode-autoship")) {
-      checks.push({ name: "package-registration", status: "PASS", message: "opencode-autoship is registered in opencode.json" });
+      pushCheck({ name: "package-registration", status: "PASS", message: "opencode-autoship is registered in opencode.json" });
     } else {
-      checks.push({ name: "package-registration", status: "FAIL", message: "opencode.json does not register opencode-autoship; run opencode-autoship install" });
+      pushCheck({ name: "package-registration", status: "FAIL", message: "opencode.json does not register opencode-autoship; run opencode-autoship install" });
       hasFailure = true;
     }
   } catch {
-    checks.push({ name: "package-registration", status: "FAIL", message: "Unable to read opencode.json; run opencode-autoship install" });
+    pushCheck({ name: "package-registration", status: "FAIL", message: "Unable to read opencode.json; run opencode-autoship install" });
     hasFailure = true;
   }
 
   try {
     await access(join(projectAutoshipDir, ".onboarded"));
-    checks.push({ name: "onboarding", status: "PASS", message: "AutoShip is onboarded" });
+    pushCheck({ name: "onboarding", status: "PASS", message: "AutoShip is onboarded" });
   } catch {
-    checks.push({ name: "onboarding", status: "WARN", message: "AutoShip has not been onboarded yet" });
+    pushCheck({ name: "onboarding", status: "WARN", message: "AutoShip has not been onboarded yet" });
   }
 
   try {
     await access(join(projectAutoshipDir, "config.json"));
-    checks.push({ name: "config", status: "PASS", message: "Config file exists" });
+    pushCheck({ name: "config", status: "PASS", message: "Config file exists" });
   } catch {
-    checks.push({ name: "config", status: "FAIL", message: "Project .autoship/config.json not found; run /autoship-setup" });
+    pushCheck({ name: "config", status: "FAIL", message: "Project .autoship/config.json not found; run /autoship-setup" });
     hasFailure = true;
   }
 
   try {
     await access(join(projectAutoshipDir, "model-routing.json"));
-    checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
+    pushCheck({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
   } catch {
-    checks.push({ name: "model-routing", status: "FAIL", message: "Project .autoship/model-routing.json not found; run /autoship-setup" });
+    pushCheck({ name: "model-routing", status: "FAIL", message: "Project .autoship/model-routing.json not found; run /autoship-setup" });
     hasFailure = true;
   }
 
   try {
     await access(join(autoshipDir, "hooks"));
-    checks.push({ name: "hooks", status: "PASS", message: "Hooks directory exists" });
+    pushCheck({ name: "hooks", status: "PASS", message: "Hooks directory exists" });
   } catch {
-    checks.push({ name: "hooks", status: "FAIL", message: "Hooks directory not found" });
+    pushCheck({ name: "hooks", status: "FAIL", message: "Hooks directory not found" });
     hasFailure = true;
   }
 
   try {
     await access(join(autoshipDir, "commands"));
-    checks.push({ name: "commands", status: "PASS", message: "Commands directory exists" });
+    pushCheck({ name: "commands", status: "PASS", message: "Commands directory exists" });
   } catch {
-    checks.push({ name: "commands", status: "FAIL", message: "Commands directory not found" });
+    pushCheck({ name: "commands", status: "FAIL", message: "Commands directory not found" });
     hasFailure = true;
   }
 
   try {
     await access(join(autoshipDir, "skills"));
-    checks.push({ name: "skills", status: "PASS", message: "Skills directory exists" });
+    pushCheck({ name: "skills", status: "PASS", message: "Skills directory exists" });
   } catch {
-    checks.push({ name: "skills", status: "FAIL", message: "Skills directory not found" });
+    pushCheck({ name: "skills", status: "FAIL", message: "Skills directory not found" });
     hasFailure = true;
   }
 
   try {
     await access(join(autoshipDir, "AGENTS.md"));
-    checks.push({ name: "agents-guide", status: "PASS", message: "AGENTS.md is installed" });
+    pushCheck({ name: "agents-guide", status: "PASS", message: "AGENTS.md is installed" });
   } catch {
-    checks.push({ name: "agents-guide", status: "FAIL", message: "AGENTS.md not found; run opencode-autoship install" });
+    pushCheck({ name: "agents-guide", status: "FAIL", message: "AGENTS.md not found; run opencode-autoship install" });
     hasFailure = true;
   }
 
@@ -317,13 +318,13 @@ async function doctor() {
     const normalizedAssetVersion = assetVersion.replace(/^v/, "");
     const normalizedPackageVersion = VERSION.replace(/^v/, "");
     if (normalizedAssetVersion === normalizedPackageVersion) {
-      checks.push({ name: "asset-version", status: "PASS", message: `Installed assets match package ${VERSION}` });
+      pushCheck({ name: "asset-version", status: "PASS", message: `Installed assets match package ${VERSION}` });
     } else {
-      checks.push({ name: "asset-version", status: "FAIL", message: `Installed asset version ${assetVersion} does not match package ${VERSION}; run opencode-autoship install` });
+      pushCheck({ name: "asset-version", status: "FAIL", message: `Installed asset version ${assetVersion} does not match package ${VERSION}; run opencode-autoship install` });
       hasFailure = true;
     }
   } catch {
-    checks.push({ name: "asset-version", status: "FAIL", message: "Installed VERSION not found; run opencode-autoship install" });
+    pushCheck({ name: "asset-version", status: "FAIL", message: "Installed VERSION not found; run opencode-autoship install" });
     hasFailure = true;
   }
 
@@ -335,10 +336,20 @@ async function doctor() {
     });
   });
 
+  // Helper to push a check with optional recovery suggestion on failure.
+  function pushCheck(check: DoctorCheck): void {
+    checks.push(check);
+    if (check.status === "FAIL" || check.status === "WARN") {
+      const kind = classifyError(check.message);
+      const recovery = getRecoverySuggestion(kind);
+      console.log(formatRecoverySuggestion(recovery));
+    }
+  }
+
   try {
     const modelsOutput = await execAsync("opencode models");
     if (modelsOutput.trim().length > 0) {
-      checks.push({ name: "model-inventory", status: "PASS", message: "OpenCode model inventory is accessible" });
+      pushCheck({ name: "model-inventory", status: "PASS", message: "OpenCode model inventory is accessible" });
       try {
         const routingPath = join(projectAutoshipDir, "model-routing.json");
         await access(routingPath);
@@ -348,37 +359,37 @@ async function doctor() {
         const configuredModels = (routing.models || []).map((m) => m.id);
         const missingModels = configuredModels.filter((m) => !modelIds.some((id) => id.includes(m) || m.includes(id)));
         if (missingModels.length > 0) {
-          checks.push({ name: "model-routing-refs", status: "WARN", message: `Configured models not in current inventory: ${missingModels.join(", ")}` });
+          pushCheck({ name: "model-routing-refs", status: "WARN", message: `Configured models not in current inventory: ${missingModels.join(", ")}` });
         } else {
-          checks.push({ name: "model-routing-refs", status: "PASS", message: "All configured models are in current inventory" });
+          pushCheck({ name: "model-routing-refs", status: "PASS", message: "All configured models are in current inventory" });
         }
       } catch {
-        checks.push({ name: "model-routing-refs", status: "WARN", message: "Unable to validate model-routing.json references" });
+        pushCheck({ name: "model-routing-refs", status: "WARN", message: "Unable to validate model-routing.json references" });
       }
     } else {
-      checks.push({ name: "model-inventory", status: "WARN", message: "OpenCode model inventory is empty" });
+      pushCheck({ name: "model-inventory", status: "WARN", message: "OpenCode model inventory is empty" });
     }
   } catch {
-    checks.push({ name: "model-inventory", status: "WARN", message: "Unable to access OpenCode model inventory; run /autoship-setup" });
+    pushCheck({ name: "model-inventory", status: "WARN", message: "Unable to access OpenCode model inventory; run /autoship-setup" });
   }
 
   try {
     await execAsync("gh auth status");
-    checks.push({ name: "gh-auth", status: "PASS", message: "GitHub CLI is authenticated" });
+    pushCheck({ name: "gh-auth", status: "PASS", message: "GitHub CLI is authenticated" });
     try {
       const statusOutput = await execAsync("gh auth status");
       const hasRepoScope = statusOutput.includes("repo") || statusOutput.includes("Full");
       if (hasRepoScope) {
-        checks.push({ name: "gh-repo-perms", status: "PASS", message: "GitHub token has repo scope for issue-to-PR automation" });
+        pushCheck({ name: "gh-repo-perms", status: "PASS", message: "GitHub token has repo scope for issue-to-PR automation" });
       } else {
-        checks.push({ name: "gh-repo-perms", status: "WARN", message: "GitHub token may lack repo scope; run 'gh auth refresh'" });
+        pushCheck({ name: "gh-repo-perms", status: "WARN", message: "GitHub token may lack repo scope; run 'gh auth refresh'" });
       }
     } catch {
-      checks.push({ name: "gh-repo-perms", status: "WARN", message: "Unable to verify repo permissions" });
+      pushCheck({ name: "gh-repo-perms", status: "WARN", message: "Unable to verify repo permissions" });
     }
   } catch {
-    checks.push({ name: "gh-auth", status: "WARN", message: "GitHub CLI not authenticated; run 'gh auth login' or set GH_TOKEN" });
-    checks.push({ name: "gh-repo-perms", status: "WARN", message: "GitHub auth required for permission check" });
+    pushCheck({ name: "gh-auth", status: "WARN", message: "GitHub CLI not authenticated; run 'gh auth login' or set GH_TOKEN" });
+    pushCheck({ name: "gh-repo-perms", status: "WARN", message: "GitHub auth required for permission check" });
   }
 
   const passChecks = checks.filter(c => c.status === "PASS");

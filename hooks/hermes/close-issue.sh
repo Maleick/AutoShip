@@ -3,7 +3,28 @@
 set -euo pipefail
 
 ISSUE_NUM="${1:?Issue number required}"
-REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
+# Resolve target repo: env → config.json → auto-detect → error
+# Env var takes precedence for one-shot overrides; config is the persistent default.
+AUTOSHIP_DIR="${AUTOSHIP_DIR:-.autoship}"
+REPO=""
+if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO="$HERMES_TARGET_REPO"
+fi
+if [[ -z "$REPO" && -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO" ]]; then
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
+  fi
+fi
+if [[ -z "$REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO not set and could not derive repo from origin remote or config" >&2
+  exit 1
+fi
 
 # Close with comment
 gh issue close "$ISSUE_NUM" --repo "$REPO" --reason completed \

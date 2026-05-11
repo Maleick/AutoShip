@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import type { PluginServer } from "./types.js";
+import { classifyError, getRecoverySuggestion, formatRecoverySuggestion } from "./recovery.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,3 +25,4 @@ export async function server(): Promise<PluginServer> {
 
 export * from "./types.js";
 export * from "./error.js";
+export { classifyError, getRecoverySuggestion, formatRecoverySuggestion } from "./recovery.js";

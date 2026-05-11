@@ -34,8 +34,34 @@ fi
 AUTOSHIP_DIR=".autoship"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 
-# Default target repo for worktrees
-TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/TextQuest}"
+# Resolve target repo path: config.json → env → auto-detect → error
+TARGET_REPO=""
+if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+  if [[ -n "$REPO" && "$REPO" == */* ]]; then
+    REPO_NAME="${REPO#*/}"
+    TARGET_REPO="$HOME/Projects/${REPO_NAME%.git}"
+  fi
+fi
+if [[ -z "$TARGET_REPO" && -n "${HERMES_TARGET_REPO_PATH:-}" ]]; then
+  TARGET_REPO="$HERMES_TARGET_REPO_PATH"
+fi
+if [[ -z "$TARGET_REPO" && -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO_NAME="${HERMES_TARGET_REPO#*/}"
+  TARGET_REPO="$HOME/Projects/${REPO_NAME%.git}"
+fi
+if [[ -z "$TARGET_REPO" ]]; then
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    TARGET_REPO="$HOME/Projects/$REPO_NAME"
+  fi
+fi
+if [[ -z "$TARGET_REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO_PATH not set and could not derive target repo path" >&2
+  exit 1
+fi
 DRY_RUN=false
 VERBOSE=false
 
