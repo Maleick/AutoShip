@@ -64,7 +64,8 @@ cd "$REPO_ROOT"
 if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
   # Only sync if we have a valid git remote (skip temp/policy-test repos)
   if git rev-parse --verify HEAD >/dev/null 2>&1 && git remote get-url origin >/dev/null 2>&1; then
-    sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ')
+    sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ' || true)
+    sync_gap="${sync_gap:-0}"
     if [[ "$sync_gap" =~ ^[0-9]+$ && "$sync_gap" -gt 0 ]]; then
       echo "[autoship-sync] $sync_gap commit(s) behind origin/main — pulling..."
       git pull origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull failed, continuing with local code"
