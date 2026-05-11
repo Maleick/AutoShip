@@ -36,7 +36,6 @@ const requiredFiles = [
   "skills/autoship-setup/SKILL.md",
   "commands/autoship-setup.md",
   "policies/default.json",
-  "policies/textquest.json",
 ];
 
 function normalizePath(filePath) {
@@ -44,7 +43,9 @@ function normalizePath(filePath) {
 }
 
 function isForbidden(filePath) {
-  return filePath === ".autoship" || filePath.startsWith(".autoship/");
+  if (filePath === ".autoship" || filePath.startsWith(".autoship/")) return true;
+  if (filePath.endsWith("textquest.json")) return true;
+  return false;
 }
 
 function isAllowed(filePath) {
