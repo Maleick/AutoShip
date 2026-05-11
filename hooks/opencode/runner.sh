@@ -145,36 +145,64 @@ should_isolate_cargo_target() {
   ((MAX > threshold))
 }
 
+map_task_type_to_agent() {
+  case "${1:-medium_code}" in
+    research)        printf '%s\n' planner ;;
+    docs)            printf '%s\n' doc-updater ;;
+    simple_code)     printf '%s\n' build ;;
+    medium_code)     printf '%s\n' build ;;
+    complex)         printf '%s\n' architect ;;
+    mechanical)      printf '%s\n' build ;;
+    ci_fix)          printf '%s\n' build-error-resolver ;;
+    review)          printf '%s\n' code-reviewer ;;
+    rust_unsafe)     printf '%s\n' rust-reviewer ;;
+    *)               printf '%s\n' build ;;
+  esac
+}
+
 run_worker() {
   local model="$1"
+  local dispatch="${AUTOSHIP_DISPATCH:-hermes}"
   local cargo_target_dir=""
   if should_isolate_cargo_target; then
     cargo_target_dir="$PWD/target-isolated"
   fi
-  # Use Hermes session create --agent instead of opencode run
-  # opencode run hangs/gets killed (exit code 128), but Hermes works reliably
   local prompt_file="$PWD/AUTOSHIP_PROMPT.md"
   if [[ ! -f "$prompt_file" ]]; then
     echo "ERROR: AUTOSHIP_PROMPT.md not found in $PWD" >&2
     return 1
   fi
-  
-  # Pre-flight: verify hermes is available
-  if ! command -v hermes >/dev/null 2>&1; then
-    echo "ERROR: hermes CLI not found in PATH" >&2
-    return 1
-  fi
-  
-  # Create a unique session name
+
   local session_name="autoship-${issue_id}-$(date +%s)"
-  
-  # Run via Hermes agent session
-  if [[ -n "$cargo_target_dir" ]]; then
-    CARGO_TARGET_DIR="$cargo_target_dir" \
-    hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
-  else
-    hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
-  fi
+
+  case "$dispatch" in
+    opencode)
+      if ! command -v opencode >/dev/null 2>&1; then
+        echo "ERROR: opencode CLI not found in PATH" >&2
+        return 1
+      fi
+      local agent
+      agent=$(map_task_type_to_agent "${task_type:-medium_code}")
+      if [[ -n "$cargo_target_dir" ]]; then
+        CARGO_TARGET_DIR="$cargo_target_dir" \
+        opencode run --agent "$agent" --model "$model" --title "$session_name" --file "$prompt_file" <"$prompt_file"
+      else
+        opencode run --agent "$agent" --model "$model" --title "$session_name" --file "$prompt_file" <"$prompt_file"
+      fi
+      ;;
+    hermes|*)
+      if ! command -v hermes >/dev/null 2>&1; then
+        echo "ERROR: hermes CLI not found in PATH" >&2
+        return 1
+      fi
+      if [[ -n "$cargo_target_dir" ]]; then
+        CARGO_TARGET_DIR="$cargo_target_dir" \
+        hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
+      else
+        hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
+      fi
+      ;;
+  esac
 }
 
 is_billing_or_quota_failure() {
@@ -461,8 +489,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
               bash "$SCRIPT_DIR/metrics-collector.sh" record-start "$issue_id" "$fallback_model" "$task_type" >/dev/null 2>&1 || true
               # Pre-flight check fallback model before committing to it
               fb_preflight_log=".autoship-fallback-preflight.log"
-              if ! hermes session create --agent "$PWD/AUTOSHIP_PROMPT.md" --name "autoship-${issue_id}-fb-$(date +%s)" --model "$fallback_model" --workdir "$PWD" >"$fb_preflight_log" 2>&1; then
-                cat "$fb_preflight_log" >> AUTOSHIP_RUNNER.log
+              if ! run_worker "$fallback_model" >"$fb_preflight_log" 2>&1; then
                 if grep -Eiq 'insufficient balance|billing|quota|rate limit|credit|unauthorized' "$fb_preflight_log"; then
                   echo "AutoShip: Fallback model $fallback_model also rejected preflight — insufficient balance or quota. Disabling via circuit breaker." >> AUTOSHIP_RUNNER.log
                   bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$fallback_model" >/dev/null 2>&1 || true

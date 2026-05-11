@@ -23,6 +23,8 @@ export async function server(): Promise<PluginServer> {
   };
 }
 
+export default server;
+
 export * from "./types.js";
 export * from "./error.js";
 export { classifyError, getRecoverySuggestion, formatRecoverySuggestion } from "./recovery.js";

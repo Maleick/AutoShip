@@ -36,6 +36,9 @@ node_modules/
 # Build artifacts
 dist/
 
+# npm pack artifacts
+*.tgz
+
 # Local OpenCode configuration/plugins
 .opencode/opencode.json
 .opencode/plugins/
