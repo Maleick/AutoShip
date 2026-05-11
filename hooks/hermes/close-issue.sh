@@ -3,7 +3,19 @@
 set -euo pipefail
 
 ISSUE_NUM="${1:?Issue number required}"
-REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
+# Auto-detect target repo: default to current repo unless explicitly overridden
+if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO="$HERMES_TARGET_REPO"
+else
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
+  else
+    REPO="Maleick/TextQuest"
+  fi
+fi
 
 # Close with comment
 gh issue close "$ISSUE_NUM" --repo "$REPO" --reason completed \

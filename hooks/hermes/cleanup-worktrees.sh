@@ -34,8 +34,23 @@ fi
 AUTOSHIP_DIR=".autoship"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 
-# Default target repo for worktrees
-TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/TextQuest}"
+# Auto-detect target repo path
+if [[ -n "${HERMES_TARGET_REPO_PATH:-}" ]]; then
+  TARGET_REPO="$HERMES_TARGET_REPO_PATH"
+elif [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO_NAME="${HERMES_TARGET_REPO#*/}"
+  TARGET_REPO="$HOME/Projects/${REPO_NAME%.git}"
+else
+  # Default: derive from current repo's origin remote
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    TARGET_REPO="$HOME/Projects/$REPO_NAME"
+  else
+    TARGET_REPO="$HOME/Projects/TextQuest"
+  fi
+fi
 DRY_RUN=false
 VERBOSE=false
 

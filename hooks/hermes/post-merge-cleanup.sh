@@ -3,12 +3,31 @@
 set -euo pipefail
 
 ISSUE_NUM="${1:?Issue number required}"
-REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
+# Auto-detect target repo: default to current repo unless explicitly overridden
+if [[ -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO="$HERMES_TARGET_REPO"
+else
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
+  else
+    REPO="Maleick/TextQuest"
+  fi
+fi
+
+# Derive target repo path from repo name
+if [[ "$REPO" == */* ]]; then
+  REPO_NAME="${REPO#*/}"
+  TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/$REPO_NAME}"
+else
+  TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/TextQuest}"
+fi
 
 echo "=== Post-merge cleanup for issue #$ISSUE_NUM ==="
 
 # 1. Remove local worktree
-TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/TextQuest}"
 wt_path="${TARGET_REPO}.worktrees/issue-${ISSUE_NUM}"
 if [[ -d "$wt_path" ]]; then
   echo "Removing worktree: $wt_path"
