@@ -5,22 +5,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Load shared utilities if available; inline fallback for standalone/test use.
-if [[ -f "$SCRIPT_DIR/lib/common.sh" ]]; then
-  source "$SCRIPT_DIR/lib/common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+if [[ -f "$LIB_DIR/common.sh" ]]; then
+  source "$LIB_DIR/common.sh"
 else
   autoship_repo_root() {
     git rev-parse --show-toplevel 2>/dev/null || {
       echo "Error: not inside a git repository" >&2
       return 1
     }
-  }
-  autoship_require_cmd() {
-    local cmd="$1"
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-      echo "Error: $cmd is required but not found" >&2
-      return 1
-    fi
   }
   autoship_state_set() {
     local action="$1" issue_key="$2"
@@ -40,7 +33,7 @@ EVENT_QUEUE="$AUTOSHIP_DIR/event-queue.json"
 PROCESSED_EVENTS="$AUTOSHIP_DIR/processed-events.json"
 LOCK_FILE="$AUTOSHIP_DIR/event-queue.lock"
 
-autoship_require_cmd jq || exit 1
+if ! command -v jq >/dev/null 2>&1; then echo "Error: jq is required but not found" >&2; exit 1; fi
 
 assert_not_symlink() {
   local path="$1"

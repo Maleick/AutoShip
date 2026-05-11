@@ -540,15 +540,16 @@ cat >"$AUTOCOMMIT_REPO/.autoship/state.json" <<'JSON'
 JSON
 printf 'QUEUED\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status"
 printf 'test prompt\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/AUTOSHIP_PROMPT.md"
-printf 'opencode/test-free\n' >"$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/model"
-cat >"$AUTOCOMMIT_REPO/bin/opencode" <<'SH'
+printf 'opencode/test-free\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/model"
+# Mock hermes CLI to simulate successful worker run
+cat >"$AUTOCOMMIT_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 printf 'impl\n' >> src/lib.rs
 printf 'COMPLETE\n' > status
 printf 'implemented\n' > AUTOSHIP_RESULT.md
 exit 0
 SH
-chmod +x "$AUTOCOMMIT_REPO/bin/opencode"
+chmod +x "$AUTOCOMMIT_REPO/bin/hermes"
 (
   cd "$AUTOCOMMIT_REPO"
   PATH="$AUTOCOMMIT_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
@@ -576,15 +577,16 @@ cat >"$CARGO_RUNNER_REPO/.autoship/state.json" <<'JSON'
 JSON
 printf 'QUEUED\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/status"
 printf 'test prompt\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/AUTOSHIP_PROMPT.md"
-printf 'opencode/test-free\n' >"$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/model"
-cat >"$CARGO_RUNNER_REPO/bin/opencode" <<'SH'
+printf 'opencode/test-free\n' > "$CARGO_RUNNER_REPO/.autoship/workspaces/issue-401/model"
+# Mock hermes CLI to verify cargo target isolation
+cat >"$CARGO_RUNNER_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 case "${CARGO_TARGET_DIR:-}" in
   */target-isolated) printf 'COMPLETE\n' > status; printf 'cargo isolated\n' > AUTOSHIP_RESULT.md; exit 0 ;;
   *) printf 'missing cargo isolation\n' >&2; exit 1 ;;
 esac
 SH
-chmod +x "$CARGO_RUNNER_REPO/bin/opencode"
+chmod +x "$CARGO_RUNNER_REPO/bin/hermes"
 (
   cd "$CARGO_RUNNER_REPO"
   PATH="$CARGO_RUNNER_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
@@ -615,12 +617,12 @@ JSON
 printf 'QUEUED\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/status"
 printf 'test prompt\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$SALVAGE_REPO/.autoship/workspaces/issue-402/model"
-cat >"$SALVAGE_REPO/bin/opencode" <<'SH'
+cat >"$SALVAGE_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 printf 'salvaged\n' >> src/lib.rs
 exit 0
 SH
-chmod +x "$SALVAGE_REPO/bin/opencode"
+chmod +x "$SALVAGE_REPO/bin/hermes"
 (
   cd "$SALVAGE_REPO"
   PATH="$SALVAGE_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
@@ -653,14 +655,14 @@ JSON
 printf 'QUEUED\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/status"
 printf 'test prompt\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$MARKER_ONLY_REPO/.autoship/workspaces/issue-403/model"
-cat >"$MARKER_ONLY_REPO/bin/opencode" <<'SH'
+cat >"$MARKER_ONLY_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 printf 'paused\n' > PAUSED_REASON.txt
 printf 'retry\n' > RETRY_CONTEXT.md
 touch .autoship-event-COMPLETE.sent
 exit 0
 SH
-chmod +x "$MARKER_ONLY_REPO/bin/opencode"
+chmod +x "$MARKER_ONLY_REPO/bin/hermes"
 (
   cd "$MARKER_ONLY_REPO"
   PATH="$MARKER_ONLY_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
@@ -692,7 +694,7 @@ JSON
 printf 'QUEUED\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status"
 printf 'test prompt\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/model"
-cat >"$TESTS_ONLY_REPO/bin/opencode" <<'SH'
+cat >"$TESTS_ONLY_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 mkdir -p tests
 printf 'test only\n' > tests/new.test.ts
@@ -700,7 +702,7 @@ printf 'COMPLETE\n' > status
 printf 'tests only\n' > AUTOSHIP_RESULT.md
 exit 0
 SH
-chmod +x "$TESTS_ONLY_REPO/bin/opencode"
+chmod +x "$TESTS_ONLY_REPO/bin/hermes"
 (
   cd "$TESTS_ONLY_REPO"
   PATH="$TESTS_ONLY_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
@@ -725,12 +727,12 @@ JSON
 printf 'QUEUED\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/status"
 printf 'test prompt\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/AUTOSHIP_PROMPT.md"
 printf 'opencode/nemotron-3-super-free\n' >"$SESSION_REPO/.autoship/workspaces/issue-997/model"
-cat >"$SESSION_REPO/bin/opencode" <<'SH'
+cat >"$SESSION_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 printf 'Session not found\n' >&2
 exit 1
 SH
-chmod +x "$SESSION_REPO/bin/opencode"
+chmod +x "$SESSION_REPO/bin/hermes"
 (
   cd "$SESSION_REPO"
   PATH="$SESSION_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
@@ -764,12 +766,12 @@ JSON
 printf 'QUEUED\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/status"
 printf 'test prompt\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$NO_STATUS_REPO/.autoship/workspaces/issue-358/model"
-cat >"$NO_STATUS_REPO/bin/opencode" <<'SH'
+cat >"$NO_STATUS_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 # Worker exits successfully without writing any terminal status marker.
 exit 0
 SH
-chmod +x "$NO_STATUS_REPO/bin/opencode"
+chmod +x "$NO_STATUS_REPO/bin/hermes"
 (
   cd "$NO_STATUS_REPO"
   PATH="$NO_STATUS_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
@@ -813,19 +815,19 @@ JSON
 printf '[]\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/event-queue.json"
 printf 'RUNNING\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/status"
 printf '999999\n' >"$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/worker.pid"
-cat >"$MONITOR_LIVE_CHILD_REPO/bin/opencode" <<'SH'
+cat >"$MONITOR_LIVE_CHILD_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 sleep 30
 SH
-chmod +x "$MONITOR_LIVE_CHILD_REPO/bin/opencode"
-"$MONITOR_LIVE_CHILD_REPO/bin/opencode" run --model opencode/test-free "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" &
+chmod +x "$MONITOR_LIVE_CHILD_REPO/bin/hermes"
+"$MONITOR_LIVE_CHILD_REPO/bin/hermes" session create --agent "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999/AUTOSHIP_PROMPT.md" --model opencode/test-free &
 live_child_pid=$!
 # Wait until the child is visible in ps to avoid a race on slow/loaded systems
 _live_wait=0
 while [ "$_live_wait" -lt 50 ]; do
-  kill -0 "$live_child_pid" 2>/dev/null \
-    && pgrep -fa "opencode" 2>/dev/null \
-    | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \
+  kill -0 "$live_child_pid" 2>/dev/null \\
+    && pgrep -fa "hermes" 2>/dev/null \\
+    | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \\
     && break
   sleep 0.1
   _live_wait=$((_live_wait + 1))
@@ -1408,7 +1410,7 @@ cat >"$REVIEWER_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-183":{"state":"verifying","model":"opencode/test","role":"reviewer","attempt":1}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
 printf 'result\n' >"$REVIEWER_REPO/.autoship/workspaces/issue-183/AUTOSHIP_RESULT.md"
-cat >"$REVIEWER_REPO/bin/opencode" <<'SH'
+cat >"$REVIEWER_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 case "${AUTOSHIP_FAKE_REVIEW:-pass}" in
   pass) printf 'analysis\nVERDICT: PASS\n' ;;
@@ -1417,7 +1419,7 @@ case "${AUTOSHIP_FAKE_REVIEW:-pass}" in
 esac
 exit 0
 SH
-chmod +x "$REVIEWER_REPO/bin/opencode"
+chmod +x "$REVIEWER_REPO/bin/hermes"
 (
   cd "$REVIEWER_REPO"
   PATH="$REVIEWER_REPO/bin:$PATH" AUTOSHIP_FAKE_REVIEW=pass bash hooks/opencode/reviewer.sh issue-183 .autoship/workspaces/issue-183 .autoship/workspaces/issue-183/AUTOSHIP_RESULT.md none >/tmp/reviewer-pass.out
@@ -1633,19 +1635,19 @@ SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"
 mkdir -p "$SETUP_REPO/autoship"
 tar -C "$SCRIPT_DIR/../.." --exclude .git --exclude .autoship -cf - . | tar -C "$SETUP_REPO/autoship" -xf -
-cat >"$SETUP_REPO/bin/opencode" <<'SH'
+cat >"$SETUP_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 if [[ "$1" == "models" ]]; then
-  printf '%s\n' \
-    'opencode/nemotron-3-super-free' \
-    'opencode/minimax-m2.5-free' \
-    'opencode/gpt-5' \
-    'opencode-go/qwen3.6-plus' \
-    'openrouter/google/gemma-3-27b-it:free' \
-    'openrouter/minimax/minimax-m2.5:free' \
-    'zen/some-free-model:free' \
-    'openai/gpt-5.5' \
-    'openai/gpt-5.5-fast' \
+  printf '%s\n' \\
+    'opencode/nemotron-3-super-free' \\
+    'opencode/minimax-m2.5-free' \\
+    'opencode/gpt-5' \\
+    'opencode-go/qwen3.6-plus' \\
+    'openrouter/google/gemma-3-27b-it:free' \\
+    'openrouter/minimax/minimax-m2.5:free' \\
+    'zen/some-free-model:free' \\
+    'openai/gpt-5.5' \\
+    'openai/gpt-5.5-fast' \\
     'openai/gpt-5.3-spark'
   exit 0
 fi
@@ -1658,7 +1660,7 @@ if [[ "$1 $2" == "auth status" ]]; then
 fi
 exit 0
 SH
-chmod +x "$SETUP_REPO/bin/opencode" "$SETUP_REPO/bin/gh"
+chmod +x "$SETUP_REPO/bin/hermes" "$SETUP_REPO/bin/gh"
 (
   cd "$SETUP_REPO/autoship"
   rm -f config/model-routing.json .autoship/model-routing.json .autoship/config.json
@@ -1979,7 +1981,7 @@ if [[ "$1 $2" == "pr view" ]]; then
 fi
 exit 0
 SH
-cat >"$FIXTURE_REPO/bin/opencode" <<'SH'
+cat >"$FIXTURE_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 if printf '%s\n' "$*" | grep -F 'AutoShip reviewer' >/dev/null; then
   printf 'VERDICT: PASS\n'
@@ -1990,7 +1992,7 @@ printf 'Fixture pipeline completed\n' > AUTOSHIP_RESULT.md
 printf 'COMPLETE\n' > status
 exit 0
 SH
-chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
+chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/hermes"
 (
   cd "$FIXTURE_REPO"
   plan_output=$(PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/plan-issues.sh --issues-file issues.json --limit 10)

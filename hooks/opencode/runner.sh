@@ -5,9 +5,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Load shared utilities if available; inline fallback for standalone/test use.
-if [[ -f "$SCRIPT_DIR/lib/common.sh" ]]; then
-  source "$SCRIPT_DIR/lib/common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+if [[ -f "$LIB_DIR/common.sh" ]]; then
+  source "$LIB_DIR/common.sh"
 else
   autoship_repo_root() {
     git rev-parse --show-toplevel 2>/dev/null || {
@@ -49,7 +49,6 @@ else
     shift 2
     local repo_root
     repo_root="$(autoship_repo_root)"
-    # Prefer opencode path; fall back to root-level hook
     if [[ -f "$repo_root/hooks/opencode/capture-failure.sh" ]]; then
       bash "$repo_root/hooks/opencode/capture-failure.sh" "$category" "$issue_id" "$@" 2>/dev/null || true
     else

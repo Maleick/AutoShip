@@ -33,6 +33,9 @@ __pycache__/
 # Dependencies
 node_modules/
 
+# Build artifacts
+dist/
+
 # Local OpenCode configuration/plugins
 .opencode/opencode.json
 .opencode/plugins/
