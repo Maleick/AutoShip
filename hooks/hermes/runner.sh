@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hermes setup runner - prepare workspaces for manual delegate_task dispatch
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -39,7 +39,7 @@ if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
     sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ')
     if [[ "$sync_gap" =~ ^[0-9]+$ && "$sync_gap" -gt 0 ]]; then
       echo "[autoship-sync] $sync_gap commit(s) behind origin/main — pulling..."
-      git pull origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull failed, continuing with local code"
+      git pull --ff-only origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull --ff-only failed, continuing with local code"
     fi
   fi
 fi

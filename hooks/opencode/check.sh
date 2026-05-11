@@ -117,6 +117,16 @@ run_syntax_check() {
       syntax_failed=1
     fi
   done
+  for script in "$HOOKS_DIR/lib"/*.sh; do
+    [[ -f "$script" ]] || continue
+    local output
+    output=$(bash -n "$script" 2>&1) || true
+    if [[ -n "$output" ]]; then
+      echo "FAIL: syntax check failed for $script" >&2
+      echo "$output" | head -5 >&2
+      syntax_failed=1
+    fi
+  done
   if [[ $syntax_failed -ne 0 ]]; then
     FAILED=1
   fi

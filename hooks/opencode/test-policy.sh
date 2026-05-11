@@ -131,8 +131,8 @@ grep -F 'tr -d' "$REPO_ROOT/hooks/opencode/monitor-agents.sh" | grep -F '\r\n' >
   || fail "monitor must normalize CRLF status reads"
 grep -F "&& mv \"\$tmp\" \"\$EVENT_QUEUE\"" "$REPO_ROOT/hooks/opencode/monitor-agents.sh" >/dev/null \
   || fail "monitor must only replace event queue after successful jq write"
-grep -F 'env -i' "$REPO_ROOT/hooks/opencode/runner.sh" >/dev/null \
-  || fail "runner must use an allowlisted worker environment"
+grep -F 'hermes session create --agent' "$REPO_ROOT/hooks/opencode/runner.sh" >/dev/null \
+  || fail "runner must use Hermes agent sessions for worker dispatch"
 grep -F 'DELEGATE_TASK_READY' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
   || fail "Hermes runner must leave setup-only workspaces ready for delegate_task"
 grep -F 'current_status" == "STUCK"' "$REPO_ROOT/hooks/hermes/runner.sh" >/dev/null \
@@ -363,6 +363,12 @@ printf '%s\n' "$NO_RUNNING_STATUS" | grep -F 'STUCK:     1' >/dev/null || fail "
 RUNNER_REPO="$TMP_DIR/runner-repo"
 mkdir -p "$RUNNER_REPO/.autoship/workspaces/issue-996" "$RUNNER_REPO/.autoship/failures" "$RUNNER_REPO/hooks/opencode" "$RUNNER_REPO/hooks" "$RUNNER_REPO/bin"
 git init -q "$RUNNER_REPO"
+# Create a dummy source file so salvage_truncated_worker has changes to commit
+cat >"$RUNNER_REPO/src.js" <<'EOF'
+// dummy source for salvage test
+EOF
+git -C "$RUNNER_REPO" add src.js
+git -C "$RUNNER_REPO" -c user.name="Test" -c user.email="test@test" commit -m "init"
 cp "$SCRIPT_DIR/runner.sh" "$RUNNER_REPO/hooks/opencode/runner.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$RUNNER_REPO/hooks/update-state.sh"
 cp "$SCRIPT_DIR/../capture-failure.sh" "$RUNNER_REPO/hooks/capture-failure.sh"
@@ -373,19 +379,20 @@ JSON
 printf 'QUEUED\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/status"
 printf 'test prompt\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_PROMPT.md"
 printf 'opencode/test-free\n' >"$RUNNER_REPO/.autoship/workspaces/issue-996/model"
-cat >"$RUNNER_REPO/bin/opencode" <<'SH'
+cat >"$RUNNER_REPO/bin/hermes" <<'SH'
 #!/usr/bin/env bash
-if [[ -n "${OPENCODE_RUN_ID:-}" || -n "${OPENCODE_SERVER_PASSWORD:-}" ]]; then
-  printf 'ENV_LEAK\n'
-  exit 0
+# Mock hermes for test-policy: simulate worker that exits without terminal status
+# The runner should salvage this via salvage_truncated_worker
+if [[ "$1" == "session" && "$2" == "create" ]]; then
+  # Do NOT write status — runner must salvage
+  :
 fi
-printf 'ok\n'
 exit 0
 SH
-chmod +x "$RUNNER_REPO/bin/opencode"
+chmod +x "$RUNNER_REPO/bin/hermes"
 (
   cd "$RUNNER_REPO"
-  OPENCODE_RUN_ID=leaked OPENCODE_SERVER_PASSWORD=leaked PATH="$RUNNER_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+  PATH="$RUNNER_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
 for _ in 1 2 3 4 5; do
   [[ "$(tr -d '[:space:]' <"$RUNNER_REPO/.autoship/workspaces/issue-996/status")" != "RUNNING" ]] && break

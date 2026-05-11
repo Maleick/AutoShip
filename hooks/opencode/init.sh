@@ -50,16 +50,22 @@ mkdir -p "$AUTOSHIP_DIR/results"
 [[ ! -f "$AUTOSHIP_DIR/config.json" ]] && echo '{}' >"$AUTOSHIP_DIR/config.json"
 
 # Initialize state.json
+DETECTED_PLATFORM="opencode"
+if [[ -n "${HERMES_SESSION_ID:-}" || -n "${HERMES_PROVIDER:-}" ]]; then
+  DETECTED_PLATFORM="hermes"
+fi
+
 if [[ ! -f "$STATE_FILE" ]]; then
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   jq -n \
     --arg repo "$REPO_SLUG" \
     --arg now "$NOW" \
     --arg ver "$AUTOSHIP_VERSION" \
+    --arg platform "$DETECTED_PLATFORM" \
     '{
       version: 1,
       autoship_version: $ver,
-      platform: "opencode",
+      platform: $platform,
       repo: $repo,
       started_at: $now,
       updated_at: $now,
@@ -90,10 +96,11 @@ else
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   jq --arg now "$NOW" \
     --arg ver "$AUTOSHIP_VERSION" \
-    '.updated_at = $now |
+    --arg platform "$DETECTED_PLATFORM" \
+     '.updated_at = $now |
      .stats.session_dispatched = 0 |
      .stats.session_completed = 0 |
-     .platform = "opencode" |
+     .platform = $platform |
      .autoship_version = $ver |
      .config.maxConcurrentAgents = (.config.maxConcurrentAgents // 20)' \
     "$STATE_FILE" >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
