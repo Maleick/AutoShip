@@ -4,8 +4,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-if [[ -f "$SCRIPT_DIR/lib/common.sh" ]]; then
-  source "$SCRIPT_DIR/lib/common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+if [[ -f "$LIB_DIR/common.sh" ]]; then
+  source "$LIB_DIR/common.sh"
 else
   autoship_repo_root() {
     git rev-parse --show-toplevel 2>/dev/null || pwd

@@ -5,9 +5,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Load shared utilities if available; inline fallback for standalone/test use.
-if [[ -f "$SCRIPT_DIR/lib/common.sh" ]]; then
-  source "$SCRIPT_DIR/lib/common.sh"
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
+if [[ -f "$LIB_DIR/common.sh" ]]; then
+  source "$LIB_DIR/common.sh"
 else
   autoship_capture_failure() {
     local category="$1" issue_id="$2"
