@@ -152,37 +152,29 @@ run_worker() {
   if should_isolate_cargo_target; then
     cargo_target_dir="$PWD/target-isolated"
   fi
-  # Unset auth env vars that cause 'Session not found' in opencode run.
-  # When OPENCODE_SERVER_USERNAME/PASSWORD are set, opencode run tries to
-  # connect to an authenticated server instead of creating a fresh session.
-  # See: https://github.com/anomalyco/opencode/issues/8502
-  # NOTE: macOS env(1) does not support -u, so we filter via grep instead.
-  local filtered_env=""
-  filtered_env=$(env | grep -vE '^(OPENCODE_SERVER_USERNAME|OPENCODE_SERVER_PASSWORD|OPENCODE_PID|OPENCODE=)' || true)
-  # Pre-flight billing/quota check — fail fast before spawning long-lived worker
-  local preflight_log=".autoship-preflight.log"
-  if ! env -i \
-       HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
-       opencode run --dir "$PWD" --model "$model" "echo 'AutoShip preflight check'" >"$preflight_log" 2>&1; then
-    cat "$preflight_log" >> AUTOSHIP_RUNNER.log
-    if grep -Eiq 'insufficient balance|billing|quota|rate limit|credit|unauthorized' "$preflight_log"; then
-      echo "AutoShip: Model $model rejected preflight — insufficient balance or quota. Disabling via circuit breaker." >> AUTOSHIP_RUNNER.log
-      # Disable exhausted model so fallback picker won't select it again this cycle
-      bash "$SCRIPT_DIR/circuit-breaker.sh" record-failure "$model" >/dev/null 2>&1 || true
-      return 1
-    fi
+  # Use Hermes session create --agent instead of opencode run
+  # opencode run hangs/gets killed (exit code 128), but Hermes works reliably
+  local prompt_file="$PWD/AUTOSHIP_PROMPT.md"
+  if [[ ! -f "$prompt_file" ]]; then
+    echo "ERROR: AUTOSHIP_PROMPT.md not found in $PWD" >&2
+    return 1
   fi
-  rm -f "$preflight_log"
-
+  
+  # Pre-flight: verify hermes is available
+  if ! command -v hermes >/dev/null 2>&1; then
+    echo "ERROR: hermes CLI not found in PATH" >&2
+    return 1
+  fi
+  
+  # Create a unique session name
+  local session_name="autoship-${issue_id}-$(date +%s)"
+  
+  # Run via Hermes agent session
   if [[ -n "$cargo_target_dir" ]]; then
-    env -i \
-      HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
-      CARGO_TARGET_DIR="$cargo_target_dir" \
-      opencode run --dir "$PWD" --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+    CARGO_TARGET_DIR="$cargo_target_dir" \
+    hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
   else
-    env -i \
-      HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
-      opencode run --dir "$PWD" --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+    hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
   fi
 }
 
@@ -470,9 +462,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
               bash "$SCRIPT_DIR/metrics-collector.sh" record-start "$issue_id" "$fallback_model" "$task_type" >/dev/null 2>&1 || true
               # Pre-flight check fallback model before committing to it
               local fb_preflight_log=".autoship-fallback-preflight.log"
-              if ! env -i \
-                   HOME="${HOME:-}" PATH="${PATH:-/usr/bin:/bin}" SHELL="${SHELL:-/bin/sh}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}" OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-}" \
-                   opencode run --dir "$PWD" --model "$fallback_model" "echo 'AutoShip fallback preflight check'" >"$fb_preflight_log" 2>&1; then
+              if ! hermes session create --agent "$PWD/AUTOSHIP_PROMPT.md" --name "autoship-${issue_id}-fb-$(date +%s)" --model "$fallback_model" --workdir "$PWD" >"$fb_preflight_log" 2>&1; then
                 cat "$fb_preflight_log" >> AUTOSHIP_RUNNER.log
                 if grep -Eiq 'insufficient balance|billing|quota|rate limit|credit|unauthorized' "$fb_preflight_log"; then
                   echo "AutoShip: Fallback model $fallback_model also rejected preflight — insufficient balance or quota. Disabling via circuit breaker." >> AUTOSHIP_RUNNER.log

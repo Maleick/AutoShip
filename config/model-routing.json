@@ -9,30 +9,40 @@
   "pools": {
     "default": {
       "description": "Default worker pool — all K2.6 inherited from main model",
-      "models": ["kimi-k2.6"]
+      "models": [
+        "kimi-k2.6"
+      ]
     },
     "frontend": {
       "description": "Frontend development tasks",
-      "models": ["kimi-k2.6"]
+      "models": [
+        "kimi-k2.6"
+      ]
     },
     "backend": {
       "description": "Backend development tasks",
-      "models": ["kimi-k2.6"]
+      "models": [
+        "kimi-k2.6"
+      ]
     },
     "docs": {
       "description": "Documentation tasks",
-      "models": ["kimi-k2.6"]
+      "models": [
+        "kimi-k2.6"
+      ]
     },
     "mechanical": {
       "description": "Mechanical/boilerplate tasks",
-      "models": ["kimi-k2.6"]
+      "models": [
+        "kimi-k2.6"
+      ]
     }
   },
   "defaultFallback": "kimi-k2.6",
   "models": [
     {
       "id": "kimi-k2.6",
-      "cost": "selected",
+      "cost": "free",
       "strength": 95,
       "max_task_types": [
         "docs",
@@ -56,7 +66,8 @@
         "mechanical",
         "ci_fix",
         "research"
-      ]
+      ],
+      "ab_score": 0
     },
     {
       "id": "opencode/nemotron-3-super-free",
@@ -68,7 +79,8 @@
         "medium_code",
         "mechanical",
         "ci_fix"
-      ]
+      ],
+      "ab_score": 0
     },
     {
       "id": "opencode/minimax-m2.5-free",
@@ -78,7 +90,8 @@
         "docs",
         "simple_code",
         "mechanical"
-      ]
+      ],
+      "ab_score": 0
     }
   ]
 }
