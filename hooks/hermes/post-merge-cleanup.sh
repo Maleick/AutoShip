@@ -3,12 +3,36 @@
 set -euo pipefail
 
 ISSUE_NUM="${1:?Issue number required}"
-REPO="${HERMES_TARGET_REPO:-Maleick/TextQuest}"
+# Resolve target repo: config.json → env → auto-detect → legacy fallback
+AUTOSHIP_DIR="${AUTOSHIP_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME/Projects/AutoShip")/.autoship}"
+REPO=""
+if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
+  REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO" && -n "${HERMES_TARGET_REPO:-}" ]]; then
+  REPO="$HERMES_TARGET_REPO"
+fi
+if [[ -z "$REPO" ]]; then
+  CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$CURRENT_REMOTE" =~ github\.com[:/]([^/]+)/([^/]+)(\.git)?$ ]]; then
+    REPO_NAME="${BASH_REMATCH[2]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
+  fi
+fi
+REPO="${REPO:-Maleick/TextQuest}"
+
+# Derive target repo path from repo name
+if [[ "$REPO" == */* ]]; then
+  REPO_NAME="${REPO#*/}"
+  TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/$REPO_NAME}"
+else
+  TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/TextQuest}"
+fi
 
 echo "=== Post-merge cleanup for issue #$ISSUE_NUM ==="
 
 # 1. Remove local worktree
-TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/TextQuest}"
 wt_path="${TARGET_REPO}.worktrees/issue-${ISSUE_NUM}"
 if [[ -d "$wt_path" ]]; then
   echo "Removing worktree: $wt_path"
