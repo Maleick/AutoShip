@@ -8,7 +8,7 @@ MAX_TOTAL_WORKTREES_GB="${AUTOSHIP_MAX_TOTAL_WORKTREES_GB:-10}" # Max total for 
 MAX_WORKSPACE_COUNT="${AUTOSHIP_MAX_WORKSPACE_COUNT:-20}"       # Max .autoship workspaces
 MAX_WORKSPACE_AGE_DAYS="${AUTOSHIP_MAX_WORKSPACE_AGE_DAYS:-7}"  # Auto-remove after N days
 
-# Resolve target repo path: config.json → env → auto-detect → legacy fallback
+# Resolve target repo path: config.json → env → auto-detect → error
 AUTOSHIP_DIR="${AUTOSHIP_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME/Projects/AutoShip")/.autoship}"
 TARGET_REPO=""
 if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
@@ -33,7 +33,10 @@ if [[ -z "$TARGET_REPO" ]]; then
     TARGET_REPO="$HOME/Projects/$REPO_NAME"
   fi
 fi
-TARGET_REPO="${TARGET_REPO:-$HOME/Projects/TextQuest}"
+if [[ -z "$TARGET_REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO_PATH not set and could not derive target repo path" >&2
+  exit 1
+fi
 WORKTREE_BASE="${TARGET_REPO}.worktrees"
 
 # ── Auto-sync: pull latest plugin code before prune ──

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ISSUE_NUM="${1:?Issue number required}"
-# Resolve target repo: config.json → env → auto-detect → legacy fallback
+# Resolve target repo: config.json → env → auto-detect → error
 AUTOSHIP_DIR="${AUTOSHIP_DIR:-.autoship}"
 REPO=""
 if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
@@ -20,7 +20,10 @@ if [[ -z "$REPO" ]]; then
     REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
   fi
 fi
-REPO="${REPO:-Maleick/TextQuest}"
+if [[ -z "$REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO not set and could not derive repo from origin remote or config" >&2
+  exit 1
+fi
 
 # Close with comment
 gh issue close "$ISSUE_NUM" --repo "$REPO" --reason completed \

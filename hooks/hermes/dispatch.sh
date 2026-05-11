@@ -50,7 +50,7 @@ cd "$REPO_ROOT"
 if [[ -z "${AUTOSHIP_NO_SYNC:-}" ]]; then
   # Only sync if we have a valid git remote (skip temp/policy-test repos)
   if git rev-parse --verify HEAD >/dev/null 2>&1 && git remote get-url origin >/dev/null 2>&1; then
-    sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ')
+    sync_gap=$(git log --oneline HEAD..origin/main 2>/dev/null | wc -l | tr -d ' ' || true)
     if [[ "$sync_gap" =~ ^[0-9]+$ && "$sync_gap" -gt 0 ]]; then
       echo "[autoship-sync] $sync_gap commit(s) behind origin/main — pulling..."
       git pull origin main >/dev/null 2>&1 || echo "[autoship-sync] WARN: git pull failed, continuing with local code"
@@ -62,7 +62,7 @@ AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
-# Resolve target repo: config.json → env → auto-detect → legacy fallback
+# Resolve target repo: config.json → env → auto-detect → error
 # This allows AutoShip to dispatch to any configured repo.
 REPO=""
 if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
@@ -79,7 +79,10 @@ if [[ -z "$REPO" ]]; then
     REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
   fi
 fi
-REPO="${REPO:-Maleick/TextQuest}"
+if [[ -z "$REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO not set and could not derive repo from origin remote or config" >&2
+  exit 1
+fi
 BASE_BRANCH="${HERMES_BASE_BRANCH:-}"
 if [[ -z "$BASE_BRANCH" ]]; then
   BASE_BRANCH=$(gh repo view "$REPO" --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)

@@ -265,11 +265,30 @@ Do NOT run cargo directly in WSL - it will fail due to missing MSVC linker (lib.
     fi
   fi
 
+  # --- AUTO-CREATE PR ON COMPLETE ---
+  if [[ "$WORKER_RESULT" == "COMPLETE" ]]; then
+    echo "Worker completed — attempting PR creation..."
+    pr_script="$SCRIPT_DIR/create-pr.sh"
+    if [[ -x "$pr_script" ]]; then
+      pr_url=$(bash "$pr_script" "$ISSUE_KEY" "$worktree_path" "$workspace_dir/HERMES_RESULT.md" 2>/dev/null || echo "")
+      if [[ -n "$pr_url" ]]; then
+        WORKER_REASON="PR created: $pr_url"
+        echo "PR created: $pr_url"
+      else
+        WORKER_REASON="Worker completed but PR creation failed"
+        echo "Warning: PR creation failed for $ISSUE_KEY"
+      fi
+    else
+      WORKER_REASON="Worker completed but create-pr.sh not found or not executable"
+      echo "Warning: create-pr.sh not found at $pr_script"
+    fi
+  fi
+
   # --- FINALIZE STATUS ---
   printf '%s\n' "$WORKER_RESULT" >"$workspace_dir/status"
 
   if [[ "$WORKER_RESULT" == "COMPLETE" ]]; then
-    autoship_state_set set-complete "$ISSUE_KEY"
+    autoship_state_set set-completed "$ISSUE_KEY"
   elif [[ "$WORKER_RESULT" == "BLOCKED" ]]; then
     autoship_state_set set-blocked "$ISSUE_KEY" reason="$WORKER_REASON"
   else

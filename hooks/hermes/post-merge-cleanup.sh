@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ISSUE_NUM="${1:?Issue number required}"
-# Resolve target repo: config.json → env → auto-detect → legacy fallback
+# Resolve target repo: config.json → env → auto-detect → error
 AUTOSHIP_DIR="${AUTOSHIP_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME/Projects/AutoShip")/.autoship}"
 REPO=""
 if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
@@ -20,14 +20,25 @@ if [[ -z "$REPO" ]]; then
     REPO="${BASH_REMATCH[1]}/${REPO_NAME}"
   fi
 fi
-REPO="${REPO:-Maleick/TextQuest}"
+if [[ -z "$REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO not set and could not derive repo from origin remote or config" >&2
+  exit 1
+fi
 
 # Derive target repo path from repo name
 if [[ "$REPO" == */* ]]; then
   REPO_NAME="${REPO#*/}"
   TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/$REPO_NAME}"
 else
-  TARGET_REPO="${HERMES_TARGET_REPO_PATH:-$HOME/Projects/TextQuest}"
+  TARGET_REPO="${HERMES_TARGET_REPO_PATH:-}"
+fi
+if [[ -z "$TARGET_REPO" ]]; then
+  # Derive from current repo root (the repo where this hook is running)
+  TARGET_REPO=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+fi
+if [[ -z "$TARGET_REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO_PATH not set and could not derive target repo path" >&2
+  exit 1
 fi
 
 echo "=== Post-merge cleanup for issue #$ISSUE_NUM ==="

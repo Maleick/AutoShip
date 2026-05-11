@@ -34,7 +34,7 @@ fi
 AUTOSHIP_DIR=".autoship"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 
-# Resolve target repo path: config.json → env → auto-detect → legacy fallback
+# Resolve target repo path: config.json → env → auto-detect → error
 TARGET_REPO=""
 if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
   REPO="$(jq -r '.repo // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)"
@@ -58,7 +58,10 @@ if [[ -z "$TARGET_REPO" ]]; then
     TARGET_REPO="$HOME/Projects/$REPO_NAME"
   fi
 fi
-TARGET_REPO="${TARGET_REPO:-$HOME/Projects/TextQuest}"
+if [[ -z "$TARGET_REPO" ]]; then
+  echo "Error: HERMES_TARGET_REPO_PATH not set and could not derive target repo path" >&2
+  exit 1
+fi
 DRY_RUN=false
 VERBOSE=false
 
