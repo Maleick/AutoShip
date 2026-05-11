@@ -197,9 +197,9 @@ run_worker() {
       fi
       if [[ -n "$cargo_target_dir" ]]; then
         CARGO_TARGET_DIR="$cargo_target_dir" \
-        hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
+        hermes chat -q "$(cat "$prompt_file")" --model "$model" --worktree --quiet --source autoship --toolsets terminal,file,web >"AUTOSHIP_RUNNER.log" 2>&1
       else
-        hermes session create --agent "$prompt_file" --name "$session_name" --model "$model" --workdir "$PWD"
+        hermes chat -q "$(cat "$prompt_file")" --model "$model" --worktree --quiet --source autoship --toolsets terminal,file,web >"AUTOSHIP_RUNNER.log" 2>&1
       fi
       ;;
   esac
