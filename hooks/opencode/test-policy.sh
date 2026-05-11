@@ -489,8 +489,9 @@ JSON
 cp "$FALLBACK_REPO/config/model-routing.json" "$FALLBACK_REPO/.autoship/model-routing.json"
 printf 'QUEUED\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/status"
 printf 'test prompt\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/AUTOSHIP_PROMPT.md"
-printf 'opencode/paid-model\n' >"$FALLBACK_REPO/.autoship/workspaces/issue-208/model"
-cat >"$FALLBACK_REPO/bin/opencode" <<'SH'
+printf 'opencode/paid-model\n' > "$FALLBACK_REPO/.autoship/workspaces/issue-208/model"
+# Mock hermes CLI to simulate billing failure on paid model, success on fallback
+cat >"$FALLBACK_REPO/bin/hermes" <<'SH'
 #!/bin/bash
 model=""
 while [[ $# -gt 0 ]]; do
@@ -507,7 +508,7 @@ printf 'COMPLETE\n' > status
 printf 'fallback succeeded\n' > AUTOSHIP_RESULT.md
 exit 0
 SH
-chmod +x "$FALLBACK_REPO/bin/opencode"
+chmod +x "$FALLBACK_REPO/bin/hermes"
 (
   cd "$FALLBACK_REPO"
   PATH="$FALLBACK_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
