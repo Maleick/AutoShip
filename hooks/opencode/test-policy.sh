@@ -825,10 +825,9 @@ live_child_pid=$!
 # Wait until the child is visible in ps to avoid a race on slow/loaded systems
 _live_wait=0
 while [ "$_live_wait" -lt 50 ]; do
-  kill -0 "$live_child_pid" 2>/dev/null \\
-    && pgrep -fa "hermes" 2>/dev/null \\
-    | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" \\
-    && break
+  kill -0 "$live_child_pid" 2>/dev/null && \
+    pgrep -fa "hermes" 2>/dev/null | grep -F -q "$MONITOR_LIVE_CHILD_REPO/.autoship/workspaces/issue-999" && \
+    break
   sleep 0.1
   _live_wait=$((_live_wait + 1))
 done

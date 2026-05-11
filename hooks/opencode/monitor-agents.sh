@@ -6,8 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
-if [[ -f "$LIB_DIR/common.sh" ]]; then
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" 2>/dev/null && pwd || true)"
+if [[ -n "${LIB_DIR:-}" && -f "$LIB_DIR/common.sh" ]]; then
   source "$LIB_DIR/common.sh"
 else
   autoship_repo_root() {

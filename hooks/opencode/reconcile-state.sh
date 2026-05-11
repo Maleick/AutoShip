@@ -5,8 +5,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
-if [[ -f "$LIB_DIR/common.sh" ]]; then
+LIB_DIR="$(cd "$SCRIPT_DIR/../lib" 2>/dev/null && pwd || true)"
+if [[ -n "${LIB_DIR:-}" && -f "$LIB_DIR/common.sh" ]]; then
   source "$LIB_DIR/common.sh"
 else
   autoship_repo_root() {
@@ -97,7 +97,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
   current_state=$(jq -r --arg key "$key" '.issues[$key].state // empty' "$tmp" 2>/dev/null || true)
   increment_stats=true
   if [[ "$current_state" != "$new_state" && -d "$REPO_ROOT/.git" ]]; then
-    if (cd "$REPO_ROOT" && autoship_state_set "$action" "$key") >/dev/null 2>&1; then
+    if bash "$REPO_ROOT/hooks/update-state.sh" "$action" "$key" >/dev/null 2>&1; then
       cp "$STATE_FILE" "$tmp"
       increment_stats=false
     fi
