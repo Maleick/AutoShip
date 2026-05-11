@@ -76,6 +76,68 @@ bash hooks/opencode/runner.sh
 
 The runner starts queued work up to the configured active cap.
 
+### opencode run exits with code 128 (signal kill)
+
+If you see workers exiting immediately with code 128, `opencode run` is hanging or being killed by the system. This happens when:
+
+- The OpenCode CLI session is stale or cannot start nested runs
+- The selected model is not available or quota is exhausted
+- Resource limits (memory/CPU) are being hit
+
+**Fix:** Use `hermes session create --agent` instead of `opencode run`. The runner auto-detects Hermes and uses it when available. To force Hermes mode:
+
+```bash
+export AUTOSHIP_RUNTIME=hermes
+bash hooks/opencode/runner.sh
+```
+
+### Model routing returns empty (no free models found)
+
+If `select-model.sh` returns empty and workers fail to start, check `config/model-routing.json`:
+
+```bash
+cat config/model-routing.json | jq '.models[] | select(.cost == "free")'
+```
+
+The `select-model.sh` script filters for models with `"cost": "free"`. If your primary model (e.g., `kimi-k2.6`) has `"cost": "selected"` or another value, it will not be picked.
+
+**Fix:** Edit `config/model-routing.json` and set the cost field to `"free"` for your desired models, then copy to `.autoship/`:
+
+```bash
+# Edit config/model-routing.json, then:
+cp config/model-routing.json .autoship/model-routing.json
+```
+
+### Subagent timeout (900s) on complex issues
+
+Hermes `delegate_task` has a 900-second (15-minute) timeout. Complex Rust builds or multi-file refactors may exceed this.
+
+**Fix:** The subagent will commit whatever progress it has made. Check the worktree, finish compilation fixes manually if needed, then commit and push:
+
+```bash
+cd .worktrees/issue-NNNN
+cargo test --no-run  # check if it compiles
+git add -A
+git commit -m "feat: partial implementation (issue #NNNN)"
+git push origin autoship/issue-NNNN
+gh pr create --title "..." --body "Closes #NNNN"
+```
+
+### Pre-existing compilation errors block all PRs
+
+If `cargo test --no-run` fails on `main`/`master`, all dispatched workers will also fail because they branch from the broken base.
+
+**Fix:** Fix compilation on `main` first, then dispatch workers:
+
+```bash
+cd ~/Projects/TextQuest
+cargo test --no-run  # identify errors
+# Fix errors...
+git add -A
+git commit -m "fix: resolve compilation errors"
+git push origin main
+```
+
 ## Status looks stale
 
 Run:
